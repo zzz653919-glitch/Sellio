@@ -1,0 +1,95 @@
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import cookieParser from "cookie-parser";
+import express from "express";
+import helmet from "helmet";
+import { config, features } from "./config.js";
+import { loadSession, requireClientHeader } from "./middleware/auth.js";
+import { errorHandler, notFoundHandler } from "./middleware/errors.js";
+import { apiLimiter } from "./middleware/rateLimit.js";
+import { analyticsRouter } from "./modules/analytics/routes.js";
+import { authRouter } from "./modules/auth/routes.js";
+import { dashboardRouter } from "./modules/dashboard/routes.js";
+import { favoritesRouter } from "./modules/favorites/routes.js";
+import { filesRouter } from "./modules/files/routes.js";
+import { marketRouter } from "./modules/forecast/marketRoutes.js";
+import { notificationsRouter } from "./modules/notifications/routes.js";
+import { pricesRouter } from "./modules/prices/routes.js";
+import { projectsRouter } from "./modules/projects/routes.js";
+import { studioRouter } from "./modules/studio/routes.js";
+import { stripeWebhook, subscriptionRouter } from "./modules/subscription/routes.js";
+import { userRouter } from "./modules/user/routes.js";
+
+export function createApp() {
+  const app = express();
+  app.disable("x-powered-by");
+  if (config.TRUST_PROXY > 0) app.set("trust proxy", config.TRUST_PROXY);
+
+  app.use(
+    helmet({
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'self'"],
+          // Store product thumbnails come from external CDNs returned by price providers.
+          imgSrc: ["'self'", "data:", "blob:", "https:"],
+          styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+          fontSrc: ["'self'", "https://fonts.gstatic.com"],
+          connectSrc: ["'self'"],
+          scriptSrc: ["'self'"],
+          objectSrc: ["'none'"],
+          frameAncestors: ["'none'"],
+        },
+      },
+      crossOriginEmbedderPolicy: false,
+    }),
+  );
+
+  // Stripe needs the raw body for signature verification, so it is mounted before JSON parsing.
+  app.post("/api/webhooks/stripe", express.raw({ type: "application/json", limit: "1mb" }), stripeWebhook);
+
+  app.use(express.json({ limit: "1mb" }));
+  app.use(cookieParser());
+  app.use("/api", apiLimiter, loadSession, requireClientHeader);
+
+  app.get("/api/health", (_req, res) => {
+    res.json({ ok: true });
+  });
+  app.get("/api/meta", (_req, res) => {
+    res.json({
+      integrations: {
+        email: features.email,
+        imageGeneration: features.imageGeneration,
+        priceProviders: { serpapi: features.serpapi, ebay: features.ebay },
+        marketDataProviders: [],
+        payments: features.payments,
+      },
+    });
+  });
+
+  app.use("/api/auth", authRouter);
+  app.use("/api/user", userRouter);
+  app.use("/api/dashboard", dashboardRouter);
+  app.use("/api/files", filesRouter);
+  app.use("/api/studio", studioRouter);
+  app.use("/api/market", marketRouter);
+  app.use("/api/prices", pricesRouter);
+  app.use("/api/projects", projectsRouter);
+  app.use("/api/favorites", favoritesRouter);
+  app.use("/api/analytics", analyticsRouter);
+  app.use("/api/notifications", notificationsRouter);
+  app.use("/api/subscription", subscriptionRouter);
+  app.use("/api", notFoundHandler);
+
+  // Serve the built web app in production.
+  const webDist = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../web/dist");
+  if (fs.existsSync(path.join(webDist, "index.html"))) {
+    app.use(express.static(webDist, { index: false, maxAge: "1h" }));
+    app.get(/^(?!\/api\/).*/, (_req, res) => {
+      res.sendFile(path.join(webDist, "index.html"));
+    });
+  }
+
+  app.use(errorHandler);
+  return app;
+}
