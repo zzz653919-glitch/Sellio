@@ -5,6 +5,7 @@ import { param, parseBody } from "../../lib/validate.js";
 import { currentUser, requireAuth, requireVerified } from "../../middleware/auth.js";
 import { serviceLimiter } from "../../middleware/rateLimit.js";
 import * as market from "./market.js";
+import { topDemand } from "./topDemand.js";
 import { trendsProvider } from "./trends.js";
 
 /** World / country demand (Google Trends search interest). */
@@ -32,6 +33,26 @@ marketRouter.post("/", requireVerified, serviceLimiter, async (req, res) => {
   const geos = [...new Set(input.geos)];
   for (const g of geos) if (!allowed.has(g)) throw badRequest(`Unknown area: ${g}`);
   res.status(201).json({ analysis: await market.runMarketAnalysis(currentUser(req).id, { ...input, geos }) });
+});
+
+/** Top 3 products with demand above their usual level right now (shared, refreshed weekly). */
+marketRouter.get("/top", async (_req, res) => {
+  const data = await topDemand("UZ");
+  res.json(data ? { configured: true, ...data } : { configured: false });
+});
+
+const compareSchema = z.object({
+  queries: z.array(z.string().trim().min(2, "Enter a product name").max(100)).min(2, "Enter at least 2 products").max(5, "Compare at most 5 products"),
+  geo: z.string(),
+});
+
+marketRouter.post("/compare", requireVerified, serviceLimiter, async (req, res) => {
+  const input = parseBody(req, compareSchema);
+  const allowed = new Set([market.WORLDWIDE, ...market.COUNTRIES.map((c) => c.code)]);
+  if (!allowed.has(input.geo)) throw badRequest(`Unknown area: ${input.geo}`);
+  const queries = [...new Map(input.queries.map((q) => [q.toLowerCase(), q])).values()];
+  if (queries.length < 2) throw badRequest("Enter at least 2 different products");
+  res.status(201).json({ analysis: await market.runComparison(currentUser(req).id, { queries, geo: input.geo }) });
 });
 
 marketRouter.get("/", async (req, res) => {

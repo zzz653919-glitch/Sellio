@@ -294,4 +294,15 @@ DROP TABLE user_settings;
 ALTER TABLE user_settings_new RENAME TO user_settings;
 `,
   },
+  {
+    // Shared cache for the "top demand now" watchlist (not user data).
+    version: 5,
+    sql: `
+CREATE TABLE trend_cache (
+  key TEXT PRIMARY KEY,
+  data_json TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+`,
+  },
 ];

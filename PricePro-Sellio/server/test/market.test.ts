@@ -103,3 +103,76 @@ test("API: world and country demand with trends, no-data areas and per-user owne
   assert.equal((await other.client.del(`/api/market/${a.id}`)).status, 404);
   assert.equal((await client.del(`/api/market/${a.id}`)).status, 200);
 });
+
+test("API: compare products — ranks rising vs falling demand and gives season timing", async () => {
+  const weeks = (shape: (m: number, i: number) => number) => {
+    const end = new Date();
+    const out = [];
+    for (let i = 0; i < 262; i++) {
+      const d = new Date(end.getTime() - (261 - i) * 7 * 86_400_000);
+      out.push({ date: d.toISOString().slice(0, 10), units: Math.max(0, Math.round(shape(d.getUTCMonth() + 1, i))) });
+    }
+    return out;
+  };
+  setTrendsProviderForTests({
+    name: "fake",
+    async interestOverTime(q) {
+      if (q === "school backpack") return weeks((m, i) => 30 + i * 0.05 + (m === 8 ? 45 : m === 9 ? 30 : 0));
+      if (q === "fidget spinner") return weeks((_m, i) => 90 - i * 0.3);
+      if (q === "unknown thing") return [];
+      return weeks(() => 50);
+    },
+    async interestByCountry() { return []; },
+  });
+  const { client } = await newUser();
+  assert.equal((await client.post("/api/market/compare", { queries: ["a"], geo: "UZ" })).status, 400);
+  assert.equal((await client.post("/api/market/compare", { queries: ["tea", "tea"], geo: "UZ" })).status, 400);
+  const r = await client.post("/api/market/compare", { queries: ["school backpack", "fidget spinner", "unknown thing"], geo: "UZ" });
+  assert.equal(r.status, 201, JSON.stringify(r.data));
+  const res = r.data.analysis.result;
+  assert.equal(res.kind, "compare");
+  const item = (q: string) => res.items.find((i: { query: string }) => i.query === q);
+  assert.equal(item("fidget spinner").seasonality.direction, "declining");
+  assert.ok(item("school backpack").seasonality.peakMonths.includes(8));
+  assert.ok(item("school backpack").seasonality.events.includes("school"));
+  assert.equal(item("unknown thing").status, "no_data");
+  assert.equal(res.items[res.items.length - 1].query, "unknown thing", "items without data go last");
+  const list = await client.get("/api/market");
+  assert.equal(list.data.items[0].range, "compare");
+  assert.equal((await client.get("/api/dashboard")).data.analyses[0].headline !== undefined, true);
+});
+
+test("API: top 3 demand now — ranks the watchlist by current vs usual interest and caches it", async () => {
+  const weeks = (shape: (m: number) => number) => {
+    const end = new Date();
+    return Array.from({ length: 262 }, (_, i) => {
+      const d = new Date(end.getTime() - (261 - i) * 7 * 86_400_000);
+      return { date: d.toISOString().slice(0, 10), units: Math.round(shape(d.getUTCMonth() + 1)) };
+    });
+  };
+  const nowM = new Date().getUTCMonth() + 1;
+  const near = (m: number, a: number[]) => a.includes(m);
+  let calls = 0;
+  setTrendsProviderForTests({
+    name: "fake",
+    async interestOverTime(q) {
+      calls++;
+      // Products in season now get a peak in the current month; others peak half a year away.
+      const inSeason = ["куртка", "обогреватель", "ёлка"].includes(q);
+      const peak = inSeason ? nowM : ((nowM + 5) % 12) + 1;
+      const boost = q === "куртка" ? 60 : q === "обогреватель" ? 45 : q === "ёлка" ? 30 : 40;
+      return weeks((m) => 30 + (near(m, [peak]) ? boost : 0));
+    },
+    async interestByCountry() { return []; },
+  });
+  const { client } = await newUser();
+  const r = await client.get("/api/market/top");
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.equal(r.data.configured, true);
+  assert.deepEqual(r.data.top.map((i: { query: string }) => i.query), ["куртка", "обогреватель", "ёлка"]);
+  assert.ok(r.data.top[0].nowVsAvgPct > 50);
+  const used = calls;
+  assert.equal((await client.get("/api/market/top")).data.top[0].query, "куртка");
+  assert.equal(calls, used, "second request is served from the weekly cache");
+  assert.equal((await client.get("/api/dashboard")).data.usage.metrics.forecasts.used, 0, "not counted against the user's plan");
+});

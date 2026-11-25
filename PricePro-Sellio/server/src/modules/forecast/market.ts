@@ -10,6 +10,7 @@ import { logActivity } from "../../services/activity.js";
 import { notify } from "../../services/notifications.js";
 import { assertWithinLimit } from "../../services/plans.js";
 import { detectGranularity, runForecast, type Granularity, type Point } from "./engine.js";
+import { analyseSeasonality, type SeasonalAnalysis } from "./seasonal.js";
 import { TrendsError, trendsProvider, type CountryInterest, type TrendsRange } from "./trends.js";
 
 export const COUNTRIES: { code: string; name: string }[] = [
@@ -24,8 +25,12 @@ export const COUNTRIES: { code: string; name: string }[] = [
 const COUNTRY_NAME = new Map(COUNTRIES.map((c) => [c.code, c.name]));
 export const WORLDWIDE = "WORLD";
 
-/** Look-back window → how far ahead the interest forecast goes. */
+/**
+ * Forecast horizon options (kept under their historical keys). The look-back is always five
+ * years, so seasons (school, holidays) can be measured across several years.
+ */
 export const RANGES: Record<TrendsRange, number> = { "today 3-m": 30, "today 12-m": 90, "today 5-y": 180 };
+const HISTORY: TrendsRange = "today 5-y";
 
 export type AreaResult = {
   geo: string;
@@ -43,6 +48,8 @@ export type AreaResult = {
   trend: "growing" | "declining" | "stable" | null;
   confidence: "high" | "medium" | "low" | null;
   peak: Point | null;
+  /** Seasons, rise/fall timing and a 12-month outlook (null with less than two years of data). */
+  seasonality?: SeasonalAnalysis | null;
   note?: string;
 };
 
@@ -55,6 +62,16 @@ export type MarketResult = {
   byCountry: CountryInterest[];
   byCountryError?: string;
 };
+
+/** "Which product is growing?" — several products in one area. */
+export type CompareItem = {
+  query: string;
+  status: "ok" | "no_data" | "error";
+  error?: string;
+  seasonality: SeasonalAnalysis | null;
+  recent: { month: string; value: number }[];
+};
+export type CompareResult = { kind: "compare"; source: "google_trends"; fetchedAt: string; geo: string; geoName: string; items: CompareItem[] };
 
 const avg = (a: number[]) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0);
 const r1 = (v: number) => Math.round(v * 10) / 10;
@@ -70,10 +87,35 @@ function analyseArea(geo: string, history: Point[], horizonDays: number): AreaRe
   const first = avg(history.slice(0, span).map((p) => p.units));
   const periodChangePct = first > 0 ? r1(((avg(history.slice(-span).map((p) => p.units)) - first) / first) * 100) : null;
   const granularity = detectGranularity(history);
+  const seasonality = analyseSeasonality(history);
   const out = runForecast(history, horizonDays, granularity);
   if (out.status !== "ok") {
     const recent = history.slice(-4).map((p) => p.units);
-    return { ...base, status: "ok", granularity, peak, periodChangePct, recentAvg: r1(avg(recent)), note: "Not enough history for a forecast in this area; only past interest is shown." };
+    return { ...base, status: "ok", granularity, peak, periodChangePct, seasonality, recentAvg: r1(avg(recent)), note: "Not enough history for a forecast in this area; only past interest is shown." };
+  }
+  if (seasonality) {
+    // Seasonal model (5 years, back-tested) drives the headline numbers and the forecast line.
+    const months = Math.max(1, Math.round(horizonDays / 30));
+    const fc = seasonality.outlook.slice(0, months);
+    const lastActual = seasonality.monthly.slice(-months).map((m) => m.value);
+    const recentAvg = avg(lastActual), forecastAvg = avg(fc.map((f) => f.value));
+    const changePct = recentAvg > 0 ? r1(((forecastAvg - recentAvg) / recentAvg) * 100) : null;
+    const threshold = months <= 1 ? 3 : 5;
+    return {
+      ...base,
+      status: "ok",
+      granularity: out.granularity,
+      history: out.history,
+      forecast: fc.map((f) => ({ date: f.date, value: f.value, lower: f.lower, upper: f.upper })),
+      recentAvg: r1(recentAvg),
+      forecastAvg: r1(forecastAvg),
+      changePct,
+      periodChangePct: seasonality.yoyPct,
+      trend: changePct === null ? "stable" : changePct > threshold ? "growing" : changePct < -threshold ? "declining" : "stable",
+      confidence: seasonality.model.confidence,
+      peak,
+      seasonality,
+    };
   }
   const h = out.horizon;
   const recent = out.history.slice(-h).map((p) => p.units);
@@ -92,6 +134,7 @@ function analyseArea(geo: string, history: Point[], horizonDays: number): AreaRe
     trend: out.trend,
     confidence: out.model.confidence,
     peak,
+    seasonality,
   };
 }
 
@@ -104,7 +147,7 @@ async function serialize(r: Row) {
     range: r.range,
     geos: safeJson<string[]>(r.geos_json, []),
     status: r.status,
-    result: safeJson<MarketResult | null>(r.result_json, null),
+    result: safeJson<MarketResult | CompareResult | null>(r.result_json, null),
     projectId: (await get<{ id: string }>("SELECT id FROM projects WHERE user_id = ? AND type = 'forecast' AND ref_id = ?", r.user_id, r.id))?.id ?? null,
     favoriteId: (await get<{ id: string }>("SELECT id FROM favorites WHERE user_id = ? AND item_type = 'forecast' AND ref_id = ?", r.user_id, r.id))?.id ?? null,
     createdAt: r.created_at,
@@ -123,7 +166,7 @@ export async function runMarketAnalysis(userId: string, input: { query: string; 
     Promise.all(
       input.geos.map(async (geo): Promise<AreaResult> => {
         try {
-          const history = await provider.interestOverTime(input.query, geo === WORLDWIDE ? "" : geo, input.range);
+          const history = await provider.interestOverTime(input.query, geo === WORLDWIDE ? "" : geo, HISTORY);
           return analyseArea(geo, history, horizonDays);
         } catch (err) {
           const name = geo === WORLDWIDE ? "Worldwide" : (COUNTRY_NAME.get(geo) ?? geo);
@@ -131,7 +174,7 @@ export async function runMarketAnalysis(userId: string, input: { query: string; 
         }
       }),
     ),
-    provider.interestByCountry(input.query, input.range).then(
+    provider.interestByCountry(input.query, HISTORY).then(
       (list) => ({ list: list.slice(0, 20), error: undefined as string | undefined }),
       (err) => ({ list: [] as CountryInterest[], error: err instanceof TrendsError ? err.message : "Request failed" }),
     ),
@@ -172,7 +215,9 @@ export async function listMarketAnalyses(userId: string, limit = 20) {
   return (await Promise.all((await all<Row>("SELECT * FROM market_analyses WHERE user_id = ? ORDER BY created_at DESC LIMIT ?", userId, limit)).map(async (r) => {
     const s = await serialize(r);
     // The list only needs the headline numbers.
-    return { ...s, result: s.result ? { ...s.result, areas: s.result.areas.map((a) => ({ ...a, history: [], forecast: [] })), byCountry: [] } : null };
+    if (!s.result) return s;
+    if ("kind" in s.result) return { ...s, result: { ...s.result, items: s.result.items.map((i) => ({ ...i, recent: [], seasonality: i.seasonality ? { ...i.seasonality, monthly: [], trendLine: [], outlook: [] } : null })) } };
+    return { ...s, result: { ...s.result, areas: s.result.areas.map((a) => ({ ...a, history: [], forecast: [], seasonality: null })), byCountry: [] } };
   })));
 }
 
@@ -184,7 +229,50 @@ export async function deleteMarketAnalysis(userId: string, id: string) {
 
 /** Headline for lists: the first area with a forecast (worldwide comes first when chosen). */
 export function headline(a: Awaited<ReturnType<typeof serialize>>) {
+  if (a.result && "kind" in a.result) {
+    const best = [...a.result.items].filter((i) => i.seasonality).sort((x, y) => (y.seasonality!.next3Pct ?? -1e9) - (x.seasonality!.next3Pct ?? -1e9))[0];
+    return best ? { name: best.query, changePct: best.seasonality!.next3Pct, periodChangePct: best.seasonality!.yoyPct, trend: best.seasonality!.direction } : null;
+  }
   const areas = a.result?.areas ?? [];
   const top = areas.find((x) => x.status === "ok" && x.changePct !== null) ?? areas.find((x) => x.status === "ok") ?? null;
   return top ? { name: top.name, changePct: top.changePct, periodChangePct: top.periodChangePct, trend: top.trend } : null;
+}
+
+/** Compare 2-5 products in one area: which demand is growing, which is falling, and when. */
+export async function runComparison(userId: string, input: { queries: string[]; geo: string }) {
+  const provider = trendsProvider();
+  if (!provider) {
+    throw notConfigured("trends", "World demand data is not connected on this server. An administrator must configure SerpApi (SERPAPI_API_KEY), which provides Google Trends data.");
+  }
+  await assertWithinLimit(userId, "forecasts");
+  const geoName = input.geo === WORLDWIDE ? "Worldwide" : (COUNTRY_NAME.get(input.geo) ?? input.geo);
+  const items = await Promise.all(input.queries.map(async (query): Promise<CompareItem> => {
+    try {
+      const history = await provider.interestOverTime(query, input.geo === WORLDWIDE ? "" : input.geo, HISTORY);
+      if (history.length === 0 || history.every((p) => p.units === 0)) return { query, status: "no_data", seasonality: null, recent: [] };
+      const seasonality = analyseSeasonality(history);
+      const recent = (seasonality?.monthly ?? []).slice(-24);
+      return { query, status: seasonality ? "ok" : "no_data", seasonality, recent };
+    } catch (err) {
+      return { query, status: "error", error: err instanceof TrendsError ? err.message : "Request failed", seasonality: null, recent: [] };
+    }
+  }));
+  if (items.every((i) => i.status === "error")) {
+    throw upstreamError("trends", `Google Trends request failed: ${items[0]?.error ?? "unknown error"}`);
+  }
+  // Rank: biggest expected change over the next 3 months first.
+  items.sort((a, b) => (b.seasonality?.next3Pct ?? -1e9) - (a.seasonality?.next3Pct ?? -1e9));
+  const result: CompareResult = { kind: "compare", source: "google_trends", fetchedAt: nowIso(), geo: input.geo, geoName, items };
+  const status = items.some((i) => i.status === "ok") ? "completed" : "no_data";
+  const id = newId();
+  const title = input.queries.join(", ");
+  await run(
+    "INSERT INTO market_analyses (id,user_id,query,range,geos_json,status,result_json,created_at) VALUES (?,?,?,?,?,?,?,?)",
+    id, userId, title, "compare", JSON.stringify([input.geo]), status, JSON.stringify(result), nowIso(),
+  );
+  await logActivity(userId, "market_analysis", "forecast", `World demand: ${title}`, { refId: id, success: status === "completed" });
+  if (status === "completed") {
+    await notify(userId, "forecast", "World demand analysis completed", `Search-interest analysis for "${title}" is ready.`, `/forecast?market=${id}`);
+  }
+  return getMarketAnalysis(userId, id);
 }

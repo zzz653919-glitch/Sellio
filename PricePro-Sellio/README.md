@@ -3,7 +3,9 @@
 AI-powered product intelligence platform with two core services:
 
 1. **AI Product Studio** — turns product photos into professional advertising images (OpenAI Images API).
-2. **Demand Forecast** — world and country demand for a product from Google Trends search interest (via SerpApi), with a back-tested outlook per area and a ranking of countries.
+2. **Demand Forecast** — world and country demand for a product from 5 years of Google Trends search interest (via SerpApi): seasons (e.g. back-to-school, New Year), when demand rises and falls, a 12-month outlook, a ranking of countries, and a comparison of up to 5 products (which is growing, which is falling).
+
+   The analysis runs inside Vercel/Node with no paid AI service: STL decomposition (periodic, robust) of the monthly series, then a Prophet-style regression (piecewise-linear trend with regularised changepoints + yearly Fourier terms), an STL + damped-trend model and a seasonal-naive model compete on a 12-month back-test; the best one makes the forecast. Seasonal strength, per-month effects and their year-to-year consistency are reported with every result.
 
 Plus: Dashboard, My Projects, Analytics, Favorites, Notifications, Profile, Settings (light/dark, Uzbek/Russian/English), Free/Pro subscriptions (Stripe) and authentication with email sign-in codes.
 

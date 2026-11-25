@@ -50,6 +50,12 @@ export function fmtMonth(value: string | Date) {
   return p.d.toLocaleDateString(loc(), { month: "long", year: "numeric", ...tz(p.utc) });
 }
 
+/** Month name only: 8 → "avgust" / "август" / "August"; short → "avg" / "авг." / "Aug". */
+export function fmtMonthName(month: number, short = false) {
+  if (isUz()) return (short ? UZ_MONTHS_SHORT : UZ_MONTHS)[month - 1];
+  return new Date(Date.UTC(2024, month - 1, 1)).toLocaleDateString(loc(), { month: short ? "short" : "long", timeZone: "UTC" });
+}
+
 /** Short axis label: "noy 25" / "Nov 25" for months, "14-noy" / "Nov 14" for days. */
 export function fmtAxis(value: string, granularity: "day" | "week" | "month") {
   const p = parts(value);

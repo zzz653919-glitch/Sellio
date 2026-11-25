@@ -4,30 +4,39 @@ import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { ErrorAlert, FavoriteButton, IntegrationNotice, SaveProjectButton } from "../components/shared";
-import { Alert, Badge, Button, Card, ConfirmDialog, EmptyState, Field, Input, Select, cx, useToast } from "../components/ui";
+import { Alert, Badge, Button, Card, ConfirmDialog, EmptyState, Field, Input, Select, Tabs, cx, useToast } from "../components/ui";
+import { CompareForm, CompareView, SeasonPanel, TopDemand, type CompareResult, type Seasonality, type TopDemandData } from "./SeasonInsights";
 import { del, errorMessage, get, post } from "../lib/api";
 import { fmtAxis, fmtDateTime, fmtNumber, fmtPct, timeAgo } from "../lib/format";
 import { useI18n } from "../lib/i18n";
 import { useTheme } from "../lib/theme";
 import type { Granularity } from "../lib/types";
 
-type Range = "today 3-m" | "today 12-m" | "today 5-y";
+type Range = "today 3-m" | "today 12-m" | "today 5-y" | "compare";
 type Point = { date: string; units: number };
 type Area = {
   geo: string; name: string; status: "ok" | "no_data" | "error"; error?: string; note?: string; granularity?: Granularity;
   history: Point[]; forecast: { date: string; value: number; lower: number; upper: number }[];
   recentAvg: number | null; forecastAvg: number | null; changePct: number | null; periodChangePct?: number | null;
   trend: "growing" | "declining" | "stable" | null; confidence: "high" | "medium" | "low" | null; peak: Point | null;
+  seasonality?: Seasonality | null;
 };
+type SingleResult = { fetchedAt: string; horizonDays: number; areas: Area[]; byCountry: { code: string; name: string; value: number }[]; byCountryError?: string };
 type Analysis = {
   id: string; query: string; range: Range; geos: string[]; status: "completed" | "no_data"; createdAt: string; projectId: string | null; favoriteId: string | null;
-  result: { fetchedAt: string; horizonDays: number; areas: Area[]; byCountry: { code: string; name: string; value: number }[]; byCountryError?: string } | null;
+  result: SingleResult | CompareResult | null;
 };
-type Options = { configured: boolean; countries: { code: string; name: string }[]; ranges: { value: Range; horizonDays: number }[]; maxAreas: number };
+type Options = { configured: boolean; countries: { code: string; name: string }[]; ranges: { value: Exclude<Range, "compare">; horizonDays: number }[]; maxAreas: number };
+const isCompare = (r: Analysis["result"]): r is CompareResult => Boolean(r && "kind" in r && r.kind === "compare");
 
 const WORLD = "WORLD";
 const COLORS = ["#6366f1", "#06b6d4", "#10b981", "#f59e0b", "#ec4899"];
-const RANGE_LABEL: Record<Range, string> = { "today 3-m": "Last 3 months → 30-day outlook", "today 12-m": "Last 12 months → 3-month outlook", "today 5-y": "Last 5 years → 6-month outlook" };
+const RANGE_LABEL: Record<Range, string> = {
+  "today 3-m": "1-month forecast · 5-year history",
+  "today 12-m": "3-month forecast · 5-year history",
+  "today 5-y": "6-month forecast · 5-year history",
+  compare: "Product comparison · 5-year history",
+};
 
 function TrendValue({ a }: { a: Area }) {
   const { t } = useI18n();
@@ -62,7 +71,7 @@ function AreaCard({ a, color }: { a: Area; color: string }) {
             {a.forecastAvg !== null && <> · {t("expected")}: <b className="text-slate-700 dark:text-slate-200">{fmtNumber(a.forecastAvg)}</b>/100</>}
           </p>
           {a.periodChangePct != null && (
-            <p className="text-xs muted">{t("Since the start of the period")}: <b className={a.periodChangePct > 0 ? "text-emerald-600 dark:text-emerald-400" : a.periodChangePct < 0 ? "text-rose-600 dark:text-rose-400" : ""}>{fmtPct(a.periodChangePct)}</b></p>
+            <p className="text-xs muted">{t(a.seasonality ? "Last 12 months vs the year before" : "Since the start of the period")}: <b className={a.periodChangePct > 0 ? "text-emerald-600 dark:text-emerald-400" : a.periodChangePct < 0 ? "text-rose-600 dark:text-rose-400" : ""}>{fmtPct(a.periodChangePct)}</b></p>
           )}
           {a.confidence && <p className="text-xs muted">{t("Model confidence")}: {t(a.confidence)}</p>}
         </div>
@@ -114,7 +123,24 @@ function InterestChart({ areas }: { areas: Area[] }) {
 function AnalysisResult({ a, onDelete }: { a: Analysis; onDelete: () => void }) {
   const { t } = useI18n();
   const r = a.result;
+  const seasonAreas = r && !isCompare(r) ? r.areas.filter((x) => x.seasonality) : [];
+  const [seasonGeo, setSeasonGeo] = useState<string | null>(null);
   if (!r) return <Alert tone="error">{t("Corrupted result")}</Alert>;
+  if (isCompare(r)) {
+    return (
+      <Card className="space-y-5 p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold">{a.query}</h2>
+            <p className="text-xs muted">{t(RANGE_LABEL.compare)} · {t("Data received")}: {fmtDateTime(r.fetchedAt)}</p>
+          </div>
+          <Badge tone="cyan">{t("Google Trends · search interest")}</Badge>
+        </div>
+        <CompareView r={r} onDelete={onDelete} />
+      </Card>
+    );
+  }
+  const shown = seasonAreas.find((x) => x.geo === seasonGeo) ?? seasonAreas[0];
   return (
     <Card className="space-y-5 p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -134,6 +160,18 @@ function AnalysisResult({ a, onDelete }: { a: Analysis; onDelete: () => void }) 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {r.areas.map((area, i) => <AreaCard key={area.geo} a={area} color={COLORS[i % COLORS.length]} />)}
       </div>
+
+      {shown?.seasonality && (
+        <div className="space-y-2">
+          {seasonAreas.length > 1 && (
+            <Tabs value={shown.geo} onChange={setSeasonGeo} tabs={seasonAreas.map((x) => ({ value: x.geo, label: x.geo === WORLD ? t("Worldwide") : t(x.name) }))} />
+          )}
+          <SeasonPanel s={shown.seasonality} title={shown.geo === WORLD ? t("Worldwide") : t(x2name(shown))} />
+        </div>
+      )}
+      {r.areas.some((x) => x.status === "ok" && !x.seasonality) && (
+        <p className="text-xs muted">{t("Season analysis needs at least two years of search data; some areas have less.")}</p>
+      )}
 
       <InterestChart areas={r.areas} />
       <p className="text-xs muted">{t("Solid line: actual search interest. Dashed line: forecast. Each area's line is scaled to its own peak, so compare directions between areas, not heights.")}</p>
@@ -167,6 +205,8 @@ function AnalysisResult({ a, onDelete }: { a: Analysis; onDelete: () => void }) 
   );
 }
 
+const x2name = (a: Area) => a.name;
+
 export default function MarketDemand() {
   const { t } = useI18n();
   const toast = useToast();
@@ -180,8 +220,10 @@ export default function MarketDemand() {
     queryFn: () => get<{ analysis: Analysis }>(`/market/${currentId}`).then((r) => r.analysis),
     enabled: Boolean(currentId),
   });
+  const top = useQuery({ queryKey: ["market-top"], queryFn: () => get<TopDemandData>("/market/top"), staleTime: 3600_000, retry: false });
+  const [mode, setMode] = useState<"single" | "compare">("single");
   const [query, setQuery] = useState("");
-  const [range, setRange] = useState<Range>("today 12-m");
+  const [range, setRange] = useState<Exclude<Range, "compare">>("today 12-m");
   const [geos, setGeos] = useState<string[]>([WORLD, "UZ"]);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const o = options.data;
@@ -191,7 +233,15 @@ export default function MarketDemand() {
   const open = (id: string | null) => setParams(id ? { market: id } : {});
 
   const run = useMutation({
-    mutationFn: () => post<{ analysis: Analysis }>("/market", { query, range, geos }),
+    mutationFn: (o?: { query: string; geos: string[] }) => post<{ analysis: Analysis }>("/market", { query: o?.query ?? query, range, geos: o?.geos ?? geos }),
+    onSuccess: (d) => {
+      qc.invalidateQueries({ queryKey: ["market"] });
+      qc.setQueryData(["market", d.analysis.id], d.analysis);
+      open(d.analysis.id);
+    },
+  });
+  const compare = useMutation({
+    mutationFn: ({ queries, geo }: { queries: string[]; geo: string }) => post<{ analysis: Analysis }>("/market/compare", { queries, geo }),
     onSuccess: (d) => {
       qc.invalidateQueries({ queryKey: ["market"] });
       qc.setQueryData(["market", d.analysis.id], d.analysis);
@@ -213,16 +263,23 @@ export default function MarketDemand() {
       <div className="space-y-5 lg:col-span-2">
         <Card className="space-y-4 p-5">
           <h2 className="flex items-center gap-2 font-semibold"><Globe2 className="h-4 w-4" />{t("World and country demand")}</h2>
-          <p className="text-sm muted">{t("See how interest in a product is changing worldwide and in specific countries, based on real Google search data.")}</p>
+          <Tabs value={mode} onChange={setMode} tabs={[{ value: "single", label: t("One product") }, { value: "compare", label: t("Compare products") }]} />
           {o && !o.configured && <IntegrationNotice service="trends" />}
+          {mode === "compare" ? (
+            <>
+              <CompareForm countries={o?.countries ?? []} disabled={o?.configured === false} loading={compare.isPending} onRun={(queries, geo) => compare.mutate({ queries, geo })} />
+              {compare.error && <ErrorAlert error={compare.error} />}
+            </>
+          ) : (<>
+          <p className="text-sm muted">{t("See how interest in a product is changing worldwide and in specific countries, based on real Google search data.")}</p>
           <Field label={t("Product")} hint={t("Write it the way people search, e.g. \"air fryer\", \"iPhone 15\", \"protein powder\". English names give more worldwide data.")}>
             <div className="relative">
               <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"><Search className="h-4 w-4" /></span>
               <Input className="pl-9" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="air fryer" />
             </div>
           </Field>
-          <Field label={t("Period")}>
-            <Select value={range} onChange={(e) => setRange(e.target.value as Range)} options={(o?.ranges ?? []).map((r) => ({ value: r.value, label: t(RANGE_LABEL[r.value]) }))} />
+          <Field label={t("Forecast")}>
+            <Select value={range} onChange={(e) => setRange(e.target.value as Exclude<Range, "compare">)} options={(o?.ranges ?? []).map((r) => ({ value: r.value, label: t(RANGE_LABEL[r.value]) }))} />
           </Field>
           <div>
             <p className="label">{t("Areas")} <span className="font-normal muted">({geos.length}/{max})</span></p>
@@ -242,7 +299,8 @@ export default function MarketDemand() {
           </div>
           {run.error && <ErrorAlert error={run.error} />}
           <Button size="lg" className="w-full" loading={run.isPending} disabled={query.trim().length < 2 || geos.length === 0 || o?.configured === false}
-            onClick={() => run.mutate()} icon={<Play className="h-4 w-4" />}>{t("Analyze demand")}</Button>
+            onClick={() => run.mutate(undefined)} icon={<Play className="h-4 w-4" />}>{t("Analyze demand")}</Button>
+          </>)}
         </Card>
 
         <Card className="p-5">
@@ -250,15 +308,19 @@ export default function MarketDemand() {
           {list.data?.length === 0 ? <p className="py-4 text-center text-sm muted">{t("No analyses yet.")}</p> : (
             <ul className="divide-y divide-slate-100 dark:divide-slate-800">
               {list.data?.map((a) => {
-                const top = a.result?.areas.find((x) => x.status === "ok" && x.changePct !== null);
+                const top = a.result && !isCompare(a.result)
+                  ? a.result.areas.find((x) => x.status === "ok" && x.changePct !== null)
+                  : null;
+                const cmp = isCompare(a.result) ? a.result.items.filter((i) => i.seasonality)[0]?.seasonality : null;
                 return (
                   <li key={a.id}>
                     <button onClick={() => open(a.id)} className={cx("flex w-full items-center gap-3 py-2.5 text-left", currentId === a.id && "text-brand-600 dark:text-brand-400")}>
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-sm font-medium">{a.query}</span>
-                        <span className="text-xs muted">{a.geos.length} {t("areas")} · {timeAgo(a.createdAt)}</span>
+                        <span className="text-xs muted">{a.range === "compare" ? t("Comparison") : `${a.geos.length} ${t("areas")}`} · {timeAgo(a.createdAt)}</span>
                       </span>
                       {top && <span className="text-sm font-semibold">{fmtPct(top.changePct)}</span>}
+                      {cmp && <span className="text-sm font-semibold">{fmtPct(cmp.next3Pct)}</span>}
                     </button>
                   </li>
                 );
@@ -274,7 +336,13 @@ export default function MarketDemand() {
         ) : currentId && current.error ? (
           <ErrorAlert error={current.error} />
         ) : (
-          <Card className="p-6">
+          <Card className="space-y-6 p-5 sm:p-6">
+            <TopDemand data={top.data} loading={top.isLoading} onAnalyse={(q) => {
+              setMode("single"); setQuery(q); setGeos(["UZ"]);
+              run.mutate({ query: q, geos: ["UZ"] });
+            }} />
+            {run.isPending && <p className="text-sm muted">{t("Analysing…")}</p>}
+            {run.error && <ErrorAlert error={run.error} />}
             <EmptyState icon={<Info className="h-6 w-6" />} title={t("World demand will appear here")}
               text={t("Enter a product, choose the world and the countries you sell in, and run the analysis. You will see where demand is growing and where it is falling.")} />
           </Card>
