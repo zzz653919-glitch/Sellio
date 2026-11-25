@@ -47,7 +47,7 @@ export default function Profile() {
           </dl>
           <h3 className="mb-3 mt-6 font-semibold">{t("Usage this month")}</h3>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {([["generations", "Ad generations"], ["forecasts", "Forecasts"], ["priceSearches", "Price searches"]] as const).map(([k, label]) => (
+            {([["generations", "Ad generations"], ["forecasts", "Forecasts"]] as const).map(([k, label]) => (
               <div key={k}>
                 <div className="mb-1 flex justify-between text-sm"><span>{t(label)}</span><span className="muted">{usage.metrics[k].used} / {usage.metrics[k].limit}</span></div>
                 <Progress value={usage.metrics[k].used} max={usage.metrics[k].limit} />

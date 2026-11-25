@@ -11,13 +11,12 @@ export type ActivityType =
   | "ad_failed"
   | "image_uploaded"
   | "market_analysis"
-  | "price_search"
   | "project_saved"
   | "project_deleted"
   | "favorite_added"
   | "plan_changed";
 
-export type Service = "studio" | "forecast" | "prices" | "account" | "projects";
+export type Service = "studio" | "forecast" | "account" | "projects";
 
 export async function logActivity(
   userId: string,

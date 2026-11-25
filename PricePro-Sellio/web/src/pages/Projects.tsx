@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Download, ExternalLink, FolderKanban, ImageIcon, LineChart, Pencil, Search, Tag, Trash2, X } from "lucide-react";
+import { Check, Download, ExternalLink, FolderKanban, ImageIcon, LineChart, Pencil, Search, Trash2, X } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { ErrorAlert, FavoriteButton } from "../components/shared";
@@ -14,7 +14,6 @@ type Tab = "all" | ProjectType | "uploads";
 const TYPE_META: Record<ProjectType, { label: string; icon: typeof ImageIcon; route: (refId: string) => string }> = {
   advertisement: { label: "Advertisement", icon: ImageIcon, route: (id) => `/studio?generation=${id}` },
   forecast: { label: "Forecast", icon: LineChart, route: (id) => `/forecast?market=${id}` },
-  price_comparison: { label: "Price comparison", icon: Tag, route: (id) => `/prices?search=${id}` },
 };
 
 function ProjectCard({ p, onDelete }: { p: Project; onDelete: (p: Project) => void }) {
@@ -148,13 +147,12 @@ export default function Projects() {
 
   return (
     <div>
-      <PageHeader icon={<FolderKanban className="h-6 w-6" />} title={t("My Projects")} subtitle={t("Your saved advertisements, forecasts, price comparisons and uploads.")} />
+      <PageHeader icon={<FolderKanban className="h-6 w-6" />} title={t("My Projects")} subtitle={t("Your saved advertisements, demand analyses and uploads.")} />
       <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <Tabs<Tab> value={tab} onChange={(v) => setParams(v === "all" ? {} : { type: v })} tabs={[
           { value: "all", label: t("All"), count: total },
           { value: "advertisement", label: t("Advertisements"), count: counts.advertisement ?? 0 },
           { value: "forecast", label: t("Forecasts"), count: counts.forecast ?? 0 },
-          { value: "price_comparison", label: t("Price comparisons"), count: counts.price_comparison ?? 0 },
           { value: "uploads", label: t("Uploaded images") },
         ]} />
         {tab !== "uploads" && (
@@ -170,7 +168,7 @@ export default function Projects() {
 
       {tab === "uploads" ? <UploadsGrid /> : list.isLoading ? <PageLoader /> : list.error ? <ErrorAlert error={list.error} /> : list.data!.items.length === 0 ? (
         <EmptyState icon={<FolderKanban className="h-6 w-6" />} title={dq ? t("No projects match your search") : t("No saved projects yet")}
-          text={t("Use “Save to My Projects” on an advertisement, forecast or price comparison.")} />
+          text={t("Use “Save to My Projects” on an advertisement or a demand analysis.")} />
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {list.data!.items.map((p) => <ProjectCard key={p.id} p={p} onDelete={setToDelete} />)}

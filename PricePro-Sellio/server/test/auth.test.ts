@@ -119,10 +119,10 @@ test("profile and settings persist; account deletion removes data", async () => 
   const p = await client.patch("/api/user/profile", { firstName: "Akbar", lastName: "Xatamov" });
   assert.equal(p.data.user.firstName, "Akbar");
   assert.equal((await client.patch("/api/user/settings", { language: "ru" })).data.settings.language, "ru");
-  const s = await client.patch("/api/user/settings", { theme: "dark", language: "uz", notifications: { price: false } });
+  const s = await client.patch("/api/user/settings", { theme: "dark", language: "uz", notifications: { generation: false } });
   assert.equal(s.data.settings.theme, "dark");
   assert.equal(s.data.settings.language, "uz");
-  assert.equal(s.data.settings.notifications.price, false);
+  assert.equal(s.data.settings.notifications.generation, false);
   assert.equal((await client.get("/api/user/settings")).data.settings.theme, "dark");
   assert.equal((await client.del("/api/user/account", { password: "wrong1234" })).status, 400);
   assert.equal((await client.del("/api/user/account", { password: "secret123" })).status, 200);

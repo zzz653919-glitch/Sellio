@@ -7,21 +7,20 @@ import { param, parseBody, parseQuery } from "../../lib/validate.js";
 import { currentUser, requireAuth } from "../../middleware/auth.js";
 import { logActivity } from "../../services/activity.js";
 import { getMarketAnalysis, headline } from "../forecast/market.js";
-import { getSearch } from "../prices/service.js";
 import { getGeneration } from "../studio/service.js";
 
 export const projectsRouter = Router();
 projectsRouter.use(requireAuth);
 
-export type ProjectType = "advertisement" | "forecast" | "price_comparison";
+export type ProjectType = "advertisement" | "forecast";
+const TYPES = ["advertisement", "forecast"] as const;
 
 type ProjectRow = { id: string; user_id: string; type: ProjectType; ref_id: string; title: string; created_at: string; updated_at: string };
 
 /** Load the underlying record, enforcing ownership. Throws 404 when missing or foreign. */
 export async function loadItem(userId: string, type: ProjectType, refId: string) {
   if (type === "advertisement") return getGeneration(userId, refId);
-  if (type === "forecast") return getMarketAnalysis(userId, refId);
-  return getSearch(userId, refId);
+  return getMarketAnalysis(userId, refId);
 }
 
 async function summary(userId: string, p: ProjectRow) {
@@ -30,21 +29,11 @@ async function summary(userId: string, p: ProjectRow) {
       const g = await getGeneration(userId, p.ref_id);
       return { thumbnailUrl: g.resultUrl ?? g.originalUrl, subtitle: `${g.styleLabel} · ${g.category}`, status: g.status, downloadUrl: g.resultUrl ? `${g.resultUrl}?download=1` : null };
     }
-    if (p.type === "forecast") {
-      const a = await getMarketAnalysis(userId, p.ref_id);
-      const h = headline(a);
-      const pct = (v: number | null) => (v === null ? "" : `${v > 0 ? "+" : ""}${v.toFixed(1)}%`);
-      const sub = h ? `${h.name}: ${pct(h.periodChangePct ?? h.changePct)} · ${a.geos.length} area(s)` : "No search data";
-      return { thumbnailUrl: null, subtitle: sub, status: a.status, downloadUrl: null };
-    }
-    const s = await getSearch(userId, p.ref_id);
-    const best = s.bestOffer;
-    return {
-      thumbnailUrl: best?.imageUrl ?? null,
-      subtitle: best ? `Best: ${best.priceText} at ${best.storeName} · ${s.offersCount} offers` : `${s.offersCount} offers`,
-      status: s.status,
-      downloadUrl: `/api/prices/searches/${s.id}/export.csv`,
-    };
+    const a = await getMarketAnalysis(userId, p.ref_id);
+    const h = headline(a);
+    const pct = (v: number | null) => (v === null ? "" : `${v > 0 ? "+" : ""}${v.toFixed(1)}%`);
+    const sub = h ? `${h.name}: ${pct(h.periodChangePct ?? h.changePct)} · ${a.geos.length} area(s)` : "No search data";
+    return { thumbnailUrl: null, subtitle: sub, status: a.status, downloadUrl: null };
   } catch {
     return { thumbnailUrl: null, subtitle: "The original item was deleted", status: "missing", downloadUrl: null };
   }
@@ -56,7 +45,7 @@ async function serialize(userId: string, p: ProjectRow) {
 }
 
 const createSchema = z.object({
-  type: z.enum(["advertisement", "forecast", "price_comparison"]),
+  type: z.enum(TYPES),
   refId: z.uuid(),
   title: z.string().trim().min(1).max(120).optional(),
 });
@@ -69,7 +58,7 @@ projectsRouter.post("/", async (req, res) => {
   const exists = await get("SELECT id FROM projects WHERE user_id = ? AND type = ? AND ref_id = ?", user.id, input.type, input.refId);
   if (exists) throw conflict("This item is already saved in My Projects.");
   const defaultTitle =
-    input.type === "advertisement" ? `Ad — ${item.productName}` : input.type === "forecast" ? `Demand — ${(item as { query?: string }).query}` : `Prices — ${item.query}`;
+    input.type === "advertisement" ? `Ad — ${item.productName}` : `Demand — ${item.query}`;
   const id = newId();
   const now = nowIso();
   await run("INSERT INTO projects (id,user_id,type,ref_id,title,created_at,updated_at) VALUES (?,?,?,?,?,?,?)",
@@ -79,7 +68,7 @@ projectsRouter.post("/", async (req, res) => {
 });
 
 const listSchema = z.object({
-  type: z.enum(["advertisement", "forecast", "price_comparison"]).optional(),
+  type: z.enum(TYPES).optional(),
   q: z.string().trim().max(100).optional(),
   sort: z.enum(["newest", "oldest", "title"]).default("newest"),
   limit: z.coerce.number().int().min(1).max(100).default(50),
@@ -89,19 +78,20 @@ const listSchema = z.object({
 projectsRouter.get("/", async (req, res) => {
   const user = currentUser(req);
   const q = parseQuery(req, listSchema);
-  const where = ["user_id = ?"];
+  // Only current item types (older price comparisons are no longer shown).
+  const where = ["user_id = ?", "type IN ('advertisement','forecast')"];
   const params: (string | number)[] = [user.id];
   if (q.type) { where.push("type = ?"); params.push(q.type); }
   if (q.q) { where.push("title LIKE ? ESCAPE '\\'"); params.push(likePattern(q.q)); }
   const order = q.sort === "oldest" ? "created_at ASC" : q.sort === "title" ? "title COLLATE NOCASE ASC" : "created_at DESC";
   const rows = await all<ProjectRow>(`SELECT * FROM projects WHERE ${where.join(" AND ")} ORDER BY ${order} LIMIT ? OFFSET ?`, ...params, q.limit, q.offset);
   const total = (await get<{ n: number }>(`SELECT COUNT(*) AS n FROM projects WHERE ${where.join(" AND ")}`, ...params))?.n ?? 0;
-  const counts = await all<{ type: string; n: number }>("SELECT type, COUNT(*) AS n FROM projects WHERE user_id = ? GROUP BY type", user.id);
+  const counts = await all<{ type: string; n: number }>("SELECT type, COUNT(*) AS n FROM projects WHERE user_id = ? AND type IN ('advertisement','forecast') GROUP BY type", user.id);
   res.json({ items: (await Promise.all(rows.map((p) => serialize(user.id, p)))), total, counts: Object.fromEntries(counts.map((c) => [c.type, c.n])) });
 });
 
 async function owned(userId: string, id: string) {
-  const p = await get<ProjectRow>("SELECT * FROM projects WHERE id = ? AND user_id = ?", id, userId);
+  const p = await get<ProjectRow>("SELECT * FROM projects WHERE id = ? AND user_id = ? AND type IN ('advertisement','forecast')", id, userId);
   if (!p) throw notFound("Project not found");
   return p;
 }

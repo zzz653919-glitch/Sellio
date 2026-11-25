@@ -3,27 +3,25 @@ import { tooMany } from "../lib/errors.js";
 import { startOfMonthIso } from "../lib/util.js";
 
 export type Plan = "free" | "pro";
-export type Metric = "generations" | "forecasts" | "priceSearches";
+export type Metric = "generations" | "forecasts";
 
 export const PLANS: Record<Plan, { name: string; priceMonthlyUsd: number; limits: Record<Metric, number>; benefits: string[] }> = {
   free: {
     name: "Free",
     priceMonthlyUsd: 0,
-    limits: { generations: 5, forecasts: 10, priceSearches: 20 },
+    limits: { generations: 5, forecasts: 10 },
     benefits: [
       "5 AI advertisement generations per month",
       "10 demand analyses per month",
-      "20 price comparisons per month",
     ],
   },
   pro: {
     name: "Pro",
     priceMonthlyUsd: 19,
-    limits: { generations: 200, forecasts: 300, priceSearches: 1000 },
+    limits: { generations: 200, forecasts: 300 },
     benefits: [
       "200 AI advertisement generations per month",
       "300 demand analyses per month",
-      "1000 price comparisons per month",
       "Priority generation queue",
     ],
   },
@@ -32,8 +30,6 @@ export const PLANS: Record<Plan, { name: string; priceMonthlyUsd: number; limits
 const COUNTERS: Record<Metric, string> = {
   generations: "SELECT COUNT(*) AS n FROM generations WHERE user_id = ? AND created_at >= ? AND status != 'failed'",
   forecasts: "SELECT COUNT(*) AS n FROM market_analyses WHERE user_id = ? AND created_at >= ? AND status = 'completed'",
-  priceSearches:
-    "SELECT COUNT(*) AS n FROM price_searches WHERE user_id = ? AND created_at >= ? AND status IN ('completed','partial')",
 };
 
 export async function userPlan(userId: string): Promise<Plan> {

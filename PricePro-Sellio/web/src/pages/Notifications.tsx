@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bell, CheckCheck, Circle, ExternalLink, ImageIcon, LineChart, MailOpen, ShieldCheck, Tag, Trash2 } from "lucide-react";
+import { Bell, CheckCheck, Circle, ExternalLink, ImageIcon, LineChart, MailOpen, ShieldCheck, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { ErrorAlert } from "../components/shared";
@@ -9,7 +9,7 @@ import { fmtDateTime, timeAgo } from "../lib/format";
 import { useI18n } from "../lib/i18n";
 import type { AppNotification } from "../lib/types";
 
-const ICON: Record<string, typeof Bell> = { generation: ImageIcon, forecast: LineChart, price: Tag, account: ShieldCheck };
+const ICON: Record<string, typeof Bell> = { generation: ImageIcon, forecast: LineChart, account: ShieldCheck };
 
 export default function Notifications() {
   const { t, tr } = useI18n();
@@ -27,7 +27,7 @@ export default function Notifications() {
 
   return (
     <div>
-      <PageHeader icon={<Bell className="h-6 w-6" />} title={t("Notifications")} subtitle={t("Updates from your advertisements, forecasts, price searches and account.")}
+      <PageHeader icon={<Bell className="h-6 w-6" />} title={t("Notifications")} subtitle={t("Updates from your advertisements, demand analyses and account.")}
         actions={<>
           <Button variant="secondary" size="sm" disabled={!q.data?.unread} onClick={() => act.mutate({ path: "/notifications/read-all", method: "POST" })} icon={<CheckCheck className="h-4 w-4" />}>{t("Mark all as read")}</Button>
           <Button variant="ghost" size="sm" onClick={() => act.mutate({ path: "/notifications", method: "DELETE" })} icon={<Trash2 className="h-4 w-4" />}>{t("Clear read")}</Button>

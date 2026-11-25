@@ -9,14 +9,13 @@ export type User = {
   createdAt: string;
 };
 
-export type Metric = "generations" | "forecasts" | "priceSearches";
+export type Metric = "generations" | "forecasts";
 export type Usage = { plan: "free" | "pro"; periodStart: string; metrics: Record<Metric, { used: number; limit: number }> };
 
 export type Meta = {
   integrations: {
     email: boolean;
     imageGeneration: boolean;
-    priceProviders: { serpapi: boolean; ebay: boolean };
     marketDataProviders: string[];
     payments: boolean;
   };
@@ -59,54 +58,7 @@ export type StudioOptions = {
 };
 
 export type Granularity = "day" | "week" | "month";
-export type Offer = {
-  id: string;
-  provider: string;
-  storeName: string;
-  title: string;
-  price: number;
-  currency: string | null;
-  priceText: string;
-  previousPrice: number | null;
-  imageUrl: string | null;
-  url: string;
-  condition: "new" | "used" | "refurbished" | null;
-  availability: "in_stock" | "out_of_stock" | null;
-  gtin: string | null;
-  shipping: string | null;
-};
-
-export type OfferGroup = {
-  id: string;
-  title: string;
-  imageUrl: string | null;
-  relevance: number;
-  currency: string | null;
-  offers: Offer[];
-  cheapest: Offer;
-  highest: Offer;
-  storesCount: number;
-  potentialSavings: number | null;
-};
-
-export type ProviderStatus = { name: string; label: string; status: "ok" | "error"; count: number; error?: string };
-
-export type PriceSearch = {
-  id: string;
-  query: string;
-  status: "completed" | "partial" | "failed" | "no_providers";
-  providers: ProviderStatus[];
-  offersCount: number;
-  bestPrice: number | null;
-  bestCurrency: string | null;
-  bestOffer: Offer | null;
-  result?: { query: string; fetchedAt: string; dataSource: "live"; providers: ProviderStatus[]; groups: OfferGroup[]; bestGroupId: string | null; bestOffer: Offer | null; totalOffers: number } | null;
-  projectId: string | null;
-  favoriteId: string | null;
-  createdAt: string;
-};
-
-export type ProjectType = "advertisement" | "forecast" | "price_comparison";
+export type ProjectType = "advertisement" | "forecast";
 export type Project = {
   id: string;
   type: ProjectType;
@@ -121,7 +73,7 @@ export type Project = {
   downloadUrl: string | null;
 };
 
-export type FavoriteType = "product" | "price_comparison" | "advertisement" | "forecast";
+export type FavoriteType = "advertisement" | "forecast";
 export type Favorite = { id: string; itemType: FavoriteType; refId: string; title: string; category: string | null; data: Record<string, unknown>; createdAt: string };
 
 export type AppNotification = { id: string; type: string; title: string; body: string; link: string | null; read: boolean; createdAt: string };
@@ -131,6 +83,6 @@ export type Activity = { id: string; type: string; service: string; title: strin
 export type Settings = {
   theme: "light" | "dark" | "system";
   language: "en" | "uz" | "ru";
-  notifications: { inApp: boolean; email: boolean; generation: boolean; forecast: boolean; price: boolean; account: boolean };
+  notifications: { inApp: boolean; email: boolean; generation: boolean; forecast: boolean; account: boolean };
 };
 

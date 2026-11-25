@@ -11,7 +11,6 @@ import { Alert, Button, cx, useToast } from "./ui";
 
 const SERVICE_TEXT: Record<string, string> = {
   imageGeneration: "AI image generation is not connected on this server, so advertisements cannot be generated yet. An administrator must configure an AI image provider (OPENAI_API_KEY).",
-  prices: "No price data providers are connected on this server, so live prices cannot be fetched yet. An administrator must configure SerpApi (Google Shopping) and/or eBay API credentials.",
   payments: "Online payments are not configured on this server yet, so upgrades are unavailable. No payment will be taken or simulated.",
   trends: "World demand data is not connected on this server. An administrator must configure SerpApi (SERPAPI_API_KEY), which provides Google Trends data.",
 };
@@ -83,8 +82,8 @@ export function StatCard({ icon, label, value, hint, tone = "brand" }: { icon: R
   );
 }
 
-export function FavoriteButton({ itemType, refId, favoriteId, searchId, offerId, invalidate, compact }: {
-  itemType: FavoriteType; refId: string; favoriteId: string | null; searchId?: string; offerId?: string; invalidate?: unknown[]; compact?: boolean;
+export function FavoriteButton({ itemType, refId, favoriteId, invalidate, compact }: {
+  itemType: FavoriteType; refId: string; favoriteId: string | null; invalidate?: unknown[]; compact?: boolean;
 }) {
   const { t } = useI18n();
   const toast = useToast();
@@ -96,8 +95,7 @@ export function FavoriteButton({ itemType, refId, favoriteId, searchId, offerId,
         await del(`/favorites/${favId}`);
         return null;
       }
-      const body = itemType === "product" ? { itemType, searchId, offerId } : { itemType, refId };
-      return (await post<{ favorite: { id: string } }>("/favorites", body)).favorite.id;
+      return (await post<{ favorite: { id: string } }>("/favorites", { itemType, refId })).favorite.id;
     },
     onSuccess: (id) => {
       setFavId(id);

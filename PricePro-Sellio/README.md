@@ -1,17 +1,15 @@
 # PricePro
 
-AI-powered product intelligence platform with three core services:
+AI-powered product intelligence platform with two core services:
 
 1. **AI Product Studio** — turns product photos into professional advertising images (OpenAI Images API).
 2. **Demand Forecast** — world and country demand for a product from Google Trends search interest (via SerpApi), with a back-tested outlook per area and a ranking of countries.
-3. **Smart Price Finder** — compares live store prices and finds the cheapest offer (SerpApi Google Shopping, eBay Browse API).
 
 Plus: Dashboard, My Projects, Analytics, Favorites, Notifications, Profile, Settings (light/dark, Uzbek/Russian/English), Free/Pro subscriptions (Stripe) and authentication with email sign-in codes.
 
 ## Data integrity rules (enforced in code)
 
 - **No fake AI generation.** Without `OPENAI_API_KEY` the Studio returns `SERVICE_NOT_CONFIGURED` and stores nothing. Provider output is validated as a real image before it is saved.
-- **No invented prices, stores, availability or links.** Offers come only from configured providers; incomplete records are discarded. Availability and condition are shown as "not verified/not stated" unless the provider states them.
 - **Demand is search interest, labelled as such.** The Demand Forecast page uses Google Trends (0–100 relative search interest per area), never presented as units sold. Areas with too little data are shown as "no data", not filled in.
 - **Statistics are real.** Dashboard and analytics numbers are computed from the user's own stored activity.
 - **No fake payments.** The plan changes only when a signed Stripe webhook confirms payment.
@@ -29,7 +27,6 @@ server/   Node 22 + Express 5 + TypeScript
     user/                profile, avatar, password, sessions, settings, account deletion
     studio/              uploads, image provider adapter, generation job queue, retry, history
     forecast/            Google Trends adapter, forecasting engine (back-tested models), world/country demand analyses
-    prices/              provider adapters (SerpApi, eBay), product matching, history, export
     projects/ favorites/ analytics/ notifications/ dashboard/ subscription/ files/
   test/                  API + security + engine tests (node:test)
 web/      React 19 + TypeScript + Vite + Tailwind CSS 4 + Framer Motion + Lucide + Recharts
@@ -66,7 +63,7 @@ Without SMTP in development, emails are printed to the server log and the sign-i
 ## Tests
 
 ```bash
-npm test                  # 35 API, security and engine tests (local SQLite)
+npm test                  # 34 API, security and engine tests (local SQLite)
 TEST_LIBSQL=1 npm test    # the same suite through the Turso/libSQL driver
 npm run typecheck
 ```
@@ -99,7 +96,7 @@ lives in **Turso** and images in **Vercel Blob** (both have free plans).
 4. **Environment variables** (Settings → Environment Variables):
    - `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN` (required)
    - `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM` (required: sign-in codes are emailed; Gmail example above)
-   - optional: `SERPAPI_API_KEY` (prices + world demand), `OPENAI_API_KEY` (AI Studio), `EBAY_*`, `STRIPE_*`
+   - optional: `SERPAPI_API_KEY` (demand forecast), `OPENAI_API_KEY` (AI Studio), `STRIPE_*`
    - `APP_URL` only if you use a custom domain (otherwise the Vercel production domain is used)
 5. **Deploy**, then open `https://<your-domain>/api/health`. It lists anything still missing
    (database, storage, email) without showing secret values.
@@ -115,6 +112,5 @@ function instance.
 | --- | --- | --- |
 | Email | `SMTP_*` | dev: code shown on screen and in the log; prod: sign-up/sign-in refused |
 | AI images | `OPENAI_API_KEY`, `IMAGE_MODEL` | Studio shows "not connected"; generation refused |
-| Prices | `SERPAPI_API_KEY` and/or `EBAY_CLIENT_ID` + `EBAY_CLIENT_SECRET` | Price search refused |
 | Demand forecast | `SERPAPI_API_KEY` (Google Trends engine) | Page shows "not connected"; nothing is estimated |
 | Payments | `STRIPE_*` | Upgrades disabled |

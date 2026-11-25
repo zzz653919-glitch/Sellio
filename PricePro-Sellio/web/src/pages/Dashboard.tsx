@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import {
-  Activity as ActivityIcon, ArrowRight, BarChart3, CheckCircle2, FolderKanban, ImageIcon, LineChart, Search, Sparkles, Tag, TrendingDown,
+  Activity as ActivityIcon, ArrowRight, BarChart3, CheckCircle2, FolderKanban, ImageIcon, LineChart, Sparkles, TrendingDown,
   TrendingUp, XCircle,
 } from "lucide-react";
 import type { ReactNode } from "react";
@@ -9,16 +9,15 @@ import { Link } from "react-router-dom";
 import { StatCard } from "../components/shared";
 import { Badge, Button, Card, EmptyState, PageLoader, Progress, cx } from "../components/ui";
 import { get } from "../lib/api";
-import { fmtMoney, fmtNumber, fmtPct, fmtToday, timeAgo } from "../lib/format";
+import { fmtNumber, fmtPct, fmtToday, timeAgo } from "../lib/format";
 import { useI18n } from "../lib/i18n";
-import type { Activity, Generation, PriceSearch, Usage, User } from "../lib/types";
+import type { Activity, Generation, Usage, User } from "../lib/types";
 
 type DashboardData = {
   user: User;
-  stats: { totalProjects: number; adsCreated: number; productsAnalyzed: number; forecastsCompleted: number; priceComparisons: number };
+  stats: { totalProjects: number; adsCreated: number; productsAnalyzed: number; forecastsCompleted: number };
   generations: Generation[];
   analyses: { id: string; query: string; areas: number; createdAt: string; headline: { name: string; changePct: number | null; periodChangePct?: number | null; trend: string | null } | null }[];
-  searches: PriceSearch[];
   recentActivity: Activity[];
   usage: Usage;
 };
@@ -26,7 +25,6 @@ type DashboardData = {
 const SERVICE_ICON: Record<string, ReactNode> = {
   studio: <Sparkles className="h-4 w-4" />,
   forecast: <LineChart className="h-4 w-4" />,
-  prices: <Tag className="h-4 w-4" />,
   projects: <FolderKanban className="h-4 w-4" />,
 };
 
@@ -63,20 +61,19 @@ export default function Dashboard() {
             <p className="text-sm opacity-85">{fmtToday()}</p>
             <h1 className="mt-1 text-3xl font-extrabold tracking-tight">{greeting}, {d.user.firstName}!</h1>
             <p className="mt-2 max-w-xl text-sm opacity-90">
-              {t("You are on the {plan} plan. Create advertisements, forecast demand and compare prices — all in one place.", { plan: d.user.plan === "pro" ? "Pro" : "Free" })}
+              {t("You are on the {plan} plan. Create advertisements and see where demand is growing — all in one place.", { plan: d.user.plan === "pro" ? "Pro" : "Free" })}
             </p>
           </div>
         </div>
       </motion.div>
 
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatCard icon={<FolderKanban className="h-4 w-4" />} label={t("Total projects")} value={fmtNumber(d.stats.totalProjects)} />
         <StatCard icon={<ImageIcon className="h-4 w-4" />} label={t("Ads created")} value={fmtNumber(d.stats.adsCreated)} tone="violet" />
         <StatCard icon={<BarChart3 className="h-4 w-4" />} label={t("Products analyzed")} value={fmtNumber(d.stats.productsAnalyzed)} hint={t("{n} forecasts completed", { n: d.stats.forecastsCompleted })} tone="cyan" />
-        <StatCard icon={<Tag className="h-4 w-4" />} label={t("Price comparisons")} value={fmtNumber(d.stats.priceComparisons)} tone="emerald" />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <ServicePanel icon={<Sparkles className="h-5 w-5" />} title={t("AI Product Studio")} gradient="from-violet-600 to-brand-600" action={t("Create Advertisement")} to="/studio">
           {latest ? (
             <Link to={`/studio?generation=${latest.id}`} className="group relative block overflow-hidden rounded-xl bg-slate-100 dark:bg-slate-800">
@@ -108,21 +105,6 @@ export default function Dashboard() {
                 </Link>
               );
             })
-          )}
-        </ServicePanel>
-
-        <ServicePanel icon={<Tag className="h-5 w-5" />} title={t("Smart Price Finder")} gradient="from-emerald-600 to-teal-600" action={t("Find Best Price")} to="/prices">
-          {d.searches.length === 0 ? (
-            <EmptyState icon={<Search className="h-5 w-5" />} title={t("No price comparisons yet")} text={t("Search a product to compare store prices.")} />
-          ) : (
-            d.searches.map((s) => (
-              <Link key={s.id} to={`/prices?search=${s.id}`} className="rounded-xl border border-slate-200 p-3 hover:border-brand-300 dark:border-slate-800">
-                <p className="truncate font-medium">{s.query}</p>
-                <p className="mt-1 text-sm muted">
-                  {s.bestOffer ? <>{t("Best")}: <b className="text-emerald-600 dark:text-emerald-400">{fmtMoney(s.bestOffer.price, s.bestOffer.currency)}</b> · {s.bestOffer.storeName}</> : t("No matching offers")}
-                </p>
-              </Link>
-            ))
           )}
         </ServicePanel>
       </div>
@@ -157,7 +139,6 @@ export default function Dashboard() {
             {([
               ["generations", "Ad generations"],
               ["forecasts", "Forecasts"],
-              ["priceSearches", "Price searches"],
             ] as const).map(([k, label]) => (
               <div key={k}>
                 <div className="mb-1 flex justify-between text-sm"><span>{t(label)}</span><span className="muted">{d.usage.metrics[k].used} / {d.usage.metrics[k].limit}</span></div>

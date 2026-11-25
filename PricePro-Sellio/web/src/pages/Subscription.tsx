@@ -70,7 +70,7 @@ export default function Subscription() {
           <p className="mt-1 flex items-center gap-2 text-3xl font-extrabold">{isPro && <Crown className="h-7 w-7 text-amber-500" />}{d.plans[d.plan].name}</p>
           {d.subscription && <p className="mt-1 text-sm muted">{t("Status")}: {t(d.subscription.status)}{d.subscription.currentPeriodEnd && ` · ${d.subscription.cancelAtPeriodEnd ? t("ends") : t("renews")} ${fmtDate(d.subscription.currentPeriodEnd)}`}</p>}
           <div className="mt-6 space-y-4">
-            {([["generations", "Ad generations"], ["forecasts", "Forecasts"], ["priceSearches", "Price searches"]] as const).map(([k, label]) => (
+            {([["generations", "Ad generations"], ["forecasts", "Forecasts"]] as const).map(([k, label]) => (
               <div key={k}>
                 <div className="mb-1 flex justify-between text-sm"><span>{t(label)}</span><span className="muted">{d.usage.metrics[k].used} / {d.usage.metrics[k].limit}</span></div>
                 <Progress value={d.usage.metrics[k].used} max={d.usage.metrics[k].limit} />

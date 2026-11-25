@@ -17,7 +17,6 @@ import { favoritesRouter } from "./modules/favorites/routes.js";
 import { filesRouter } from "./modules/files/routes.js";
 import { marketRouter } from "./modules/forecast/marketRoutes.js";
 import { notificationsRouter } from "./modules/notifications/routes.js";
-import { pricesRouter } from "./modules/prices/routes.js";
 import { projectsRouter } from "./modules/projects/routes.js";
 import { studioRouter } from "./modules/studio/routes.js";
 import { stripeWebhook, subscriptionRouter } from "./modules/subscription/routes.js";
@@ -33,7 +32,6 @@ export function createApp() {
       contentSecurityPolicy: {
         directives: {
           defaultSrc: ["'self'"],
-          // Store product thumbnails come from external CDNs returned by price providers.
           imgSrc: ["'self'", "data:", "blob:", "https:"],
           styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
           fontSrc: ["'self'", "https://fonts.gstatic.com"],
@@ -84,7 +82,7 @@ export function createApp() {
       ok,
       platform: onVercel ? "vercel" : "server",
       checks: { database, storage, email },
-      integrations: { imageGeneration: features.imageGeneration, serpapi: features.serpapi, ebay: features.ebay, payments: features.payments },
+      integrations: { imageGeneration: features.imageGeneration, serpapi: features.serpapi, payments: features.payments },
     });
   });
   app.get("/api/meta", (_req, res) => {
@@ -92,7 +90,6 @@ export function createApp() {
       integrations: {
         email: features.email,
         imageGeneration: features.imageGeneration,
-        priceProviders: { serpapi: features.serpapi, ebay: features.ebay },
         marketDataProviders: [],
         payments: features.payments,
       },
@@ -105,7 +102,6 @@ export function createApp() {
   app.use("/api/files", filesRouter);
   app.use("/api/studio", studioRouter);
   app.use("/api/market", marketRouter);
-  app.use("/api/prices", pricesRouter);
   app.use("/api/projects", projectsRouter);
   app.use("/api/favorites", favoritesRouter);
   app.use("/api/analytics", analyticsRouter);

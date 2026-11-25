@@ -18,7 +18,6 @@ const SERVER_PATTERNS: [RegExp, string, string[]][] = [
   [/^Removed from My Projects: (.+)$/s, "Removed from My Projects: {x}", ["x"]],
   [/^Added to Favorites: (.+)$/s, "Added to Favorites: {x}", ["x"]],
   [/^World demand: (.+)$/s, "World demand: {x}", ["x"]],
-  [/^Price search: (.+)$/s, "Price search: {x}", ["x"]],
   [/^Advertisement created: (.+)$/s, "Advertisement created: {x}", ["x"]],
   [/^Advertisement failed: (.+)$/s, "Advertisement failed: {x}", ["x"]],
   [/^Product image uploaded: (.+)$/s, "Product image uploaded: {x}", ["x"]],
@@ -28,7 +27,6 @@ const SERVER_PATTERNS: [RegExp, string, string[]][] = [
   [/^Your advertisement for "(.+)" has been generated\.$/s, "Your advertisement for \"{x}\" has been generated.", ["x"]],
   [/^Search-interest analysis for "(.+)" is ready\.$/s, "Search-interest analysis for \"{x}\" is ready.", ["x"]],
   [/^Demand — (.+)$/s, "Demand — {x}", ["x"]],
-  [/^Prices — (.+)$/s, "Prices — {x}", ["x"]],
   [/^Ad — (.+)$/s, "Ad — {x}", ["x"]],
 ];
 

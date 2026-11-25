@@ -146,7 +146,6 @@ function NotificationsTab() {
       <Toggle checked={n.email} onChange={set("email")} label={t("Email notifications")} description={t("Email important account updates.")} />
       <Toggle checked={n.generation} disabled={!n.inApp} onChange={set("generation")} label={t("Advertisement generation")} description={t("When an advertisement is ready or fails.")} />
       <Toggle checked={n.forecast} disabled={!n.inApp} onChange={set("forecast")} label={t("Demand analysis")} description={t("When a forecast is completed.")} />
-      <Toggle checked={n.price} disabled={!n.inApp} onChange={set("price")} label={t("Price searches")} description={t("When a price comparison finishes.")} />
       <Toggle checked={n.account} onChange={set("account")} label={t("Account updates")} description={t("Security, password and plan changes.")} />
     </Card>
   );

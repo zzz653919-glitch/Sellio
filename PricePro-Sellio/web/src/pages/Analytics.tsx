@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { BarChart3, CheckCircle2, Download, FolderKanban, Heart, ImageIcon, LineChart, Tag, XCircle } from "lucide-react";
+import { BarChart3, CheckCircle2, Download, FolderKanban, Heart, ImageIcon, LineChart, XCircle } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Bar, BarChart, CartesianGrid, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { ErrorAlert, StatCard } from "../components/shared";
@@ -12,14 +12,14 @@ import type { Activity } from "../lib/types";
 
 type Summary = {
   range: { from: string; to: string };
-  totals: { adsGenerated: number; adsFailed: number; forecastsCompleted: number; productsAnalyzed: number; priceComparisons: number; projectsSaved: number; favoritesAdded: number };
-  timeline: { date: string; studio: number; forecast: number; prices: number; projects: number }[];
+  totals: { adsGenerated: number; adsFailed: number; forecastsCompleted: number; productsAnalyzed: number; projectsSaved: number; favoritesAdded: number };
+  timeline: { date: string; studio: number; forecast: number; projects: number }[];
   performance: { service: string; total: number; successRate: number | null; avgDurationMs: number | null }[];
   usageByService: { service: string; n: number }[];
 };
 
-const COLORS: Record<string, string> = { studio: "#8b5cf6", forecast: "#06b6d4", prices: "#10b981", projects: "#6366f1", account: "#94a3b8" };
-const SERVICE_LABEL: Record<string, string> = { studio: "AI Product Studio", forecast: "Demand Forecast", prices: "Smart Price Finder", projects: "Projects", account: "Account" };
+const COLORS: Record<string, string> = { studio: "#8b5cf6", forecast: "#06b6d4", projects: "#6366f1", account: "#94a3b8" };
+const SERVICE_LABEL: Record<string, string> = { studio: "AI Product Studio", forecast: "Demand Forecast", projects: "Projects", account: "Account" };
 const iso = (d: Date) => d.toISOString().slice(0, 10);
 
 export default function Analytics() {
@@ -54,8 +54,8 @@ export default function Analytics() {
       ["metric", "value"],
       ...Object.entries(s.totals).map(([k, v]) => [k, v]),
       [],
-      ["date", "studio", "forecast", "prices", "projects"],
-      ...s.timeline.map((d) => [d.date, d.studio, d.forecast, d.prices, d.projects]),
+      ["date", "studio", "forecast", "projects"],
+      ...s.timeline.map((d) => [d.date, d.studio, d.forecast, d.projects]),
       [],
       ["service", "operations", "success_rate_pct", "avg_duration_ms"],
       ...s.performance.map((p) => [p.service, p.total, p.successRate, p.avgDurationMs]),
@@ -83,10 +83,9 @@ export default function Analytics() {
       {summary.error && <ErrorAlert error={summary.error} />}
       {!s ? <PageLoader /> : (
         <div className="space-y-6">
-          <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
             <StatCard icon={<ImageIcon className="h-4 w-4" />} label={t("Ads generated")} value={fmtNumber(s.totals.adsGenerated)} hint={s.totals.adsFailed ? t("{n} failed", { n: s.totals.adsFailed }) : undefined} tone="violet" />
             <StatCard icon={<LineChart className="h-4 w-4" />} label={t("Products analyzed")} value={fmtNumber(s.totals.productsAnalyzed)} hint={t("{n} forecasts completed", { n: s.totals.forecastsCompleted })} tone="cyan" />
-            <StatCard icon={<Tag className="h-4 w-4" />} label={t("Price comparisons")} value={fmtNumber(s.totals.priceComparisons)} tone="emerald" />
             <StatCard icon={<FolderKanban className="h-4 w-4" />} label={t("Projects saved")} value={fmtNumber(s.totals.projectsSaved)} />
             <StatCard icon={<Heart className="h-4 w-4" />} label={t("Favorites added")} value={fmtNumber(s.totals.favoritesAdded)} tone="amber" />
           </div>
@@ -102,7 +101,7 @@ export default function Analytics() {
                     <YAxis allowDecimals={false} tick={{ fill: axis, fontSize: 11 }} />
                     <Tooltip contentStyle={{ background: resolved === "dark" ? "#0f172a" : "#fff", border: `1px solid ${grid}`, borderRadius: 12 }} />
                     <Legend />
-                    {(["studio", "forecast", "prices", "projects"] as const).map((k) => (
+                    {(["studio", "forecast", "projects"] as const).map((k) => (
                       <Bar key={k} dataKey={k} stackId="a" name={t(SERVICE_LABEL[k])} fill={COLORS[k]} radius={k === "projects" ? [4, 4, 0, 0] : 0} />
                     ))}
                   </BarChart>

@@ -47,14 +47,9 @@ const EnvSchema = z.object({
   OPENAI_BASE_URL: z.string().default("https://api.openai.com/v1"),
   IMAGE_MODEL: z.string().default("gpt-image-1"),
 
-  // Price providers
+  // Google Trends via SerpApi (Demand Forecast)
   SERPAPI_API_KEY: optional,
-  SERPAPI_GL: z.string().default("us"),
-  SERPAPI_HL: z.string().default("en"),
   SERPAPI_BASE_URL: z.url().default("https://serpapi.com"),
-  EBAY_CLIENT_ID: optional,
-  EBAY_CLIENT_SECRET: optional,
-  EBAY_MARKETPLACE_ID: z.string().default("EBAY_US"),
 
 
   // Payments (Stripe)
@@ -77,7 +72,6 @@ export const features = {
   email: Boolean(config.SMTP_HOST),
   imageGeneration: Boolean(config.OPENAI_API_KEY),
   serpapi: Boolean(config.SERPAPI_API_KEY),
-  ebay: Boolean(config.EBAY_CLIENT_ID && config.EBAY_CLIENT_SECRET),
   blobStorage: Boolean(config.BLOB_READ_WRITE_TOKEN || config.BLOB_STORE_ID),
   payments: Boolean(config.STRIPE_SECRET_KEY && config.STRIPE_PRICE_PRO),
 };

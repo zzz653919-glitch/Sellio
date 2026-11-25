@@ -1,18 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ExternalLink, Heart, ImageIcon, LineChart, Search, ShoppingBag, Tag, Trash2 } from "lucide-react";
+import { ExternalLink, Heart, ImageIcon, LineChart, Search, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ErrorAlert } from "../components/shared";
 import { Badge, Button, Card, EmptyState, Input, PageHeader, PageLoader, Select, Tabs, useToast } from "../components/ui";
 import { del, errorMessage, get } from "../lib/api";
-import { fmtDate, fmtMoney } from "../lib/format";
+import { fmtDate } from "../lib/format";
 import { useDebounced } from "../lib/hooks";
 import { useI18n } from "../lib/i18n";
 import type { Favorite, FavoriteType } from "../lib/types";
 
 const META: Record<FavoriteType, { label: string; icon: typeof Heart }> = {
-  product: { label: "Product", icon: ShoppingBag },
-  price_comparison: { label: "Price comparison", icon: Tag },
   advertisement: { label: "Advertisement", icon: ImageIcon },
   forecast: { label: "Forecast", icon: LineChart },
 };
@@ -47,20 +45,16 @@ export default function Favorites() {
   });
 
   const open = (f: Favorite) => {
-    if (f.itemType === "product") window.open(String(f.data.url), "_blank", "noopener,noreferrer");
-    else if (f.itemType === "advertisement") nav(`/studio?generation=${f.refId}`);
-    else if (f.itemType === "forecast") nav(`/forecast?market=${f.refId}`);
-    else nav(`/prices?search=${f.refId}`);
+    if (f.itemType === "advertisement") nav(`/studio?generation=${f.refId}`);
+    else nav(`/forecast?market=${f.refId}`);
   };
 
   return (
     <div>
-      <PageHeader icon={<Heart className="h-6 w-6" />} title={t("Favorites")} subtitle={t("Products, price comparisons, advertisements and reports you saved.")} />
+      <PageHeader icon={<Heart className="h-6 w-6" />} title={t("Favorites")} subtitle={t("Advertisements and demand analyses you saved.")} />
       <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <Tabs<"" | FavoriteType> value={type} onChange={setType} tabs={[
           { value: "", label: t("All") },
-          { value: "product", label: t("Products") },
-          { value: "price_comparison", label: t("Price comparisons") },
           { value: "advertisement", label: t("Advertisements") },
           { value: "forecast", label: t("Analysis reports") },
         ]} />
@@ -89,13 +83,6 @@ export default function Favorites() {
                 <div className="min-w-0 flex-1">
                   <Badge tone="brand"><M.icon className="h-3 w-3" />{t(M.label)}</Badge>
                   <p className="mt-1 line-clamp-2 text-sm font-semibold">{tr(f.title)}</p>
-                  {f.itemType === "product" && (
-                    <p className="text-xs muted">
-                      <b className="text-slate-800 dark:text-slate-200">{fmtMoney(Number(f.data.price), (f.data.currency as string) ?? null)}</b> · {String(f.data.storeName)}
-                      <span className="block">{t("Price as of {date}", { date: fmtDate(String(f.data.priceCapturedAt)) })}</span>
-                    </p>
-                  )}
-                  {f.itemType === "price_comparison" && f.data.best ? <p className="text-xs muted">{t("Best")}: {String(f.data.best)}</p> : null}
                   <p className="text-xs muted">{t("Saved")} {fmtDate(f.createdAt)}</p>
                   <div className="mt-2 flex gap-1">
                     <Button size="sm" variant="secondary" onClick={() => open(f)} icon={<ExternalLink className="h-3.5 w-3.5" />}>{t("Open")}</Button>

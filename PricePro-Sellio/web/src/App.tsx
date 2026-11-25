@@ -9,7 +9,6 @@ import { NotFoundPage } from "./pages/NotFound";
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Studio = lazy(() => import("./pages/Studio"));
 const Forecast = lazy(() => import("./pages/Forecast"));
-const Prices = lazy(() => import("./pages/Prices"));
 const Projects = lazy(() => import("./pages/Projects"));
 const Analytics = lazy(() => import("./pages/Analytics"));
 const Favorites = lazy(() => import("./pages/Favorites"));
@@ -45,7 +44,6 @@ export function App() {
           <Route index element={<Dashboard />} />
           <Route path="studio" element={<Studio />} />
           <Route path="forecast" element={<Forecast />} />
-          <Route path="prices" element={<Prices />} />
           <Route path="projects" element={<Projects />} />
           <Route path="analytics" element={<Analytics />} />
           <Route path="favorites" element={<Favorites />} />

@@ -2,12 +2,11 @@ import { get, run } from "../db/index.js";
 import { newId, nowIso } from "../lib/util.js";
 import { sendEmail } from "./email.js";
 
-export type NotificationType = "generation" | "forecast" | "price" | "account";
+export type NotificationType = "generation" | "forecast" | "account";
 
 const TOGGLE: Record<NotificationType, string> = {
   generation: "notify_generation",
   forecast: "notify_forecast",
-  price: "notify_price",
   account: "notify_account",
 };
 

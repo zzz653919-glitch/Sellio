@@ -131,7 +131,6 @@ async function settingsOf(userId: string) {
       email: s.notify_email === 1,
       generation: s.notify_generation === 1,
       forecast: s.notify_forecast === 1,
-      price: s.notify_price === 1,
       account: s.notify_account === 1,
     },
   };
@@ -150,7 +149,6 @@ const settingsSchema = z.object({
       email: z.boolean(),
       generation: z.boolean(),
       forecast: z.boolean(),
-      price: z.boolean(),
       account: z.boolean(),
     })
     .partial()
@@ -159,7 +157,7 @@ const settingsSchema = z.object({
 
 const NOTIFY_COLUMNS: Record<string, string> = {
   inApp: "notify_inapp", email: "notify_email", generation: "notify_generation",
-  forecast: "notify_forecast", price: "notify_price", account: "notify_account",
+  forecast: "notify_forecast", account: "notify_account",
 };
 
 userRouter.patch("/settings", async (req, res) => {

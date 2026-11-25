@@ -1,6 +1,6 @@
 import { useMutation } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { CheckCircle2, LineChart, Lock, Mail, Sparkles, Tag, User as UserIcon } from "lucide-react";
+import { CheckCircle2, LineChart, Lock, Mail, Sparkles, User as UserIcon } from "lucide-react";
 import { useState, type FormEvent, type ReactNode } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { Logo } from "../components/Layout";
@@ -25,7 +25,6 @@ function AuthShell({ title, subtitle, children }: { title: string; subtitle?: st
           {[
             { icon: Sparkles, title: "AI Product Studio", text: "Turn product photos into professional advertisements." },
             { icon: LineChart, title: "Demand Forecast", text: "See where demand for a product is growing — worldwide and by country." },
-            { icon: Tag, title: "Smart Price Finder", text: "Compare live store prices and find the cheapest offer." },
           ].map(({ icon: Icon, title: ft, text }) => (
             <div key={ft} className="flex gap-3">
               <span className="h-fit rounded-xl bg-white/15 p-2"><Icon className="h-5 w-5" /></span>
