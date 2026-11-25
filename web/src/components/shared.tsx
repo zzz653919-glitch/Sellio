@@ -63,7 +63,7 @@ export function ErrorAlert({ error }: { error: unknown }) {
   const notVerified = error instanceof ApiError && error.code === "EMAIL_NOT_VERIFIED";
   return (
     <Alert tone={limit ? "warning" : "error"} title={limit ? t("Plan limit reached") : notVerified ? t("Email not verified") : t("Something went wrong")}>
-      {errorMessage(error)}
+      {t(errorMessage(error))}
       {limit && <> <Link to="/subscription" className="font-semibold underline">{t("View plans")}</Link></>}
     </Alert>
   );

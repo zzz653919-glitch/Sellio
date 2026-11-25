@@ -12,7 +12,7 @@ else delete process.env.TURSO_DATABASE_URL;
 process.env.STORAGE_DIR = path.join(dir, "storage");
 process.env.APP_URL = "http://localhost:5173";
 process.env.STRIPE_WEBHOOK_SECRET = "whsec_test_secret";
-for (const k of ["BLOB_READ_WRITE_TOKEN", "OPENAI_API_KEY", "SERPAPI_API_KEY", "EBAY_CLIENT_ID", "EBAY_CLIENT_SECRET", "ANTHROPIC_API_KEY", "STRIPE_SECRET_KEY", "SMTP_HOST"]) {
+for (const k of ["BLOB_READ_WRITE_TOKEN", "BLOB_STORE_ID", "OPENAI_API_KEY", "SERPAPI_API_KEY", "EBAY_CLIENT_ID", "EBAY_CLIENT_SECRET", "ANTHROPIC_API_KEY", "STRIPE_SECRET_KEY", "SMTP_HOST"]) {
   delete process.env[k];
 }
 

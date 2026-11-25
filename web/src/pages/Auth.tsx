@@ -149,7 +149,7 @@ export function ForgotPasswordPage() {
         </div>
       ) : (
         <form onSubmit={(e) => { e.preventDefault(); m.mutate(); }} className="space-y-4">
-          {m.error && <Alert tone="error">{errorMessage(m.error)}</Alert>}
+          {m.error && <Alert tone="error">{t(errorMessage(m.error))}</Alert>}
           <Field label={t("Email")}><Input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
           <Button type="submit" className="w-full" size="lg" loading={m.isPending}>{t("Send reset link")}</Button>
           <p className="text-center text-sm"><Link to="/login" className="font-semibold text-brand-600 hover:underline dark:text-brand-400">{t("Back to sign in")}</Link></p>
@@ -178,7 +178,7 @@ export function ResetPasswordPage() {
         </div>
       ) : (
         <form onSubmit={(e) => { e.preventDefault(); if (!mismatch) m.mutate(); }} className="space-y-4">
-          {m.error && <Alert tone="error">{errorMessage(m.error)}</Alert>}
+          {m.error && <Alert tone="error">{t(errorMessage(m.error))}</Alert>}
           <Field label={t("New password")} hint={t("At least 8 characters with a letter and a number.")}><Input type="password" required autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} /></Field>
           <Field label={t("Confirm password")} error={mismatch ? t("Passwords do not match") : undefined}><Input type="password" required autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} /></Field>
           <Button type="submit" className="w-full" size="lg" loading={m.isPending} disabled={mismatch}>{t("Update password")}</Button>

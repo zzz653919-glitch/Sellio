@@ -94,7 +94,8 @@ lives in **Turso** and images in **Vercel Blob** (both have free plans).
 2. **Import the repository in Vercel** (Add New → Project → choose the GitHub repository).
    Leave Framework Preset as **Other**; the build settings come from `vercel.json`.
 3. **Storage — Vercel Blob.** In the project: Storage → Create → Blob → connect it to the
-   project. Vercel adds `BLOB_READ_WRITE_TOKEN` automatically.
+   project. Vercel adds `BLOB_STORE_ID` (private stores, authenticated with Vercel OIDC) or
+   `BLOB_READ_WRITE_TOKEN` automatically; either works. Redeploy afterwards.
 4. **Environment variables** (Settings → Environment Variables):
    - `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN` (required)
    - `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM` (required: sign-in codes are emailed; Gmail example above)

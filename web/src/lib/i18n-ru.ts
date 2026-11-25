@@ -657,4 +657,13 @@ export const RU: Record<string, string> = {
   "Demand — {x}": "Спрос — {x}",
   "Prices — {x}": "Цены — {x}",
   "Ad — {x}": "Реклама — {x}",
+
+  // Server errors
+  "Something went wrong. Please try again.": "Что-то пошло не так. Попробуйте ещё раз.",
+  "The email server rejected the login. Check SMTP_USER and SMTP_PASS (Gmail needs a 16-character App password, not the normal password).": "Почтовый сервер отклонил вход. Проверьте SMTP_USER и SMTP_PASS (для Gmail нужен 16-значный пароль приложения, а не обычный пароль).",
+  "Could not connect to the email server. Check SMTP_HOST, SMTP_PORT and SMTP_SECURE (Gmail: smtp.gmail.com, 465, true).": "Не удалось подключиться к почтовому серверу. Проверьте SMTP_HOST, SMTP_PORT и SMTP_SECURE (Gmail: smtp.gmail.com, 465, true).",
+  "The email server refused the sender address. EMAIL_FROM must use the same address as SMTP_USER.": "Почтовый сервер отклонил адрес отправителя. В EMAIL_FROM должен быть тот же адрес, что и в SMTP_USER.",
+  "The email could not be sent. Please try again later.": "Не удалось отправить письмо. Попробуйте позже.",
+  "This reset link is invalid or has expired.": "Ссылка для сброса недействительна или устарела.",
+  "Cannot reach the server. Check your connection.": "Нет связи с сервером. Проверьте подключение.",
 };

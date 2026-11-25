@@ -56,6 +56,19 @@ test("Vercel Blob driver: avatar is stored privately, served to its owner only, 
   assert.equal(blob.store.size, 0);
 });
 
+test("Blob stores connected through Vercel OIDC (no token) are used without a token", async () => {
+  const blob = fakeBlob();
+  const seen: unknown[] = [];
+  const spy = { ...blob, put: (p: string, b: unknown, o: { access: string; token?: string }) => { seen.push(o.token); return blob.put(p, b, o); } };
+  setBlobForTests(spy as never, null);
+  const { client } = await newUser();
+  const up = await client.req("POST", "/api/user/avatar", undefined, { form: fileForm("file", makePng(300, 300), "me.png", "image/png") });
+  assert.equal(up.status, 200);
+  assert.deepEqual(seen, [undefined]);
+  assert.equal((await client.req("GET", "/api/user/avatar", undefined, { raw: true })).status, 200);
+  setBlobForTests(null);
+});
+
 test("health check reports the configuration without secrets", async () => {
   const { baseUrl } = await import("./helpers.js");
   const r = await fetch(`${baseUrl}/api/health`);
@@ -65,4 +78,12 @@ test("health check reports the configuration without secrets", async () => {
   assert.equal(body.platform, "server");
   assert.equal(body.checks.database.ok, true);
   assert.ok(!JSON.stringify(body).includes("test-token"));
+});
+
+test("SMTP failures are explained without secrets", async () => {
+  const { describeSmtpError } = await import("../src/services/email.js");
+  assert.match(describeSmtpError({ code: "EAUTH", responseCode: 535, response: "535-5.7.8 Username and Password not accepted" }), /App password/);
+  assert.match(describeSmtpError({ code: "ESOCKET", message: "wrong version number" }), /SMTP_PORT/);
+  assert.match(describeSmtpError({ code: "EENVELOPE" }), /EMAIL_FROM/);
+  assert.match(describeSmtpError(new Error("boom")), /could not be sent/);
 });

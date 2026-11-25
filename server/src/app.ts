@@ -64,9 +64,11 @@ export function createApp() {
       database = { ok: false, driver: config.TURSO_DATABASE_URL ? "turso" : "sqlite-file", error: err instanceof Error ? err.message : "Database error" };
     }
     const storage = {
-      ok: !onVercel || Boolean(config.BLOB_READ_WRITE_TOKEN),
-      driver: config.BLOB_READ_WRITE_TOKEN ? "vercel-blob" : "local-disk",
-      ...(onVercel && !config.BLOB_READ_WRITE_TOKEN ? { error: "BLOB_READ_WRITE_TOKEN is not set (connect a Vercel Blob store to the project)." } : {}),
+      ok: !onVercel || features.blobStorage,
+      driver: features.blobStorage ? (config.BLOB_READ_WRITE_TOKEN ? "vercel-blob" : "vercel-blob (oidc)") : "local-disk",
+      ...(onVercel && !features.blobStorage
+        ? { error: "No Vercel Blob store is connected (neither BLOB_READ_WRITE_TOKEN nor BLOB_STORE_ID is set). Connect the store, then redeploy." }
+        : {}),
     };
     const email = {
       ok: features.email || config.NODE_ENV !== "production",

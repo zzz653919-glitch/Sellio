@@ -23,6 +23,8 @@ const EnvSchema = z.object({
   TURSO_AUTH_TOKEN: optional,
   // Vercel Blob for uploaded and generated images (required on Vercel)
   BLOB_READ_WRITE_TOKEN: optional,
+  // Newer (private) Blob stores connect with BLOB_STORE_ID + Vercel OIDC instead of a token.
+  BLOB_STORE_ID: optional,
   BLOB_ACCESS: z.enum(["private", "public"]).default("private"),
   STORAGE_DIR: z.string().default(path.join(serverRoot, "data", "storage")),
   SESSION_TTL_DAYS: z.coerce.number().int().positive().default(30),
@@ -76,5 +78,6 @@ export const features = {
   imageGeneration: Boolean(config.OPENAI_API_KEY),
   serpapi: Boolean(config.SERPAPI_API_KEY),
   ebay: Boolean(config.EBAY_CLIENT_ID && config.EBAY_CLIENT_SECRET),
+  blobStorage: Boolean(config.BLOB_READ_WRITE_TOKEN || config.BLOB_STORE_ID),
   payments: Boolean(config.STRIPE_SECRET_KEY && config.STRIPE_PRICE_PRO),
 };

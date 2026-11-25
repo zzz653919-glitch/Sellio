@@ -725,4 +725,13 @@ export const UZ: Record<string, string> = {
   "Demand — {x}": "Talab — {x}",
   "Prices — {x}": "Narxlar — {x}",
   "Ad — {x}": "Reklama — {x}",
+
+  // Server errors
+  "Something went wrong. Please try again.": "Nimadir xato ketdi. Qaytadan urinib ko‘ring.",
+  "The email server rejected the login. Check SMTP_USER and SMTP_PASS (Gmail needs a 16-character App password, not the normal password).": "Email serveri kirishni rad etdi. SMTP_USER va SMTP_PASS ni tekshiring (Gmail uchun oddiy parol emas, 16 belgili App password kerak).",
+  "Could not connect to the email server. Check SMTP_HOST, SMTP_PORT and SMTP_SECURE (Gmail: smtp.gmail.com, 465, true).": "Email serveriga ulanib bo‘lmadi. SMTP_HOST, SMTP_PORT va SMTP_SECURE ni tekshiring (Gmail: smtp.gmail.com, 465, true).",
+  "The email server refused the sender address. EMAIL_FROM must use the same address as SMTP_USER.": "Email serveri jo‘natuvchi manzilini rad etdi. EMAIL_FROM dagi manzil SMTP_USER bilan bir xil bo‘lishi kerak.",
+  "The email could not be sent. Please try again later.": "Email yuborilmadi. Birozdan keyin qayta urinib ko‘ring.",
+  "This reset link is invalid or has expired.": "Bu tiklash havolasi yaroqsiz yoki muddati o‘tgan.",
+  "Cannot reach the server. Check your connection.": "Serverga ulanib bo‘lmadi. Internetni tekshiring.",
 };

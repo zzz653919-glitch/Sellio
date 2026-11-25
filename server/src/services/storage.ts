@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { Readable } from "node:stream";
 import type { Response as ExpressResponse } from "express";
-import { config } from "../config.js";
+import { config, features } from "../config.js";
 import { all, get, run } from "../db/index.js";
 import { notFound } from "../lib/errors.js";
 import { newId, nowIso } from "../lib/util.js";
@@ -34,7 +34,7 @@ function localPath(key: string) {
 const localDriver: FileDriver = {
   async write(key, data) {
     if (process.env.VERCEL) {
-      throw new Error("BLOB_READ_WRITE_TOKEN is not set. On Vercel files must be stored in Vercel Blob (see README → Deploy to Vercel).");
+      throw new Error("No Vercel Blob store is connected (BLOB_READ_WRITE_TOKEN or BLOB_STORE_ID). On Vercel files must be stored in Vercel Blob (see README → Deploy to Vercel).");
     }
     const file = localPath(key);
     fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -55,21 +55,23 @@ const localDriver: FileDriver = {
 type BlobModule = Pick<typeof import("@vercel/blob"), "put" | "get" | "del">;
 let blobOverride: BlobModule | null = null;
 /** Tests replace the Vercel Blob SDK with an in-memory fake and switch the driver on. */
-export function setBlobForTests(fake: BlobModule | null) {
+export function setBlobForTests(fake: BlobModule | null, token: string | null = "test-token") {
   blobOverride = fake;
-  driver = fake ? blobDriver("test-token", "private") : null;
+  driver = fake ? blobDriver(token ?? undefined, "private") : null;
 }
 
-function blobDriver(token: string, access: "private" | "public"): FileDriver {
+/** `token` is omitted for stores connected through Vercel OIDC (BLOB_STORE_ID); the SDK authenticates itself. */
+function blobDriver(token: string | undefined, access: "private" | "public"): FileDriver {
+  const auth = token ? { token } : {};
   const blob = async (): Promise<BlobModule> => blobOverride ?? import("@vercel/blob");
   const open = async (key: string) => {
-    const r = await (await blob()).get(key, { access, token });
+    const r = await (await blob()).get(key, { access, ...auth });
     if (!r) throw notFound("File not found");
     return r;
   };
   return {
     async write(key, data, mime) {
-      const r = await (await blob()).put(key, data, { access, token, contentType: mime, addRandomSuffix: true });
+      const r = await (await blob()).put(key, data, { access, ...auth, contentType: mime, addRandomSuffix: true });
       return access === "public" ? r.url : r.pathname;
     },
     async read(key) {
@@ -84,14 +86,14 @@ function blobDriver(token: string, access: "private" | "public"): FileDriver {
       });
     },
     async remove(key) {
-      await (await blob()).del(key, { token });
+      await (await blob()).del(key, auth);
     },
   };
 }
 
 let driver: FileDriver | null = null;
 function files(): FileDriver {
-  driver ??= config.BLOB_READ_WRITE_TOKEN ? blobDriver(config.BLOB_READ_WRITE_TOKEN, config.BLOB_ACCESS) : localDriver;
+  driver ??= features.blobStorage ? blobDriver(config.BLOB_READ_WRITE_TOKEN, config.BLOB_ACCESS) : localDriver;
   return driver;
 }
 
