@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Globe2, Info, Minus, Play, Rocket, Search, Trash2, TrendingDown, TrendingUp } from "lucide-react";
+import { Check, Globe2, Info, Minus, Play, RefreshCw, Rocket, Search, Trash2, TrendingDown, TrendingUp } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
@@ -185,12 +185,22 @@ function GrowthPlanButton({ analysisId, product }: { analysisId: string; product
   return <Button size="sm" variant="secondary" icon={<Rocket className="h-4 w-4" />} loading={m.isPending} onClick={() => m.mutate()}>{t("Make a growth plan")}</Button>;
 }
 
-function AnalysisResult({ a, onDelete }: { a: Analysis; onDelete: () => void }) {
+function AnalysisResult({ a, onDelete, onRefresh, refreshing, refreshError }: { a: Analysis; onDelete: () => void; onRefresh: () => void; refreshing: boolean; refreshError: unknown }) {
   const { t } = useI18n();
   const r = a.result;
   const seasonAreas = r && !isCompare(r) ? r.areas.filter((x) => x.seasonality) : [];
   const [seasonGeo, setSeasonGeo] = useState<string | null>(null);
   if (!r) return <Alert tone="error">{t("Corrupted result")}</Alert>;
+  const ageDays = Math.floor((Date.now() - Date.parse(r.fetchedAt)) / 86_400_000);
+  const refreshButton = (
+    <Button size="sm" variant="secondary" icon={<RefreshCw className="h-4 w-4" />} loading={refreshing} onClick={onRefresh} title={t("Gets fresh data from Google Trends. It counts as one analysis in your monthly limit.")}>{t("Update")}</Button>
+  );
+  const staleNote = (
+    <>
+      {ageDays >= 7 && <Alert tone="warning">{t("This data was received {n} days ago. Press \"Update\" to get fresh figures.", { n: ageDays })}</Alert>}
+      {refreshError ? <ErrorAlert error={refreshError} /> : null}
+    </>
+  );
   if (isCompare(r)) {
     return (
       <Card className="space-y-5 p-5">
@@ -199,8 +209,9 @@ function AnalysisResult({ a, onDelete }: { a: Analysis; onDelete: () => void }) 
             <h2 className="text-lg font-semibold">{a.query}</h2>
             <p className="text-xs muted">{t(RANGE_LABEL.compare)} · {t("Data received")}: {fmtDateTime(r.fetchedAt)}</p>
           </div>
-          <Badge tone="cyan">{t("Google Trends · search interest")}</Badge>
+          <div className="flex flex-wrap items-center gap-2">{refreshButton}<Badge tone="cyan">{t("Google Trends · search interest")}</Badge></div>
         </div>
+        {staleNote}
         <CompareView r={r} onDelete={onDelete} />
       </Card>
     );
@@ -213,8 +224,9 @@ function AnalysisResult({ a, onDelete }: { a: Analysis; onDelete: () => void }) 
           <h2 className="text-lg font-semibold">{a.query}</h2>
           <p className="text-xs muted">{t(RANGE_LABEL[a.range])} · {t("Data received")}: {fmtDateTime(r.fetchedAt)}</p>
         </div>
-        <Badge tone="cyan">{t("Google Trends · search interest")}</Badge>
+        <div className="flex flex-wrap items-center gap-2">{refreshButton}<Badge tone="cyan">{t("Google Trends · search interest")}</Badge></div>
       </div>
+      {staleNote}
 
       <Alert tone="info">
         {t("The numbers show how much people search for this product on Google, in % of the highest interest in the chosen period (100% = the peak). This is real search data, not sales volume: it shows where interest is rising or falling.")}
@@ -301,7 +313,7 @@ export default function MarketDemand() {
   const open = (id: string | null) => setParams(id ? { market: id } : {});
 
   const run = useMutation({
-    mutationFn: (o?: { query: string; geos: string[] }) => post<{ analysis: Analysis }>("/market", { query: o?.query ?? query, range, geos: o?.geos ?? geos }),
+    mutationFn: (o?: { query: string; geos: string[]; range?: Range }) => post<{ analysis: Analysis }>("/market", { query: o?.query ?? query, range: o?.range ?? range, geos: o?.geos ?? geos }),
     onSuccess: (d) => {
       qc.invalidateQueries({ queryKey: ["market"] });
       qc.setQueryData(["market", d.analysis.id], d.analysis);
@@ -400,7 +412,14 @@ export default function MarketDemand() {
 
       <div className="lg:col-span-3">
         {currentId && current.data ? (
-          <AnalysisResult a={current.data} onDelete={() => setConfirmDelete(current.data!.id)} />
+          <AnalysisResult a={current.data} onDelete={() => setConfirmDelete(current.data!.id)}
+            refreshing={run.isPending || compare.isPending} refreshError={run.error ?? compare.error}
+            onRefresh={() => {
+              const x = current.data!;
+              const res = x.result;
+              if (res && isCompare(res)) compare.mutate({ queries: res.items.map((i) => i.query), geo: res.geo });
+              else run.mutate({ query: x.query, geos: x.geos, range: x.range as Range });
+            }} />
         ) : currentId && current.error ? (
           <ErrorAlert error={current.error} />
         ) : (

@@ -1724,4 +1724,9 @@ export const RU: Record<string, string> = {
   "Source: Google Trends, last 12 months. 100% = the region with the highest share of searches; this compares interest, not sales.": "Источник: Google Trends, последние 12 месяцев. 100% = регион с наибольшей долей поисков; это сравнение интереса, а не продаж.",
   "The numbers show how much people search for this product on Google, in % of the highest interest in the chosen period (100% = the peak). This is real search data, not sales volume: it shows where interest is rising or falling.": "Цифры показывают, насколько часто этот товар ищут в Google, в % от самого высокого интереса за выбранный период (100% = пик). Это реальные поисковые данные, а не объём продаж: они показывают, где интерес растёт или падает.",
   "Here countries are compared with each other: 100% = the country where the product is searched most relative to all searches there.": "Здесь страны сравниваются между собой: 100% = страна, где товар ищут чаще всего относительно всех поисков в ней.",
+  "All market data refreshed: {n} products with data. Users' own analyses update when they press \"Update\".": "Все рыночные данные обновлены: товаров с данными — {n}. Собственные анализы пользователей обновятся, когда они нажмут «Обновить».",
+  "Refresh all market data": "Обновить все рыночные данные",
+  "Gets fresh data from Google Trends. It counts as one analysis in your monthly limit.": "Получает свежие данные из Google Trends. Засчитывается как один анализ в месячном лимите.",
+  "Update": "Обновить",
+  "This data was received {n} days ago. Press \"Update\" to get fresh figures.": "Эти данные получены {n} дн. назад. Нажмите «Обновить», чтобы получить свежие цифры.",
 };

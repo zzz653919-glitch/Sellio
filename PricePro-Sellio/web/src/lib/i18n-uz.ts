@@ -1789,4 +1789,9 @@ export const UZ: Record<string, string> = {
   "Source: Google Trends, last 12 months. 100% = the region with the highest share of searches; this compares interest, not sales.": "Manba: Google Trends, oxirgi 12 oy. 100% = qidiruvlar ulushi eng yuqori viloyat; bu sotuvni emas, qiziqishni solishtiradi.",
   "The numbers show how much people search for this product on Google, in % of the highest interest in the chosen period (100% = the peak). This is real search data, not sales volume: it shows where interest is rising or falling.": "Raqamlar odamlar bu mahsulotni Google'da qanchalik ko'p qidirayotganini tanlangan davrdagi eng yuqori qiziqishga nisbatan foizda ko'rsatadi (100% = cho'qqi). Bu sotuv hajmi emas, haqiqiy qidiruv ma'lumoti: qiziqish qayerda o'sayotgani yoki pasayayotganini ko'rsatadi.",
   "Here countries are compared with each other: 100% = the country where the product is searched most relative to all searches there.": "Bu yerda davlatlar bir-biri bilan solishtiriladi: 100% — mahsulot o'sha davlatdagi barcha qidiruvlarga nisbatan eng ko'p qidirilgan davlat.",
+  "All market data refreshed: {n} products with data. Users' own analyses update when they press \"Update\".": "Barcha bozor ma'lumotlari yangilandi: ma'lumotli {n} ta mahsulot. Foydalanuvchilarning o'z tahlillari ular \"Yangilash\" tugmasini bosganda yangilanadi.",
+  "Refresh all market data": "Barcha bozor ma'lumotlarini yangilash",
+  "Gets fresh data from Google Trends. It counts as one analysis in your monthly limit.": "Google Trends'dan yangi ma'lumot oladi. Oylik limitingizdan bitta tahlil sifatida hisoblanadi.",
+  "Update": "Yangilash",
+  "This data was received {n} days ago. Press \"Update\" to get fresh figures.": "Bu ma'lumot {n} kun oldin olingan. Yangi raqamlar uchun \"Yangilash\" tugmasini bosing.",
 };

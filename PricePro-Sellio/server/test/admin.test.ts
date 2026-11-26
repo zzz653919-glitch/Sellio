@@ -210,6 +210,8 @@ test("announcements now and scheduled; support conversation; content moderation;
   assert.ok(logins.data.items.some((l: { success: boolean }) => l.success));
   assert.equal((await sa.client.get("/api/admin/studio")).status, 200);
   assert.equal((await sa.client.get("/api/admin/forecast")).status, 200);
+  const refreshAll = await sa.client.post("/api/admin/forecast/refresh-all", {});
+  assert.equal(refreshAll.status, 400); // SerpApi is not connected in tests; the full refresh is covered in the browser test
   assert.equal((await sa.client.get("/api/admin/system")).status, 200);
   assert.equal((await sa.client.get("/api/admin/subscriptions?status=all")).status, 200);
   assert.equal((await sa.client.get("/api/admin/subscriptions/usage")).status, 200);

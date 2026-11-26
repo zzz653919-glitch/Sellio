@@ -14,6 +14,7 @@ import { sendUpload, deleteUpload, type UploadRow } from "../../services/storage
 import { COUNTRIES, deleteMarketAnalysis } from "../forecast/market.js";
 import { MIN_MONTHS } from "../forecast/seasonal.js";
 import { topDemand, WATCHLIST_UZ } from "../forecast/topDemand.js";
+import { countryStats } from "../intel/worldbank.js";
 import { deleteGeneration } from "../studio/service.js";
 import { requirePermission } from "./permissions.js";
 import { like, pageOf, rangeOf } from "./util.js";
@@ -209,6 +210,22 @@ contentAdminRouter.get("/forecast", requirePermission("forecast.view"), async (r
 });
 
 /** Re-download the Market Radar now (16 Google Trends requests). */
+/**
+ * Refresh all shared market data at once: Market Radar / Top 3 / season calendar, regions,
+ * World Bank and UN Comtrade caches. Users' own saved analyses are not re-run (each one costs
+ * Google Trends requests); they update when the user presses "Update".
+ */
+contentAdminRouter.post("/forecast/refresh-all", requirePermission("forecast.manage"), async (req, res) => {
+  if (!features.serpapi) throw badRequest("SerpApi is not connected.");
+  const cleared = (await get<{ n: number }>("SELECT COUNT(*) AS n FROM trend_cache"))?.n ?? 0;
+  await run("DELETE FROM trend_cache");
+  const data = await topDemand("UZ");
+  let worldBank = "off";
+  if (features.worldBank) { try { await countryStats(["UZ"]); worldBank = "ok"; } catch { worldBank = "failed"; } }
+  await logAudit(req, "forecast.all_refreshed", { type: "cache", id: "all" }, `Refreshed all shared market data (${cleared} cached entries cleared, ${data?.items.length ?? 0} radar products with data)`);
+  res.json({ ok: true, cleared, items: data?.items.length ?? 0, worldBank, computedAt: data?.computedAt ?? null });
+});
+
 contentAdminRouter.post("/forecast/refresh-radar", requirePermission("forecast.manage"), async (req, res) => {
   if (!features.serpapi) throw badRequest("SerpApi is not connected.");
   await run("DELETE FROM trend_cache WHERE key = 'top2:UZ'");
