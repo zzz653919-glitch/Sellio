@@ -1,5 +1,5 @@
-import { transaction, type Statement } from "../db/index.js";
-import { deleteAllFilesOf } from "./storage.js";
+import { all, transaction, type Statement } from "../db/index.js";
+import { deleteAllFilesOf, removePrivateFile } from "./storage.js";
 
 /**
  * Delete an account and every record it owns (children first). Foreign-key cascades are not relied on:
@@ -8,6 +8,9 @@ import { deleteAllFilesOf } from "./storage.js";
  */
 export async function deleteAccount(u: string) {
   await deleteAllFilesOf(u);
+  for (const r of await all<{ receipt_key: string | null }>("SELECT receipt_key FROM payment_requests WHERE user_id = ? AND receipt_key IS NOT NULL", u)) {
+    if (r.receipt_key) await removePrivateFile(r.receipt_key);
+  }
   await transaction([
     ["DELETE FROM support_messages WHERE ticket_id IN (SELECT id FROM support_tickets WHERE user_id = ?)", u],
     ["DELETE FROM support_tickets WHERE user_id = ?", u],
@@ -18,7 +21,7 @@ export async function deleteAccount(u: string) {
     ["DELETE FROM campaign_stats WHERE user_id = ?", u],
     ["DELETE FROM campaign_items WHERE user_id = ?", u],
     ["DELETE FROM sales_points WHERE dataset_id IN (SELECT id FROM sales_datasets WHERE user_id = ?)", u],
-    ...["login_challenges", "sessions", "email_tokens", "competitors", "business_datasets", "business_reports", "advisor_messages", "campaigns", "competitor_ads", "ad_copies", "ai_requests", "brand_profiles", "notifications", "activity", "favorites", "projects", "market_analyses",
+    ...["payment_requests", "usage_events", "login_challenges", "sessions", "email_tokens", "competitors", "business_datasets", "business_reports", "campaigns", "competitor_ads", "ad_copies", "ai_requests", "brand_profiles", "notifications", "activity", "favorites", "projects", "market_analyses",
       "price_searches", "forecasts", "sales_datasets", "assistant_messages", "generations", "uploads", "subscription_events",
       "subscriptions", "user_settings"].map((t): Statement => [`DELETE FROM ${t} WHERE user_id = ?`, u]),
     ["DELETE FROM users WHERE id = ?", u],

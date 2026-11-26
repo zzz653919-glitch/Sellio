@@ -95,7 +95,7 @@ export default function Support() {
   const c = list.data?.counts ?? {};
   return (
     <div className="space-y-4">
-      <div><h1 className="text-2xl font-bold">{t("Support")}</h1><p className="text-sm muted">{t("Requests users send from the Support page. Replies reach the user as a notification.")}</p></div>
+      <div><h1 className="text-[26px] font-extrabold tracking-[-0.03em]">{t("Support")}</h1><p className="text-sm muted">{t("Requests users send from the Support page. Replies reach the user as a notification.")}</p></div>
       <div className="overflow-x-auto"><Tabs value={status} onChange={(v) => { setStatus(v); setPage(1); }} tabs={[{ value: "open", label: t("Open"), count: c.open ?? 0 }, { value: "pending", label: t("Waiting for user"), count: c.pending ?? 0 }, { value: "resolved", label: t("Resolved"), count: c.resolved ?? 0 }, { value: "all", label: t("All") }]} /></div>
       <Section title={t("Requests")}>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">

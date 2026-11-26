@@ -2,18 +2,20 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Ban, CheckCircle2, Flag, Trash2, Undo2 } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ErrorAlert } from "../../components/shared";
-import { Alert, Badge, Button, Field, Input, Modal, PageLoader, Progress, Select, useToast } from "../../components/ui";
+import { ErrorAlert, UsageMeter } from "../../components/shared";
+import { Alert, Badge, Button, Field, Input, Modal, PageLoader, Select, useToast } from "../../components/ui";
 import { del, get, post } from "../../lib/api";
 import { fmtDateTime, timeAgo } from "../../lib/format";
 import { useI18n } from "../../lib/i18n";
 import { money } from "./Dashboard";
 import { ConfirmWithPassword, ROLE_LABEL, Section, Stat, Table, useCan, type Role } from "../ui";
+import { planTone, type Usage } from "../../lib/types";
 
 type Detail = {
   user: { id: string; email: string; name: string; plan: string; status: string; verified: boolean; createdAt: string; role: Role | null; lastActive: string | null; suspendedReason: string | null; planSource: string | null; language: string | null };
   counts: Record<string, number>;
-  usage: { plan: string; metrics: Record<string, { used: number; limit: number }> };
+  usage: Usage;
+  usageHistory: { id: string; service: string; refId: string | null; status: string; plan: string; period: string; createdAt: string }[];
   subscription: { plan: string; status: string; provider: string | null; periodEnd: string | null; cancelAtPeriodEnd: boolean } | null;
   subscriptionEvents: { id: string; type: string; plan: string | null; amountCents: number | null; currency: string | null; createdAt: string }[];
   activity: { id: string; type: string; service: string; title: string; success: boolean; createdAt: string }[];
@@ -62,17 +64,17 @@ export default function UserDetail() {
       <Link to="/admin/users" className="inline-flex items-center gap-1 text-sm text-brand-600 hover:underline"><ArrowLeft className="h-4 w-4" />{t("Users")}</Link>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">{u.name}</h1>
+          <h1 className="text-[26px] font-extrabold tracking-[-0.03em]">{u.name}</h1>
           <p className="text-sm muted">{u.email} · ID {u.id}</p>
           <div className="mt-2 flex flex-wrap gap-1.5">
-            <Badge tone={u.plan === "pro" ? "violet" : "slate"}>{u.plan}{u.planSource === "admin" && ` · ${t("assigned by admin")}`}</Badge>
+            <Badge tone={planTone(u.plan)}>{u.plan}{u.planSource === "admin" && ` · ${t("assigned by admin")}`}</Badge>
             <Badge tone={u.status === "active" ? "green" : "red"}>{t(u.status === "active" ? "Active" : "Suspended")}</Badge>
             <Badge tone={u.verified ? "green" : "amber"}>{t(u.verified ? "Email verified" : "Email not verified")}</Badge>
             {u.role && <Badge tone="brand">{t(ROLE_LABEL[u.role])}</Badge>}
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          {can("users.manage") && <Button size="sm" variant="secondary" onClick={() => { setPlan(u.plan === "pro" ? "free" : "pro"); setModal("plan"); }}>{t("Change plan")}</Button>}
+          {can("users.manage") && <Button size="sm" variant="secondary" onClick={() => { setPlan(u.plan === "free" ? "pro" : "free"); setModal("plan"); }}>{t("Change plan")}</Button>}
           {can("users.manage") && (u.status === "active"
             ? <Button size="sm" variant="secondary" icon={<Ban className="h-4 w-4" />} onClick={() => setModal("suspend")}>{t("Suspend")}</Button>
             : <Button size="sm" variant="secondary" icon={<Undo2 className="h-4 w-4" />} loading={act.isPending} onClick={() => act.mutate({ kind: "reactivate" })}>{t("Reactivate")}</Button>)}
@@ -100,9 +102,19 @@ export default function UserDetail() {
         </Section>
         <Section title={t("Subscription and usage this month")}>
           {d.subscription && <p className="text-sm">{t("Plan")}: <b>{d.subscription.plan}</b> · {t("Status")}: {d.subscription.status} · {t("Source")}: {d.subscription.provider ?? "—"}{d.subscription.periodEnd && <> · {t("Period ends")}: {fmtDateTime(d.subscription.periodEnd)}</>}</p>}
-          {Object.entries(d.usage.metrics).map(([k, m]) => (
-            <div key={k}><div className="mb-1 flex justify-between text-sm"><span>{t(k === "generations" ? "Ad generations" : k === "forecasts" ? "Forecasts" : "AI text requests")}</span><span className="muted">{m.used} / {m.limit}</span></div><Progress value={m.used} max={m.limit} /></div>
-          ))}
+          <UsageMeter usage={d.usage} />
+        </Section>
+        <Section title={t("Request history")}>
+          <Table head={[t("When"), t("Service"), t("Status"), t("Plan")]} empty={!d.usageHistory.length}>
+            {d.usageHistory.map((e) => (
+              <tr key={e.id}>
+                <td>{fmtDateTime(e.createdAt)}</td>
+                <td>{t(e.service === "generation" ? "AI ad" : "Demand forecast")}</td>
+                <td><Badge tone={e.status === "consumed" ? "green" : "amber"}>{t(e.status === "consumed" ? "Counted" : "In progress")}</Badge></td>
+                <td>{e.plan} · {t(e.period === "day" ? "per day" : "per month")}</td>
+              </tr>
+            ))}
+          </Table>
         </Section>
         <Section title={t("Activity")}>
           <Table head={[t("Action"), t("Service"), t("When")]} empty={!d.activity.length}>
@@ -139,7 +151,7 @@ export default function UserDetail() {
 
       <ConfirmWithPassword open={modal === "plan"} title={t("Change plan")} text={t("No payment is created. The change is marked as assigned by an administrator and written to the audit log.")} confirmLabel={t("Save")} error={act.error} loading={act.isPending}
         onConfirm={(password) => act.mutate({ kind: "plan", password })} onClose={() => { setModal(null); act.reset(); }}>
-        <Field label={t("New plan")}><Select value={plan} onChange={(e) => setPlan(e.target.value)} options={[{ value: "free", label: "Free" }, { value: "pro", label: "Pro" }]} /></Field>
+        <Field label={t("New plan")}><Select value={plan} onChange={(e) => setPlan(e.target.value)} options={[{ value: "free", label: "Free" }, { value: "pro", label: "Pro" }, { value: "max", label: "Max" }]} /></Field>
       </ConfirmWithPassword>
       <ConfirmWithPassword open={modal === "delete"} title={t("Delete account?")} text={t("All of this user's data is deleted permanently. This cannot be undone.")} confirmLabel={t("Delete")} danger typeToConfirm={u.email} error={act.error} loading={act.isPending}
         onConfirm={(password) => act.mutate({ kind: "delete", password })} onClose={() => { setModal(null); act.reset(); }} />

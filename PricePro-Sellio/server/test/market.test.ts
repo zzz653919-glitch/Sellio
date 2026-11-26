@@ -46,7 +46,7 @@ test("API: refused without a provider (nothing invented, nothing counted)", asyn
   const r = await client.post("/api/market", { query: "air fryer", range: "today 12-m", geos: ["WORLD"] });
   assert.equal(r.status, 503);
   assert.equal(r.data.error.code, "SERVICE_NOT_CONFIGURED");
-  assert.equal((await client.get("/api/dashboard")).data.usage.metrics.forecasts.used, 0);
+  assert.equal((await client.get("/api/dashboard")).data.usage.metrics.requests.used, 0);
 });
 
 test("API: world and country demand with trends, no-data areas and per-user ownership", async () => {
@@ -83,7 +83,7 @@ test("API: world and country demand with trends, no-data areas and per-user owne
   assert.equal(a.result.byCountry[0].code, "UZ");
   assert.deepEqual(calls.sort(), ["RU", "TM", "UZ", "WORLD"]);
 
-  assert.equal((await client.get("/api/dashboard")).data.usage.metrics.forecasts.used, 1, "counts toward the forecast limit");
+  assert.equal((await client.get("/api/dashboard")).data.usage.metrics.requests.used, 1, "counts toward the forecast limit");
   assert.equal((await client.get("/api/market")).data.items.length, 1);
   const dash = (await client.get("/api/dashboard")).data;
   assert.equal(dash.stats.forecastsCompleted, 1);
@@ -174,5 +174,5 @@ test("API: top 3 demand now — ranks the watchlist by current vs usual interest
   const used = calls;
   assert.equal((await client.get("/api/market/top")).data.top[0].query, "куртка");
   assert.equal(calls, used, "second request is served from the weekly cache");
-  assert.equal((await client.get("/api/dashboard")).data.usage.metrics.forecasts.used, 0, "not counted against the user's plan");
+  assert.equal((await client.get("/api/dashboard")).data.usage.metrics.requests.used, 0, "not counted against the user's plan");
 });

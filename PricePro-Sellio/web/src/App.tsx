@@ -12,7 +12,6 @@ const Studio = lazy(() => import("./pages/Studio"));
 const Forecast = lazy(() => import("./pages/Forecast"));
 const Intelligence = lazy(() => import("./pages/Intelligence"));
 const Business = lazy(() => import("./pages/Business"));
-const Advisor = lazy(() => import("./pages/Advisor"));
 const AdStudio = lazy(() => import("./pages/AdStudio"));
 const Growth = lazy(() => import("./pages/Growth"));
 const Projects = lazy(() => import("./pages/Projects"));
@@ -23,6 +22,7 @@ const Settings = lazy(() => import("./pages/Settings"));
 const Profile = lazy(() => import("./pages/Profile"));
 const Subscription = lazy(() => import("./pages/Subscription"));
 const Support = lazy(() => import("./pages/Support"));
+const Payment = lazy(() => import("./pages/Payment"));
 const AdminApp = lazy(() => import("./admin/AdminApp"));
 
 function Protected({ children }: { children: ReactNode }) {
@@ -56,7 +56,6 @@ export function App() {
           <Route path="forecast" element={<Forecast />} />
           <Route path="intelligence" element={<Intelligence />} />
           <Route path="business" element={<Business />} />
-          <Route path="advisor" element={<Advisor />} />
           <Route path="ads" element={<AdStudio />} />
           <Route path="projects" element={<Projects />} />
           <Route path="analytics" element={<Analytics />} />
@@ -66,6 +65,7 @@ export function App() {
           <Route path="profile" element={<Profile />} />
           <Route path="subscription" element={<Subscription />} />
           <Route path="support" element={<Support />} />
+          <Route path="payment" element={<Payment />} />
           <Route path="*" element={<NotFoundPage />} />
         </Route>
       </Routes>

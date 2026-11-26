@@ -5,9 +5,11 @@ import { Link } from "react-router-dom";
 import { ApiError, del, errorMessage, post } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { useI18n } from "../lib/i18n";
-import type { FavoriteType, ProjectType } from "../lib/types";
+import { fmtInZone } from "../lib/format";
+import { useQty } from "../lib/qty";
+import { PLAN_NAME, planTone, type FavoriteType, type ProjectType, type Usage } from "../lib/types";
 import { CodeForm, type CodeChallenge } from "./CodeForm";
-import { Alert, Button, cx, useToast } from "./ui";
+import { Alert, Badge, Button, Progress, cx, useToast } from "./ui";
 
 const SERVICE_TEXT: Record<string, string> = {
   imageGeneration: "AI image generation is not connected on this server, so advertisements cannot be generated yet. An administrator must configure an AI image provider (OPENAI_API_KEY).",
@@ -72,15 +74,13 @@ export function ErrorAlert({ error }: { error: unknown }) {
 }
 
 export function StatCard({ icon, label, value, hint, tone = "brand" }: { icon: ReactNode; label: string; value: ReactNode; hint?: ReactNode; tone?: "brand" | "cyan" | "violet" | "emerald" | "amber" }) {
-  const bg = { brand: "from-brand-500 to-brand-600", cyan: "from-cyan-500 to-sky-600", violet: "from-violet-500 to-fuchsia-600", emerald: "from-emerald-500 to-teal-600", amber: "from-amber-500 to-orange-600" }[tone];
+  const tile = { brand: "", cyan: "", violet: "t-lilac", emerald: "t-ok", amber: "t-warn" }[tone];
   return (
-    <div className="card min-w-0 p-5">
-      <div className="flex items-start justify-between gap-3">
-        <p className="min-w-0 break-words text-sm font-medium muted">{label}</p>
-        <span className={cx("shrink-0 rounded-xl bg-gradient-to-br p-2 text-white", bg)}>{icon}</span>
-      </div>
-      <p className="mt-3 text-3xl font-bold tracking-tight">{value}</p>
-      {hint && <p className="mt-1 text-xs muted">{hint}</p>}
+    <div className="card min-w-0 px-[18px] pb-[18px] pt-4">
+      <span className={cx("tile mb-3.5", tile)}>{icon}</span>
+      <p className="text-[27px] font-extrabold leading-tight tracking-[-0.03em]">{value}</p>
+      <p className="mt-1.5 min-w-0 break-words text-[13px] muted">{label}</p>
+      {hint && <p className="mt-0.5 text-xs text-[var(--v-faint)]">{hint}</p>}
     </div>
   );
 }
@@ -145,4 +145,39 @@ export function SaveProjectButton({ type, refId, projectId, invalidate }: { type
     );
   }
   return <Button variant="secondary" size="sm" loading={m.isPending} onClick={() => m.mutate()} icon={<BookmarkPlus className="h-4 w-4" />}>{t("Save to My Projects")}</Button>;
+}
+
+/** Request allowance: plan, used, remaining, total and the next reset (in the user's time zone). */
+export function UsageMeter({ usage, compact }: { usage: Usage; compact?: boolean }) {
+  const { t } = useI18n();
+  const qty = useQty();
+  const r = usage.metrics.requests;
+  const ai = usage.metrics.ai;
+  const reset = (iso: string) => fmtInZone(iso, usage.timezone);
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge tone={planTone(usage.plan)}>{PLAN_NAME[usage.plan]}</Badge>
+        <span className="text-sm muted">{t(r.period === "day" ? "Daily limit" : "Monthly limit")}: <b className="text-[var(--v-text)]">{qty(r.limit)}</b></span>
+      </div>
+      <div>
+        <p className="text-[15px] font-bold">
+          {t("{used}/{limit} used, {left} remaining", { used: r.used, limit: r.limit, left: qty(r.remaining) })}
+        </p>
+        <div className="mt-2"><Progress value={r.used} max={r.limit} /></div>
+        {r.imagesToday && (
+          <p className="mt-2 text-sm">{t("AI images today")}: <b>{r.imagesToday.used}/{r.imagesToday.limit}</b> <span className="text-xs muted">({t("{n} remaining", { n: qty(r.imagesToday.remaining) })})</span></p>
+        )}
+        <p className="mt-1.5 text-xs muted">{t("AI ads and demand forecasts share these requests. Failed operations are not counted.")}</p>
+        <p className="mt-0.5 text-xs muted">{t("Next reset")}: <b className="text-[var(--v-text)]">{reset(r.resetsAt)}</b> ({usage.timezone})</p>
+      </div>
+      {!compact && (
+        <div>
+          <div className="mb-1 flex justify-between text-sm"><span>{t("AI text requests")}</span><span className="muted">{ai.used} / {qty(ai.limit)}</span></div>
+          <Progress value={ai.used} max={ai.limit} />
+          <p className="mt-1 text-xs muted">{t("Next reset")}: {reset(ai.resetsAt)}</p>
+        </div>
+      )}
+    </div>
+  );
 }

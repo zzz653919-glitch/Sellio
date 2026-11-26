@@ -21,13 +21,12 @@ export const ROLE_LABEL: Record<Role, string> = { super_admin: "Super Admin", ad
 
 export function Stat({ label, value, hint, tone = "brand" }: { label: string; value: ReactNode; hint?: ReactNode; tone?: "brand" | "green" | "amber" | "red" | "slate" }) {
   const qty = useQty();
-  const bar = { brand: "bg-brand-500", green: "bg-emerald-500", amber: "bg-amber-500", red: "bg-rose-500", slate: "bg-slate-400" }[tone];
+  const dot = { brand: "bg-[var(--v-sky)]", green: "bg-[var(--v-ok)]", amber: "bg-[var(--v-warn)]", red: "bg-[var(--v-bad)]", slate: "bg-[var(--v-faint)]" }[tone];
   return (
-    <div className="card relative overflow-hidden p-4">
-      <span className={cx("absolute inset-y-0 left-0 w-1", bar)} />
-      <p className="text-xs font-medium muted">{label}</p>
-      <p className="mt-1 text-2xl font-extrabold tracking-tight">{typeof value === "number" ? qty(value, Number.isInteger(value) ? 0 : 1) : value}</p>
-      {hint && <p className="mt-0.5 text-xs muted">{hint}</p>}
+    <div className="card relative overflow-hidden px-[18px] pb-4 pt-4">
+      <p className="flex items-center gap-2 text-[13px] font-medium muted"><span className={cx("h-2 w-2 flex-none rounded-full", dot)} />{label}</p>
+      <p className="mt-2 text-[26px] font-extrabold leading-tight tracking-[-0.03em]">{typeof value === "number" ? qty(value, Number.isInteger(value) ? 0 : 1) : value}</p>
+      {hint && <p className="mt-1 text-xs text-[var(--v-faint)]">{hint}</p>}
     </div>
   );
 }
@@ -35,7 +34,7 @@ export function Stat({ label, value, hint, tone = "brand" }: { label: string; va
 export function Section({ title, actions, children, className }: { title: string; actions?: ReactNode; children: ReactNode; className?: string }) {
   return (
     <section className={cx("card space-y-3 p-5", className)}>
-      <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="font-semibold">{title}</h2>{actions}</div>
+      <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="text-[15px] font-bold">{title}</h2>{actions}</div>
       {children}
     </section>
   );
@@ -61,8 +60,8 @@ export function Table({ head, children, empty }: { head: ReactNode[]; children: 
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[460px] text-sm">
-        <thead className="text-left text-xs uppercase tracking-wide text-slate-500"><tr>{head.map((h, i) => <th key={i} className="whitespace-nowrap py-2 pr-3">{h}</th>)}</tr></thead>
-        <tbody className="[&>tr]:border-t [&>tr]:border-slate-100 dark:[&>tr]:border-slate-800 [&_td]:py-2 [&_td]:pr-3">{children}</tbody>
+        <thead className="text-left text-xs font-bold text-[var(--v-muted)]"><tr>{head.map((h, i) => <th key={i} className="whitespace-nowrap bg-[var(--v-th)] py-2.5 pr-3 first:rounded-l-[10px] first:pl-3 last:rounded-r-[10px]">{h}</th>)}</tr></thead>
+        <tbody className="[&>tr]:border-t [&>tr]:border-[var(--v-line-soft)] [&>tr:first-child]:border-t-0 [&_td]:py-2.5 [&_td]:pr-3 [&_td:first-child]:pl-3">{children}</tbody>
       </table>
       {empty && <p className="py-6 text-center text-sm muted">{t("Nothing found.")}</p>}
     </div>

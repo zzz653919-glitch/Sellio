@@ -11,10 +11,10 @@ export { cx };
 
 type Variant = "primary" | "secondary" | "ghost" | "danger";
 const VARIANT: Record<Variant, string> = {
-  primary: "bg-brand-600 text-white hover:bg-brand-700 shadow-sm shadow-brand-600/20",
-  secondary: "border border-slate-300 bg-white text-slate-800 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800",
-  ghost: "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800",
-  danger: "bg-rose-600 text-white hover:bg-rose-700",
+  primary: "bg-[var(--v-btn)] text-[var(--v-btn-text)] hover:bg-[var(--v-btn-hover)] shadow-[inset_0_1px_0_rgba(255,255,255,.45)]",
+  secondary: "border border-[var(--v-line)] bg-[var(--v-glass-2)] text-[var(--v-text)] shadow-[inset_0_1px_0_var(--v-hi)] hover:bg-[var(--v-glass-3)]",
+  ghost: "text-[var(--v-muted)] hover:bg-[var(--v-glass-2)] hover:text-[var(--v-text)]",
+  danger: "bg-rose-600 text-white hover:bg-rose-700 shadow-[inset_0_1px_0_rgba(255,255,255,.3)]",
 };
 
 export function Button({
@@ -25,8 +25,8 @@ export function Button({
       {...rest}
       disabled={disabled || loading}
       className={cx(
-        "inline-flex items-center justify-center gap-2 rounded-xl font-semibold transition focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-500/30 disabled:cursor-not-allowed disabled:opacity-55",
-        size === "sm" ? "px-3 py-1.5 text-xs" : size === "lg" ? "px-5 py-3 text-base" : "px-4 py-2.5 text-sm",
+        "inline-flex items-center justify-center gap-2 whitespace-nowrap font-semibold transition active:translate-y-px focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--v-sky-soft)] disabled:cursor-not-allowed disabled:opacity-50",
+        size === "sm" ? "h-8 rounded-[10px] px-3 text-[12.5px]" : size === "lg" ? "h-12 rounded-[14px] px-[22px] text-[14.5px]" : "h-10 rounded-xl px-4 text-[13.5px]",
         VARIANT[variant],
         className,
       )}
@@ -65,19 +65,19 @@ export function Select({ options, className, ...rest }: SelectHTMLAttributes<HTM
 
 type Tone = "slate" | "brand" | "green" | "amber" | "red" | "cyan" | "violet";
 const TONE: Record<Tone, string> = {
-  slate: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
-  brand: "bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-300",
-  green: "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300",
-  amber: "bg-amber-50 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300",
-  red: "bg-rose-50 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300",
-  cyan: "bg-cyan-50 text-cyan-700 dark:bg-cyan-500/15 dark:text-cyan-300",
-  violet: "bg-violet-50 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300",
+  slate: "bg-[var(--v-glass-3)] text-[var(--v-muted)]",
+  brand: "bg-[var(--v-sky-soft)] text-[var(--v-sky)]",
+  green: "bg-[var(--v-ok-soft)] text-[var(--v-ok)]",
+  amber: "bg-[var(--v-warn-soft)] text-[var(--v-warn)]",
+  red: "bg-[var(--v-bad-soft)] text-[var(--v-bad)]",
+  cyan: "bg-[var(--v-sky-soft)] text-[var(--v-sky)]",
+  violet: "bg-[var(--v-lilac-soft)] text-[var(--v-lilac)]",
 };
 export function Badge({ tone = "slate", children, className }: { tone?: Tone; children: ReactNode; className?: string }) {
-  return <span className={cx("inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold", TONE[tone], className)}>{children}</span>;
+  return <span className={cx("inline-flex h-6 items-center gap-1 whitespace-nowrap rounded-full px-[9px] text-xs font-semibold", TONE[tone], className)}>{children}</span>;
 }
 
-export const Spinner = ({ className }: { className?: string }) => <Loader2 className={cx("h-5 w-5 animate-spin text-brand-600", className)} />;
+export const Spinner = ({ className }: { className?: string }) => <Loader2 className={cx("h-5 w-5 animate-spin text-[var(--v-sky)]", className)} />;
 
 export function PageLoader() {
   return (
@@ -89,9 +89,9 @@ export function PageLoader() {
 
 export function EmptyState({ icon, title, text, action }: { icon: ReactNode; title: string; text?: string; action?: ReactNode }) {
   return (
-    <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 px-6 py-12 text-center dark:border-slate-700">
-      <div className="mb-3 rounded-2xl bg-slate-100 p-3 text-slate-500 dark:bg-slate-800 dark:text-slate-400">{icon}</div>
-      <p className="font-semibold">{title}</p>
+    <div className="flex flex-col items-center justify-center rounded-[18px] border border-dashed border-[var(--v-line)] px-6 py-11 text-center">
+      <div className="tile mb-3 h-[52px] w-[52px] rounded-2xl">{icon}</div>
+      <p className="text-base font-bold">{title}</p>
       {text && <p className="mt-1 max-w-md text-sm muted">{text}</p>}
       {action && <div className="mt-4">{action}</div>}
     </div>
@@ -100,12 +100,12 @@ export function EmptyState({ icon, title, text, action }: { icon: ReactNode; tit
 
 export function PageHeader({ title, subtitle, icon, actions }: { title: string; subtitle?: string; icon?: ReactNode; actions?: ReactNode }) {
   return (
-    <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-      <div className="flex items-center gap-3">
-        {icon && <div className="rounded-2xl bg-gradient-to-br from-brand-500 to-cyan-500 p-2.5 text-white shadow-lg shadow-brand-500/20">{icon}</div>}
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
-          {subtitle && <p className="mt-0.5 text-sm muted">{subtitle}</p>}
+    <div className="mb-6 flex flex-col gap-4 px-1.5 pt-2 sm:flex-row sm:items-end sm:justify-between">
+      <div className="flex items-center gap-3.5">
+        {icon && <div className="tile hidden h-12 w-12 rounded-2xl sm:grid [&>svg]:h-6 [&>svg]:w-6">{icon}</div>}
+        <div className="min-w-0">
+          <h1 className="text-[26px] font-extrabold leading-tight tracking-[-0.03em] sm:text-[30px]">{title}</h1>
+          {subtitle && <p className="mt-1.5 text-[14.5px] muted">{subtitle}</p>}
         </div>
       </div>
       {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
@@ -115,14 +115,14 @@ export function PageHeader({ title, subtitle, icon, actions }: { title: string; 
 
 export function Alert({ tone = "info", title, children, action }: { tone?: "info" | "warning" | "error" | "success"; title?: string; children?: ReactNode; action?: ReactNode }) {
   const cls = {
-    info: "border-brand-200 bg-brand-50 text-brand-900 dark:border-brand-500/30 dark:bg-brand-500/10 dark:text-brand-100",
-    warning: "border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100",
-    error: "border-rose-200 bg-rose-50 text-rose-900 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-100",
-    success: "border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-100",
+    info: "border-[var(--v-line)] bg-[var(--v-sky-soft)] [&>svg]:text-[var(--v-sky)]",
+    warning: "border-[var(--v-line)] bg-[var(--v-warn-soft)] [&>svg]:text-[var(--v-warn)]",
+    error: "border-[var(--v-line)] bg-[var(--v-bad-soft)] [&>svg]:text-[var(--v-bad)]",
+    success: "border-[var(--v-line)] bg-[var(--v-ok-soft)] [&>svg]:text-[var(--v-ok)]",
   }[tone];
   const Icon = { info: Info, warning: AlertTriangle, error: XCircle, success: CheckCircle2 }[tone];
   return (
-    <div role={tone === "error" ? "alert" : "status"} className={cx("flex gap-3 rounded-xl border p-3.5 text-sm", cls)}>
+    <div role={tone === "error" ? "alert" : "status"} className={cx("flex gap-3 rounded-[14px] border p-3.5 text-sm text-[var(--v-text)]", cls)}>
       <Icon className="mt-0.5 h-4 w-4 flex-none" />
       <div className="min-w-0 flex-1">
         {title && <p className="font-semibold">{title}</p>}
@@ -143,12 +143,12 @@ export function Modal({ open, onClose, title, children, wide }: { open: boolean;
   return (
     <AnimatePresence>
       {open && (
-        <motion.div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onMouseDown={onClose}>
+        <motion.div className="fixed inset-0 z-50 flex items-center justify-center bg-[#030612]/55 p-4 backdrop-blur-sm" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onMouseDown={onClose}>
           <motion.div
             role="dialog"
             aria-modal="true"
             aria-label={title}
-            className={cx("card max-h-[90vh] w-full overflow-y-auto p-6", wide ? "max-w-4xl" : "max-w-md")}
+            className={cx("max-h-[90vh] w-full overflow-y-auto rounded-[22px] border border-[var(--v-line)] bg-[var(--v-pop)] p-6 shadow-[inset_0_1px_0_var(--v-hi),var(--v-drop)] backdrop-blur-2xl", wide ? "max-w-4xl" : "max-w-md")}
             initial={{ y: 16, scale: 0.98 }}
             animate={{ y: 0, scale: 1 }}
             exit={{ y: 16, scale: 0.98 }}
@@ -156,7 +156,7 @@ export function Modal({ open, onClose, title, children, wide }: { open: boolean;
           >
             <div className="mb-4 flex items-center justify-between gap-4">
               <h2 className="text-lg font-bold">{title}</h2>
-              <button onClick={onClose} className="rounded-lg p-1 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800" aria-label="Close"><X className="h-5 w-5" /></button>
+              <button onClick={onClose} className="rounded-lg p-1 text-[var(--v-muted)] hover:bg-[var(--v-glass-2)]" aria-label="Close"><X className="h-5 w-5" /></button>
             </div>
             {children}
           </motion.div>
@@ -194,9 +194,9 @@ export function Toggle({ checked, onChange, label, description, disabled }: { ch
         aria-checked={checked}
         disabled={disabled}
         onClick={() => onChange(!checked)}
-        className={cx("relative h-6 w-11 flex-none rounded-full transition", checked ? "bg-brand-600" : "bg-slate-300 dark:bg-slate-700")}
+        className={cx("relative h-6 w-[42px] flex-none rounded-full border transition", checked ? "border-transparent bg-[var(--v-switch-on)]" : "border-[var(--v-line)] bg-[var(--v-switch-off)]")}
       >
-        <span className={cx("absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition", checked ? "left-[22px]" : "left-0.5")} />
+        <span className={cx("absolute top-[2px] h-[18px] w-[18px] rounded-full bg-white shadow transition", checked ? "left-[20px]" : "left-[2px]")} />
       </button>
     </label>
   );
@@ -204,20 +204,17 @@ export function Toggle({ checked, onChange, label, description, disabled }: { ch
 
 export function Tabs<T extends string>({ value, onChange, tabs }: { value: T; onChange: (v: T) => void; tabs: { value: T; label: string; count?: number }[] }) {
   return (
-    <div className="flex gap-1 overflow-x-auto rounded-xl bg-slate-100 p-1 dark:bg-slate-900" role="tablist">
+    <div className="seg" role="tablist">
       {tabs.map((tab) => (
         <button
           key={tab.value}
           role="tab"
           aria-selected={value === tab.value}
           onClick={() => onChange(tab.value)}
-          className={cx(
-            "whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium transition",
-            value === tab.value ? "bg-white text-slate-900 shadow-sm dark:bg-slate-800 dark:text-white" : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200",
-          )}
+          className={cx("seg-btn", value === tab.value && "is-on")}
         >
           {tab.label}
-          {tab.count !== undefined && <span className="ml-1.5 text-xs opacity-60">{tab.count}</span>}
+          {tab.count !== undefined && <small className="text-[11px] font-bold text-[var(--v-faint)]">{tab.count}</small>}
         </button>
       ))}
     </div>
@@ -227,8 +224,8 @@ export function Tabs<T extends string>({ value, onChange, tabs }: { value: T; on
 export function Progress({ value, max }: { value: number; max: number }) {
   const pct = max > 0 ? Math.min(100, (value / max) * 100) : 0;
   return (
-    <div className="h-2 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
-      <div className={cx("h-full rounded-full transition-all", pct >= 100 ? "bg-rose-500" : pct >= 80 ? "bg-amber-500" : "bg-brand-500")} style={{ width: `${pct}%` }} />
+    <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--v-track)]">
+      <div className={cx("h-full rounded-full transition-all", pct >= 100 ? "bg-rose-400" : pct >= 80 ? "bg-amber-400" : "bg-[var(--v-sky)]")} style={{ width: `${pct}%` }} />
     </div>
   );
 }

@@ -1,4 +1,6 @@
 import fs from "node:fs";
+import { paymentsRouter } from "./modules/payments/routes.js";
+import { expireManualPlans } from "./services/payments.js";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import cookieParser from "cookie-parser";
@@ -20,7 +22,6 @@ import { notificationsRouter } from "./modules/notifications/routes.js";
 import { projectsRouter } from "./modules/projects/routes.js";
 import { studioRouter } from "./modules/studio/routes.js";
 import { adsRouter } from "./modules/ads/routes.js";
-import { advisorRouter } from "./modules/advisor/routes.js";
 import { campaignsRouter } from "./modules/campaigns/routes.js";
 import { growthRouter } from "./modules/growth/routes.js";
 import { adminRouter } from "./modules/admin/routes.js";
@@ -140,6 +141,7 @@ export function createApp() {
     const started = Date.now();
     const result: Record<string, string> = {};
     try { result.radar = (await topDemand("UZ")) ? "ok" : "not configured"; } catch (e) { result.radar = e instanceof Error ? e.message : "failed"; }
+    try { result.expiredPlans = `${await expireManualPlans()} ended`; } catch (e) { result.expiredPlans = e instanceof Error ? e.message : "failed"; }
     try { result.announcements = `${await deliverDueAnnouncements(true)} delivered`; } catch (e) { result.announcements = e instanceof Error ? e.message : "failed"; }
     try { result.worldBank = features.worldBank ? ((await countryStats(["UZ"])), "ok") : "off"; } catch (e) { result.worldBank = e instanceof Error ? e.message : "failed"; }
     res.json({ ok: true, ms: Date.now() - started, ...result });
@@ -158,10 +160,10 @@ export function createApp() {
   app.use("/api/subscription", subscriptionRouter);
   app.use("/api/intel", intelRouter);
   app.use("/api/business", businessRouter);
-  app.use("/api/advisor", advisorRouter);
   app.use("/api/ads", adsRouter);
   app.use("/api/campaigns", campaignsRouter);
   app.use("/api/growth", growthRouter);
+  app.use("/api/payments", paymentsRouter);
   app.use("/api/support", supportRouter);
   app.use("/api/admin", adminRouter);
   app.use("/api", notFoundHandler);

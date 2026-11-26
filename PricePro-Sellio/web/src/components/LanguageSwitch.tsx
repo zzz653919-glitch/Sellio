@@ -27,14 +27,14 @@ export function LanguageSwitch({ className }: { className?: string }) {
     }
   };
   return (
-    <div className={cx("flex items-center gap-1 rounded-xl border border-slate-200 bg-white p-0.5 text-xs font-semibold dark:border-slate-700 dark:bg-slate-900", className)}
+    <div className={cx("seg items-center gap-0.5 p-[3px] text-xs", className)}
       role="group" aria-label="Language / Til">
-      <Languages className="mx-1 hidden h-4 w-4 text-slate-400 sm:block" aria-hidden />
+      <Languages className="mx-1.5 hidden h-4 w-4 text-[var(--v-faint)] xl:block" aria-hidden />
       {LANGS.map((l) => (
         <button key={l.code} type="button" onClick={() => choose(l.code)} aria-pressed={lang === l.code} title={l.name}
-          className={cx("rounded-lg px-2.5 py-1.5 transition", lang === l.code ? "bg-brand-600 text-white shadow-sm" : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white")}>
-          <span className="sm:hidden">{l.short}</span>
-          <span className="hidden sm:inline">{l.name}</span>
+          className={cx("seg-btn h-[30px] px-2.5 text-xs", lang === l.code && "is-on")}>
+          <span className="xl:hidden">{l.short}</span>
+          <span className="hidden xl:inline">{l.name}</span>
         </button>
       ))}
     </div>

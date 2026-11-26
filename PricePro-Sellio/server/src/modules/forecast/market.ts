@@ -8,7 +8,7 @@ import { notConfigured, notFound, upstreamError } from "../../lib/errors.js";
 import { newId, nowIso, safeJson } from "../../lib/util.js";
 import { logActivity } from "../../services/activity.js";
 import { notify } from "../../services/notifications.js";
-import { assertWithinLimit } from "../../services/plans.js";
+import { consumeRequest, releaseRequest, reserveRequest } from "../../services/quota.js";
 import { detectGranularity, runForecast, type Granularity, type Point } from "./engine.js";
 import { analyseSeasonality, type SeasonalAnalysis } from "./seasonal.js";
 import { savedRefs, type SavedRefs } from "../../services/savedRefs.js";
@@ -221,48 +221,56 @@ export async function runMarketAnalysis(userId: string, input: { query: string; 
   if (!provider) {
     throw notConfigured("trends", "World demand data is not connected on this server. An administrator must configure SerpApi (SERPAPI_API_KEY), which provides Google Trends data.");
   }
-  await assertWithinLimit(userId, "forecasts");
-  const horizonDays = RANGES[input.range];
-
-  const [areas, byCountry] = await Promise.all([
-    Promise.all(
-      input.geos.map(async (geo): Promise<AreaResult> => {
-        try {
-          const history = await provider.interestOverTime(input.query, geo === WORLDWIDE ? "" : geo, HISTORY);
-          return analyseArea(geo, history, horizonDays);
-        } catch (err) {
-          const name = geo === WORLDWIDE ? "Worldwide" : (COUNTRY_NAME.get(geo) ?? geo);
-          return { geo, name, status: "error", error: err instanceof TrendsError ? err.message : "Request failed", history: [], forecast: [], recentAvg: null, forecastAvg: null, changePct: null, periodChangePct: null, trend: null, confidence: null, peak: null };
-        }
-      }),
-    ),
-    provider.interestByCountry(input.query, HISTORY).then(
-      (list) => ({ list: list.slice(0, 20), error: undefined as string | undefined }),
-      (err) => ({ list: [] as CountryInterest[], error: err instanceof TrendsError ? err.message : "Request failed" }),
-    ),
-  ]);
-
-  if (areas.every((a) => a.status === "error")) {
-    throw upstreamError("trends", `Google Trends request failed: ${areas[0]?.error ?? "unknown error"}`);
-  }
-  const result: MarketResult = {
-    source: "google_trends",
-    metric: "search_interest_index",
-    fetchedAt: nowIso(),
-    horizonDays,
-    areas,
-    byCountry: byCountry.list,
-    byCountryError: byCountry.error,
-  };
-  const status = areas.some((a) => a.status === "ok") ? "completed" : "no_data";
+  // One request is reserved now and counted only if the analysis completes with data.
   const id = newId();
-  await run(
-    "INSERT INTO market_analyses (id,user_id,query,range,geos_json,status,result_json,created_at) VALUES (?,?,?,?,?,?,?,?)",
-    id, userId, input.query, input.range, JSON.stringify(input.geos), status, JSON.stringify(result), nowIso(),
-  );
-  await logActivity(userId, "market_analysis", "forecast", `World demand: ${input.query}`, { refId: id, success: status === "completed" });
-  if (status === "completed") {
-    await notify(userId, "forecast", "World demand analysis completed", `Search-interest analysis for "${input.query}" is ready.`, `/forecast?market=${id}`);
+  await reserveRequest(userId, "forecast", id);
+  try {
+    const horizonDays = RANGES[input.range];
+
+    const [areas, byCountry] = await Promise.all([
+      Promise.all(
+        input.geos.map(async (geo): Promise<AreaResult> => {
+          try {
+            const history = await provider.interestOverTime(input.query, geo === WORLDWIDE ? "" : geo, HISTORY);
+            return analyseArea(geo, history, horizonDays);
+          } catch (err) {
+            const name = geo === WORLDWIDE ? "Worldwide" : (COUNTRY_NAME.get(geo) ?? geo);
+            return { geo, name, status: "error", error: err instanceof TrendsError ? err.message : "Request failed", history: [], forecast: [], recentAvg: null, forecastAvg: null, changePct: null, periodChangePct: null, trend: null, confidence: null, peak: null };
+          }
+        }),
+      ),
+      provider.interestByCountry(input.query, HISTORY).then(
+        (list) => ({ list: list.slice(0, 20), error: undefined as string | undefined }),
+        (err) => ({ list: [] as CountryInterest[], error: err instanceof TrendsError ? err.message : "Request failed" }),
+      ),
+    ]);
+
+    if (areas.every((a) => a.status === "error")) {
+      throw upstreamError("trends", `Google Trends request failed: ${areas[0]?.error ?? "unknown error"}`);
+    }
+    const result: MarketResult = {
+      source: "google_trends",
+      metric: "search_interest_index",
+      fetchedAt: nowIso(),
+      horizonDays,
+      areas,
+      byCountry: byCountry.list,
+      byCountryError: byCountry.error,
+    };
+    const status = areas.some((a) => a.status === "ok") ? "completed" : "no_data";
+    await run(
+      "INSERT INTO market_analyses (id,user_id,query,range,geos_json,status,result_json,created_at) VALUES (?,?,?,?,?,?,?,?)",
+      id, userId, input.query, input.range, JSON.stringify(input.geos), status, JSON.stringify(result), nowIso(),
+    );
+    if (status === "completed") await consumeRequest("forecast", id);
+    else await releaseRequest("forecast", id);
+    await logActivity(userId, "market_analysis", "forecast", `World demand: ${input.query}`, { refId: id, success: status === "completed" });
+    if (status === "completed") {
+      await notify(userId, "forecast", "World demand analysis completed", `Search-interest analysis for "${input.query}" is ready.`, `/forecast?market=${id}`);
+    }
+  } catch (err) {
+    await releaseRequest("forecast", id);
+    throw err;
   }
   return getMarketAnalysis(userId, id);
 }
@@ -307,35 +315,43 @@ export async function runComparison(userId: string, input: { queries: string[]; 
   if (!provider) {
     throw notConfigured("trends", "World demand data is not connected on this server. An administrator must configure SerpApi (SERPAPI_API_KEY), which provides Google Trends data.");
   }
-  await assertWithinLimit(userId, "forecasts");
-  const geoName = input.geo === WORLDWIDE ? "Worldwide" : (COUNTRY_NAME.get(input.geo) ?? input.geo);
-  const items = await Promise.all(input.queries.map(async (query): Promise<CompareItem> => {
-    try {
-      const history = await provider.interestOverTime(query, input.geo === WORLDWIDE ? "" : input.geo, HISTORY);
-      if (history.length === 0 || history.every((p) => p.units === 0)) return { query, status: "no_data", seasonality: null, recent: [] };
-      const seasonality = analyseSeasonality(history);
-      const recent = (seasonality?.monthly ?? []).slice(-24);
-      return { query, status: seasonality ? "ok" : "no_data", seasonality, recent };
-    } catch (err) {
-      return { query, status: "error", error: err instanceof TrendsError ? err.message : "Request failed", seasonality: null, recent: [] };
-    }
-  }));
-  if (items.every((i) => i.status === "error")) {
-    throw upstreamError("trends", `Google Trends request failed: ${items[0]?.error ?? "unknown error"}`);
-  }
-  // Rank: biggest expected change over the next 3 months first.
-  items.sort((a, b) => (b.seasonality?.next3Pct ?? -1e9) - (a.seasonality?.next3Pct ?? -1e9));
-  const result: CompareResult = { kind: "compare", source: "google_trends", fetchedAt: nowIso(), geo: input.geo, geoName, items };
-  const status = items.some((i) => i.status === "ok") ? "completed" : "no_data";
+  // One request is reserved now and counted only if the analysis completes with data.
   const id = newId();
-  const title = input.queries.join(", ");
-  await run(
-    "INSERT INTO market_analyses (id,user_id,query,range,geos_json,status,result_json,created_at) VALUES (?,?,?,?,?,?,?,?)",
-    id, userId, title, "compare", JSON.stringify([input.geo]), status, JSON.stringify(result), nowIso(),
-  );
-  await logActivity(userId, "market_analysis", "forecast", `World demand: ${title}`, { refId: id, success: status === "completed" });
-  if (status === "completed") {
-    await notify(userId, "forecast", "World demand analysis completed", `Search-interest analysis for "${title}" is ready.`, `/forecast?market=${id}`);
+  await reserveRequest(userId, "forecast", id);
+  try {
+    const geoName = input.geo === WORLDWIDE ? "Worldwide" : (COUNTRY_NAME.get(input.geo) ?? input.geo);
+    const items = await Promise.all(input.queries.map(async (query): Promise<CompareItem> => {
+      try {
+        const history = await provider.interestOverTime(query, input.geo === WORLDWIDE ? "" : input.geo, HISTORY);
+        if (history.length === 0 || history.every((p) => p.units === 0)) return { query, status: "no_data", seasonality: null, recent: [] };
+        const seasonality = analyseSeasonality(history);
+        const recent = (seasonality?.monthly ?? []).slice(-24);
+        return { query, status: seasonality ? "ok" : "no_data", seasonality, recent };
+      } catch (err) {
+        return { query, status: "error", error: err instanceof TrendsError ? err.message : "Request failed", seasonality: null, recent: [] };
+      }
+    }));
+    if (items.every((i) => i.status === "error")) {
+      throw upstreamError("trends", `Google Trends request failed: ${items[0]?.error ?? "unknown error"}`);
+    }
+    // Rank: biggest expected change over the next 3 months first.
+    items.sort((a, b) => (b.seasonality?.next3Pct ?? -1e9) - (a.seasonality?.next3Pct ?? -1e9));
+    const result: CompareResult = { kind: "compare", source: "google_trends", fetchedAt: nowIso(), geo: input.geo, geoName, items };
+    const status = items.some((i) => i.status === "ok") ? "completed" : "no_data";
+    const title = input.queries.join(", ");
+    await run(
+      "INSERT INTO market_analyses (id,user_id,query,range,geos_json,status,result_json,created_at) VALUES (?,?,?,?,?,?,?,?)",
+      id, userId, title, "compare", JSON.stringify([input.geo]), status, JSON.stringify(result), nowIso(),
+    );
+    if (status === "completed") await consumeRequest("forecast", id);
+    else await releaseRequest("forecast", id);
+    await logActivity(userId, "market_analysis", "forecast", `World demand: ${title}`, { refId: id, success: status === "completed" });
+    if (status === "completed") {
+      await notify(userId, "forecast", "World demand analysis completed", `Search-interest analysis for "${title}" is ready.`, `/forecast?market=${id}`);
+    }
+  } catch (err) {
+    await releaseRequest("forecast", id);
+    throw err;
   }
   return getMarketAnalysis(userId, id);
 }

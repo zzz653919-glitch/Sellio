@@ -105,18 +105,19 @@ test("a provider returning a non-image is treated as a failure", async () => {
   assert.equal(g.resultUrl, null);
 });
 
-test("free plan limit of 5 generations per month is enforced", async () => {
+test("free plan: 2 AI advertisement images per day (within 5 requests per month)", async () => {
   setImageProviderForTests({ name: "test", model: "m", edit: async () => makePng(300, 300) });
   const { client } = await newUser();
   const id = await upload(client);
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < 2; i++) {
     const r = await client.post("/api/studio/generations", body(id));
     assert.equal(r.status, 202);
     await waitFor(client, r.data.generation.id);
   }
-  const sixth = await client.post("/api/studio/generations", body(id));
-  assert.equal(sixth.status, 429);
-  assert.equal(sixth.data.error.code, "LIMIT_REACHED");
+  const third = await client.post("/api/studio/generations", body(id));
+  assert.equal(third.status, 429);
+  assert.equal(third.data.error.code, "LIMIT_REACHED");
+  assert.equal(third.data.error.details.metric, "images_per_day");
 });
 
 test("users cannot read each other's files or generations", async () => {

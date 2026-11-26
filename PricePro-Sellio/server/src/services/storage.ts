@@ -27,7 +27,7 @@ interface FileDriver {
 }
 
 function localPath(key: string) {
-  if (!/^[a-z]+\/[0-9a-f-]{36}\.(png|jpg|webp)$/.test(key)) throw new Error("Invalid storage key");
+  if (!/^[a-z]+\/[0-9a-f-]{36}\.(png|jpg|webp|pdf)$/.test(key)) throw new Error("Invalid storage key");
   return path.join(config.STORAGE_DIR, key);
 }
 
@@ -180,4 +180,18 @@ export async function deleteUpload(userId: string, uploadId: string) {
 export async function deleteAllFilesOf(userId: string) {
   const rows = await all<UploadRow>("SELECT * FROM uploads WHERE user_id = ?", userId);
   for (const r of rows) await files().remove(r.storage_key).catch(() => {});
+}
+
+/** Private file outside the uploads table (payment receipts). Returns the storage key. */
+export async function storePrivateFile(key: string, data: Buffer, mime: string): Promise<string> {
+  return files().write(key, data, mime);
+}
+
+/** Streams a private file (the caller has already checked who may see it). */
+export async function sendPrivateFile(res: ExpressResponse, key: string, mime: string) {
+  await files().send(res, key, mime);
+}
+
+export async function removePrivateFile(key: string) {
+  await files().remove(key).catch(() => {});
 }

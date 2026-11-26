@@ -1,16 +1,18 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bell, CreditCard, Languages, Laptop, Moon, Palette, Settings as SettingsIcon, Shield, Sun, Trash2, Upload as UploadIcon, User as UserIcon } from "lucide-react";
+import { Bell, Clock, CreditCard, Languages, Laptop, Moon, Palette, Settings as SettingsIcon, Shield, Sun, Trash2, Upload as UploadIcon, User as UserIcon } from "lucide-react";
 import { useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Avatar } from "../components/Layout";
 import { ErrorAlert } from "../components/shared";
-import { Alert, Badge, Button, Card, Field, Input, Modal, PageHeader, PageLoader, Toggle, cx, useToast } from "../components/ui";
+import { Alert, Badge, Button, Card, Field, Input, Modal, PageHeader, PageLoader, Select, Toggle, cx, useToast } from "../components/ui";
+import { timezoneOptions } from "../lib/timezones";
 import { del, errorMessage, get, patch, post, upload } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { timeAgo } from "../lib/format";
 import { useI18n } from "../lib/i18n";
 import { useTheme } from "../lib/theme";
 import type { Settings, User } from "../lib/types";
+import { PLAN_NAME } from "../lib/types";
 
 type Tab = "personal" | "security" | "notifications" | "preferences" | "subscription";
 
@@ -168,6 +170,13 @@ function PreferencesTab() {
         </div>
       </Card>
       <Card className="p-6">
+        <h3 className="mb-1 flex items-center gap-2 font-semibold"><Clock className="h-4 w-4" />{t("Time zone")}</h3>
+        <p className="mb-4 text-sm muted">{t("Your daily and monthly request limits renew at 00:00 in this time zone.")}</p>
+        <Select className="max-w-sm" value={settings.timezone ?? ""} aria-label={t("Time zone")}
+          onChange={(e) => save({ timezone: e.target.value || null })}
+          options={[{ value: "", label: settings.timezone ? t("Default") : t("Default ({tz})", { tz: settings.effectiveTimezone }) }, ...timezoneOptions(settings.timezone).map((z) => ({ value: z, label: z.replace(/_/g, " ") }))]} />
+      </Card>
+      <Card className="p-6">
         <h3 className="mb-4 flex items-center gap-2 font-semibold"><Palette className="h-4 w-4" />{t("Appearance")}</h3>
         <div className="grid max-w-lg grid-cols-3 gap-3">
           {([["light", "Light", Sun], ["dark", "Dark", Moon], ["system", "System", Laptop]] as const).map(([v, label, Icon]) => (
@@ -215,7 +224,7 @@ export default function SettingsPage() {
           {tab === "subscription" && (
             <Card className="p-6">
               <p className="text-sm muted">{t("Current plan")}</p>
-              <p className="text-2xl font-bold">{user.plan === "pro" ? "Pro" : "Free"}</p>
+              <p className="text-2xl font-bold">{PLAN_NAME[user.plan]}</p>
               <Link to="/subscription"><Button className="mt-4" icon={<CreditCard className="h-4 w-4" />}>{t("Manage subscription")}</Button></Link>
             </Card>
           )}

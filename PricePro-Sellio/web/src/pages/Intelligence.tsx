@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  ArrowDownRight, ArrowUpRight, Bot, CalendarDays, Globe2, Lightbulb, LineChart as LineIcon, MapPin, Pencil, Plus, Radar as RadarIcon, Rocket,
+  ArrowDownRight, ArrowUpRight, CalendarDays, Globe2, Lightbulb, LineChart as LineIcon, MapPin, Pencil, Plus, Radar as RadarIcon, Rocket,
   Search, Ship, Swords, Trash2, TrendingDown, TrendingUp,
 } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -152,7 +152,7 @@ function OpportunitiesTab() {
       ) : items.map((o, k) => (
         <Card key={o.query} className="space-y-3 p-5">
           <div className="flex flex-wrap items-start gap-3">
-            <span className="flex h-10 w-10 flex-none items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-cyan-500 font-bold text-white">{k + 1}</span>
+            <span className="flex h-10 w-10 flex-none items-center justify-center rounded-xl bg-[var(--v-sky-soft)] font-extrabold text-[var(--v-sky)]">{k + 1}</span>
             <div className="min-w-0 flex-1">
               <p className="font-semibold">{t(o.label)} <span className="text-xs font-normal muted">«{o.query}»</span></p>
               <div className="mt-1 flex items-center gap-2">
@@ -162,7 +162,6 @@ function OpportunitiesTab() {
             </div>
             <div className="flex flex-wrap gap-2">
               <Button size="sm" variant="secondary" icon={<LineIcon className="h-4 w-4" />} onClick={() => navigate(`/forecast?q=${encodeURIComponent(o.query)}`)}>{t("Detailed analysis")}</Button>
-              <Button size="sm" variant="secondary" icon={<Bot className="h-4 w-4" />} onClick={() => navigate(`/advisor?q=${encodeURIComponent(t("Explain the opportunity \"{x}\" for my business: is it worth it and how should I start?", { x: t(o.label) }))}`)}>{t("Ask the advisor")}</Button>
               {o.mine
                 ? <Button size="sm" icon={<Rocket className="h-4 w-4" />} onClick={() => navigate(`/growth?id=${o.mine!.initiativeId}`)}>{t("Open my plan")}</Button>
                 : <Button size="sm" icon={<Rocket className="h-4 w-4" />} loading={start.isPending && start.variables?.query === o.query} onClick={() => start.mutate(o)}>{t("Start a growth plan")}</Button>}
@@ -422,7 +421,6 @@ function CompetitorsTab() {
       <Alert tone="info">{t("Write down what you know about competitors from their public pages, prices and ads. Vendora does not collect data from other websites; it compares their search interest on Google and helps you find how to stand out.")}</Alert>
       <div className="flex flex-wrap gap-2">
         <Button icon={<Plus className="h-4 w-4" />} onClick={() => setEditing({ id: null, form: EMPTY_COMPETITOR })}>{t("Add competitor")}</Button>
-        {items.length > 0 && <Button variant="secondary" icon={<Bot className="h-4 w-4" />} onClick={() => navigate(`/advisor?q=${encodeURIComponent(t("Compare me with my saved competitors and suggest how I can stand out (prices, offer, advertising)."))}`)}>{t("How to stand out (AI advisor)")}</Button>}
       </div>
       {list.isLoading ? <Loading text={t("Loading…")} /> : items.length === 0 ? (
         <EmptyState icon={<Swords className="h-6 w-6" />} title={t("No competitors yet")} text={t("Add the shops or brands you compete with: their prices, positioning and notes.")} />

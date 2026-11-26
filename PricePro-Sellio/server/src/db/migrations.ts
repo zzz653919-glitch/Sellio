@@ -608,4 +608,84 @@ CREATE INDEX idx_api_calls_created ON api_calls(created_at);
 CREATE INDEX idx_api_calls_provider ON api_calls(provider, created_at);
 `,
   },
+  {
+    // Max plan: allow 'max' in users.plan and subscriptions.plan (SQLite cannot change a CHECK in place,
+    // so the column is renamed, re-added with the new CHECK, copied and the old one dropped). Billing interval for yearly plans.
+    version: 10,
+    sql: `
+ALTER TABLE users RENAME COLUMN plan TO plan_legacy;
+ALTER TABLE users ADD COLUMN plan TEXT NOT NULL DEFAULT 'free' CHECK (plan IN ('free','pro','max'));
+UPDATE users SET plan = plan_legacy;
+ALTER TABLE users DROP COLUMN plan_legacy;
+
+ALTER TABLE subscriptions RENAME COLUMN plan TO plan_legacy;
+ALTER TABLE subscriptions ADD COLUMN plan TEXT NOT NULL DEFAULT 'free' CHECK (plan IN ('free','pro','max'));
+UPDATE subscriptions SET plan = plan_legacy;
+ALTER TABLE subscriptions DROP COLUMN plan_legacy;
+ALTER TABLE subscriptions ADD COLUMN billing_interval TEXT;
+`,
+  },
+  {
+    // The AI Advisor was removed from the product: drop its chat history and its activity log lines.
+    version: 11,
+    sql: `
+DROP INDEX IF EXISTS idx_advisor_user;
+DROP TABLE IF EXISTS advisor_messages;
+DELETE FROM activity WHERE service = 'assistant' AND title LIKE 'Advisor: %';
+`,
+  },
+  {
+    // Request limits: every AI advertisement and demand forecast is tracked here (reserve → consume / release),
+    // and each user can set the time zone used for daily and monthly resets.
+    version: 12,
+    sql: `
+CREATE TABLE usage_events (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  service TEXT NOT NULL CHECK (service IN ('generation','forecast')),
+  ref_id TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('reserved','consumed')),
+  plan TEXT NOT NULL,
+  period TEXT NOT NULL CHECK (period IN ('day','month')),
+  period_start TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX ux_usage_ref ON usage_events(service, ref_id);
+CREATE INDEX idx_usage_user ON usage_events(user_id, created_at);
+CREATE INDEX idx_usage_created ON usage_events(created_at);
+ALTER TABLE user_settings ADD COLUMN timezone TEXT;
+`,
+  },
+  {
+    // Manual card payments: a user pays by bank transfer, uploads the receipt, an administrator approves or rejects.
+    // A paid plan is activated only by an approval. At most one open request per user.
+    version: 13,
+    sql: `
+CREATE TABLE payment_requests (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  plan TEXT NOT NULL CHECK (plan IN ('pro','max')),
+  billing_interval TEXT NOT NULL CHECK (billing_interval IN ('month','year')),
+  amount_usd REAL NOT NULL,
+  amount_uzs INTEGER NOT NULL,
+  card_json TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('pending','approved','rejected','cancelled')),
+  receipt_key TEXT,
+  receipt_mime TEXT,
+  receipt_name TEXT,
+  receipt_size INTEGER,
+  submitted_at TEXT,
+  reviewed_by TEXT,
+  reviewed_at TEXT,
+  reject_reason TEXT,
+  period_end TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX ux_payment_open ON payment_requests(user_id) WHERE status = 'pending';
+CREATE INDEX idx_payment_user ON payment_requests(user_id, created_at);
+CREATE INDEX idx_payment_status ON payment_requests(status, submitted_at);
+`,
+  },
 ];

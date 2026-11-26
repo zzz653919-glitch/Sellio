@@ -58,7 +58,7 @@ const EnvSchema = z.object({
   COMTRADE_API_KEY: optional,
   COMTRADE_API_BASE: z.url().default("https://comtradeapi.un.org/data/v1"),
 
-  // Text AI for the Business Advisor, reports and ad copy.
+  // Text AI for reports, growth explanations and ad copy.
   // Gemini has a free tier (aistudio.google.com); OpenAI is paid. LLM_PROVIDER picks one when both are set.
   LLM_PROVIDER: z.enum(["gemini", "openai"]).optional(),
   GEMINI_API_KEY: optional,
@@ -71,6 +71,9 @@ const EnvSchema = z.object({
   STRIPE_SECRET_KEY: optional,
   STRIPE_WEBHOOK_SECRET: optional,
   STRIPE_PRICE_PRO: optional,
+  /** Stripe Price IDs for the Max plan (monthly $20 and yearly $200). */
+  STRIPE_PRICE_MAX_MONTHLY: optional,
+  STRIPE_PRICE_MAX_YEARLY: optional,
 
   // Vercel Cron: a daily request refreshes shared market data so users do not wait for it.
   CRON_SECRET: optional,
@@ -97,5 +100,5 @@ export const features = {
   comtrade: Boolean(config.COMTRADE_API_KEY),
   llm: Boolean(config.GEMINI_API_KEY || config.OPENAI_API_KEY),
   blobStorage: Boolean(config.BLOB_READ_WRITE_TOKEN || config.BLOB_STORE_ID),
-  payments: Boolean(config.STRIPE_SECRET_KEY && config.STRIPE_PRICE_PRO),
+  payments: Boolean(config.STRIPE_SECRET_KEY && (config.STRIPE_PRICE_PRO || config.STRIPE_PRICE_MAX_MONTHLY || config.STRIPE_PRICE_MAX_YEARLY)),
 };

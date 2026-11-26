@@ -6,14 +6,21 @@
 import { all, run } from "../db/index.js";
 import { nowIso } from "../lib/util.js";
 
-export type Metric = "generations" | "forecasts" | "ai";
-export type PlanOverride = { name?: string; priceMonthlyUsd?: number; limits?: Partial<Record<Metric, number>>; benefits?: string[]; enabled?: boolean };
+/** requests = AI advertisements + demand forecasts (shared); ai = AI text requests (monthly). */
+export type Metric = "requests" | "ai";
+export type RequestPeriod = "day" | "month";
+export type PlanOverride = { name?: string; priceMonthlyUsd?: number; priceYearlyUsd?: number | null; limits?: Partial<Record<Metric | "generations" | "forecasts", number>>; requestPeriod?: RequestPeriod; dailyImageLimit?: number | null; benefits?: string[]; enabled?: boolean };
+/** Manual card payments: what users pay to and the exchange rate used for so'm amounts. */
+export type ManualPayment = { enabled: boolean; cardNumber: string; cardholder: string; bank: string; cardType: string; uzsPerUsd: number };
 export type Settings = {
   registrationOpen: boolean;
   maintenance: { enabled: boolean; message: string };
   requireAdmin2fa: boolean;
   accountEmails: boolean;
-  plans: { free?: PlanOverride; pro?: PlanOverride };
+  /** Time zone for daily / monthly resets when a user has not chosen one. */
+  defaultTimezone: string;
+  plans: { free?: PlanOverride; pro?: PlanOverride; max?: PlanOverride };
+  manualPayment: ManualPayment;
   ai: { imageModel: string | null; textProvider: "gemini" | "openai" | null; openaiTextModel: string | null; geminiModel: string | null };
 };
 
@@ -22,7 +29,9 @@ export const DEFAULT_SETTINGS: Settings = {
   maintenance: { enabled: false, message: "" },
   requireAdmin2fa: false,
   accountEmails: true,
+  defaultTimezone: "Asia/Tashkent",
   plans: {},
+  manualPayment: { enabled: true, cardNumber: "4466136951534453", cardholder: "Ihtiyor Zoirov", bank: "TBC Bank", cardType: "Visa", uzsPerUsd: 12600 },
   ai: { imageModel: null, textProvider: null, openaiTextModel: null, geminiModel: null },
 };
 

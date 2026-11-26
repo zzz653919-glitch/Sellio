@@ -44,7 +44,7 @@ export default function Analytics() {
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <div><h1 className="text-2xl font-bold">{t("Analytics")}</h1><p className="text-sm muted">{t("Counted from Vendora's own records: sign-ups, activity, AI requests, analyses and logged API calls.")}</p></div>
+        <div><h1 className="text-[26px] font-extrabold tracking-[-0.03em]">{t("Analytics")}</h1><p className="text-sm muted">{t("Counted from Vendora's own records: sign-ups, activity, AI requests, analyses and logged API calls.")}</p></div>
         <DateRange from={range.from} to={range.to} onChange={setRange} />
       </div>
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">

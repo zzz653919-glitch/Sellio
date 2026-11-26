@@ -56,12 +56,54 @@ test("plan changes only through a correctly signed Stripe webhook, idempotently"
   assert.equal((await dup.json()).duplicate, true);
   const sub = await client.get("/api/subscription");
   assert.equal(sub.data.plan, "pro");
-  assert.equal(sub.data.usage.metrics.generations.limit, 200);
+  assert.equal(sub.data.usage.metrics.requests.limit, 10);
+  assert.equal(sub.data.usage.metrics.requests.period, "day");
   assert.equal(sub.data.history.filter((h: { type: string }) => h.type === "upgraded").length, 1);
 
   const cancel = { id: `evt_${crypto.randomUUID()}`, type: "customer.subscription.deleted", data: { object: { id: "sub_1", customer: "cus_1" } } };
   assert.equal((await signedWebhook(cancel)).status, 200);
   assert.equal((await client.get("/api/subscription")).data.plan, "free");
+});
+
+test("Max plan: yearly checkout via webhook, switch by Stripe price, events keep the plan", async () => {
+  const { client, user } = await newUser();
+  const plans = (await client.get("/api/subscription")).data.plans;
+  assert.equal(plans.max.priceMonthlyUsd, 20);
+  assert.equal(plans.max.priceYearlyUsd, 200);
+  assert.equal(plans.max.limits.requests, 20);
+  assert.equal(plans.max.requestPeriod, "day");
+  assert.equal((await client.post("/api/subscription/checkout", { plan: "gold" })).status, 400);
+
+  const paid = {
+    id: `evt_${crypto.randomUUID()}`, type: "checkout.session.completed",
+    data: { object: { id: "cs_max", mode: "subscription", payment_status: "paid", client_reference_id: user.id, customer: "cus_max", subscription: "sub_max", amount_total: 20000, currency: "usd", metadata: { userId: user.id, plan: "max", interval: "year" } } },
+  };
+  assert.equal((await signedWebhook(paid)).status, 200);
+  let sub = (await client.get("/api/subscription")).data;
+  assert.equal(sub.plan, "max");
+  assert.equal(sub.subscription.interval, "year");
+  assert.equal(sub.usage.metrics.requests.limit, 20);
+  assert.equal(sub.usage.metrics.ai.limit, 3000);
+  assert.equal((await client.get("/api/auth/me")).data.user.plan, "max");
+
+  // A second checkout is refused while the Stripe subscription runs (changes go through the billing portal).
+  assert.notEqual((await client.post("/api/subscription/checkout", { plan: "pro" })).status, 200);
+
+  // Switching to Pro in the billing portal: Stripe sends the new price.
+  const toPro = { id: `evt_${crypto.randomUUID()}`, type: "customer.subscription.updated", data: { object: { id: "sub_max", customer: "cus_max", status: "active", items: { data: [{ price: { id: "price_pro_test", recurring: { interval: "month" } } }] } } } };
+  assert.equal((await signedWebhook(toPro)).status, 200);
+  sub = (await client.get("/api/subscription")).data;
+  assert.equal(sub.plan, "pro");
+  assert.equal(sub.subscription.interval, "month");
+
+  const toMax = { id: `evt_${crypto.randomUUID()}`, type: "customer.subscription.updated", data: { object: { id: "sub_max", customer: "cus_max", status: "active", items: { data: [{ price: { id: "price_max_month_test" } }] } } } };
+  assert.equal((await signedWebhook(toMax)).status, 200);
+  assert.equal((await client.get("/api/subscription")).data.plan, "max");
+
+  const invoice = { id: `evt_${crypto.randomUUID()}`, type: "invoice.paid", data: { object: { id: "in_1", customer: "cus_max", amount_paid: 2000, currency: "usd" } } };
+  assert.equal((await signedWebhook(invoice)).status, 200);
+  const payment = (await client.get("/api/subscription")).data.history.find((h: { type: string }) => h.type === "payment");
+  assert.equal(payment.plan, "max");
 });
 
 test("notifications: list, read/unread, delete, and respect preferences", async () => {

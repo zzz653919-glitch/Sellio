@@ -120,3 +120,12 @@ export function fmtCompact(n: number, digits = 1) {
 export function fmtAmount(n: number, currency: string) {
   return `${fmtNumber(Math.round(n))} ${currency}`;
 }
+
+/** "1-dekabr, 00:00" / "1 December, 00:00" at an instant, shown in the given IANA time zone. */
+export function fmtInZone(iso: string, timeZone: string) {
+  const p = Object.fromEntries(
+    new Intl.DateTimeFormat("en-GB", { timeZone, day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
+      .formatToParts(new Date(iso)).filter((x) => x.type !== "literal").map((x) => [x.type, x.value]),
+  );
+  return `${p.day}${isUz() ? "-" : " "}${fmtMonthName(Number(p.month))}, ${p.hour}:${p.minute}`;
+}

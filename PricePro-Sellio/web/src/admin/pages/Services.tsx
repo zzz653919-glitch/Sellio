@@ -150,7 +150,7 @@ export default function Services({ which }: { which: "studio" | "forecast" }) {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <h1 className="text-2xl font-bold">{t(which === "studio" ? "AI Product Studio" : "Demand Forecast")}</h1>
+        <h1 className="text-[26px] font-extrabold tracking-[-0.03em]">{t(which === "studio" ? "AI Product Studio" : "Demand Forecast")}</h1>
         <DateRange from={range.from} to={range.to} onChange={setRange} />
       </div>
       {which === "studio" ? <StudioAdmin range={range} /> : <ForecastAdmin range={range} />}

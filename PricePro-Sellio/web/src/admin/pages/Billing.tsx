@@ -7,21 +7,23 @@ import { SERIES_COLORS, useChartTheme } from "../../components/charts";
 import { ErrorAlert } from "../../components/shared";
 import { Alert, Badge, Field, Input, PageLoader, Select, Tabs, Toggle, useToast } from "../../components/ui";
 import { get, put } from "../../lib/api";
-import { fmtDateTime, fmtNumber, timeAgo } from "../../lib/format";
+import { fmtDateTime, fmtInZone, fmtNumber, timeAgo } from "../../lib/format";
 import { useI18n } from "../../lib/i18n";
 import { ConfirmWithPassword, DateRange, defaultRange, downloadUrl, Pager, Section, Stat, Table, useCan, useList } from "../ui";
 import { money } from "./Dashboard";
 
-type Plan = { key: "free" | "pro"; name: string; priceMonthlyUsd: number; limits: { generations: number; forecasts: number; ai: number }; benefits: string[]; enabled: boolean; users: number };
+type UMetric = { used: number; limit: number; remaining: number; period: "day" | "month"; resetsAt: string };
+type UsageSummary = { timezone: string; today: { byService: { service: string; n: number }[] }; month: { byService: { service: string; n: number }[]; byPlan: { plan: string; n: number }[] }; inProgress: number; daily: { date: string; generation: number; forecast: number }[] };
+type Plan = { key: "free" | "pro" | "max"; name: string; priceMonthlyUsd: number; priceYearlyUsd: number | null; limits: { requests: number; ai: number }; requestPeriod: "day" | "month"; dailyImageLimit: number | null; benefits: string[]; enabled: boolean; users: number };
 
 function PlanEditor({ plan, onClose }: { plan: Plan; onClose: () => void }) {
   const { t } = useI18n();
   const toast = useToast();
   const qc = useQueryClient();
-  const [f, setF] = useState({ name: plan.name, priceMonthlyUsd: String(plan.priceMonthlyUsd), generations: String(plan.limits.generations), forecasts: String(plan.limits.forecasts), ai: String(plan.limits.ai), benefits: plan.benefits.join("\n"), enabled: plan.enabled });
+  const [f, setF] = useState({ name: plan.name, priceMonthlyUsd: String(plan.priceMonthlyUsd), priceYearlyUsd: plan.priceYearlyUsd === null ? "" : String(plan.priceYearlyUsd), requests: String(plan.limits.requests), requestPeriod: plan.requestPeriod, dailyImageLimit: plan.dailyImageLimit === null ? "" : String(plan.dailyImageLimit), ai: String(plan.limits.ai), benefits: plan.benefits.join("\n"), enabled: plan.enabled });
   const save = useMutation({
     mutationFn: (password: string) => put(`/admin/plans/${plan.key}`, {
-      name: f.name, priceMonthlyUsd: Number(f.priceMonthlyUsd), limits: { generations: Number(f.generations), forecasts: Number(f.forecasts), ai: Number(f.ai) },
+      name: f.name, priceMonthlyUsd: Number(f.priceMonthlyUsd), priceYearlyUsd: f.priceYearlyUsd === "" ? null : Number(f.priceYearlyUsd), limits: { requests: Number(f.requests), ai: Number(f.ai) }, requestPeriod: f.requestPeriod, dailyImageLimit: f.dailyImageLimit === "" ? null : Number(f.dailyImageLimit),
       benefits: f.benefits.split("\n").map((b) => b.trim()).filter(Boolean), enabled: f.enabled, password,
     }),
     onSuccess: () => { toast("success", t("Saved")); void qc.invalidateQueries({ queryKey: ["admin-plans"] }); onClose(); },
@@ -33,18 +35,24 @@ function PlanEditor({ plan, onClose }: { plan: Plan; onClose: () => void }) {
       <div className="grid grid-cols-2 gap-3">
         <Field label={t("Name")}><Input value={f.name} onChange={set("name")} maxLength={40} /></Field>
         <Field label={t("Price per month (USD)")}><Input type="number" min={0} value={f.priceMonthlyUsd} onChange={set("priceMonthlyUsd")} /></Field>
-        <Field label={t("AI ad generations / month")}><Input type="number" min={0} value={f.generations} onChange={set("generations")} /></Field>
-        <Field label={t("Demand analyses / month")}><Input type="number" min={0} value={f.forecasts} onChange={set("forecasts")} /></Field>
+        {plan.key !== "free" && <Field label={t("Price per year (USD)")} hint={t("Empty = no yearly payment")}><Input type="number" min={0} value={f.priceYearlyUsd} onChange={set("priceYearlyUsd")} /></Field>}
+        <Field label={t("Requests (AI ads + forecasts)")}><Input type="number" min={0} value={f.requests} onChange={set("requests")} /></Field>
+        <Field label={t("Reset schedule")}>
+          <Select value={f.requestPeriod} onChange={(e) => setF((s) => ({ ...s, requestPeriod: e.target.value as "day" | "month" }))}
+            options={[{ value: "day", label: t("Every day at 00:00") }, { value: "month", label: t("1st of every month at 00:00") }]} />
+        </Field>
+        <Field label={t("AI ad images per day")} hint={t("Empty = no extra daily limit")}><Input type="number" min={0} value={f.dailyImageLimit} onChange={set("dailyImageLimit")} /></Field>
         <Field label={t("AI text requests / month")}><Input type="number" min={0} value={f.ai} onChange={set("ai")} /></Field>
       </div>
       <Field label={t("Benefits (one per line)")}><textarea className="input min-h-24" value={f.benefits} onChange={set("benefits")} /></Field>
-      {plan.key === "pro" && <Toggle checked={f.enabled} onChange={(v) => setF((s) => ({ ...s, enabled: v }))} label={t("Available for purchase")} />}
+      {plan.key !== "free" && <Toggle checked={f.enabled} onChange={(v) => setF((s) => ({ ...s, enabled: v }))} label={t("Available for purchase")} />}
     </ConfirmWithPassword>
   );
 }
 
 function Subscriptions() {
   const { t } = useI18n();
+  const ch = useChartTheme();
   const can = useCan();
   const [tab, setTab] = useState<"plans" | "subs" | "history" | "usage">("plans");
   const [status, setStatus] = useState("active");
@@ -54,19 +62,20 @@ function Subscriptions() {
   const plans = useQuery({ queryKey: ["admin-plans"], queryFn: () => get<{ plans: Plan[]; paymentsConnected: boolean }>("/admin/plans") });
   const subs = useList<{ items: { userId: string; email: string; plan: string; status: string; provider: string; periodEnd: string | null; cancelAtPeriodEnd: boolean; updatedAt: string }[]; total: number; page: number; limit: number; summary: { active: number; ended: number; admin: number } }>(["admin-subs"], "/admin/subscriptions", { status, q, page });
   const events = useList<{ items: { id: string; type: string; plan: string | null; amountCents: number | null; currency: string | null; user: string; createdAt: string }[]; total: number; page: number; limit: number }>(["admin-sub-events"], "/admin/subscriptions/events", { page });
-  const usage = useQuery({ queryKey: ["admin-usage"], queryFn: () => get<{ items: { userId: string; email: string; plan: string; used: Record<string, number>; limits: Record<string, number>; maxPct: number }[] }>("/admin/subscriptions/usage"), enabled: tab === "usage" });
+  const usage = useQuery({ queryKey: ["admin-usage"], queryFn: () => get<{ items: { userId: string; email: string; plan: string; timezone: string; requests: UMetric; ai: UMetric; maxPct: number }[] }>("/admin/subscriptions/usage"), enabled: tab === "usage" });
+  const summary = useQuery({ queryKey: ["admin-usage-summary"], queryFn: () => get<UsageSummary>("/admin/usage/summary"), enabled: tab === "usage" });
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-bold">{t("Subscriptions")}</h1>
+      <h1 className="text-[26px] font-extrabold tracking-[-0.03em]">{t("Subscriptions")}</h1>
       {plans.data && !plans.data.paymentsConnected && <Alert tone="info">{t("Online payments (Stripe) are not connected, so no paid subscriptions can start. Plans can still be assigned by administrators; no payment is recorded for them.")}</Alert>}
-      {subs.data && <div className="grid grid-cols-3 gap-3"><Stat label={t("Active paid / Pro")} value={subs.data.summary.active} tone="green" /><Stat label={t("Ended (Stripe)")} value={subs.data.summary.ended} tone="slate" /><Stat label={t("Assigned by admin")} value={subs.data.summary.admin} tone="amber" /></div>}
+      {subs.data && <div className="grid grid-cols-1 gap-3 sm:grid-cols-3"><Stat label={t("Active paid / Pro")} value={subs.data.summary.active} tone="green" /><Stat label={t("Ended (Stripe)")} value={subs.data.summary.ended} tone="slate" /><Stat label={t("Assigned by admin")} value={subs.data.summary.admin} tone="amber" /></div>}
       <div className="overflow-x-auto"><Tabs value={tab} onChange={(v) => { setTab(v); setPage(1); }} tabs={[{ value: "plans", label: t("Plans") }, { value: "subs", label: t("Subscriptions") }, { value: "history", label: t("History") }, { value: "usage", label: t("Usage") }]} /></div>
       {tab === "plans" && (plans.isLoading ? <PageLoader /> : plans.error ? <ErrorAlert error={plans.error} /> : (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
           {plans.data!.plans.map((p) => (
-            <Section key={p.key} title={`${p.name} · $${p.priceMonthlyUsd}/${t("month")}`} actions={can("plans.manage") ? <button type="button" className="inline-flex items-center gap-1 text-sm text-brand-600 hover:underline" onClick={() => setEditing(p)}><Pencil className="h-4 w-4" />{t("Edit")}</button> : undefined}>
+            <Section key={p.key} title={`${p.name} · $${p.priceMonthlyUsd}/${t("month")}${p.priceYearlyUsd !== null ? ` · $${p.priceYearlyUsd}/${t("year")}` : ""}`} actions={can("plans.manage") ? <button type="button" className="inline-flex items-center gap-1 text-sm text-brand-600 hover:underline" onClick={() => setEditing(p)}><Pencil className="h-4 w-4" />{t("Edit")}</button> : undefined}>
               <p className="text-sm">{t("{n} users", { n: fmtNumber(p.users) })} · <Badge tone={p.enabled ? "green" : "slate"}>{p.enabled ? t("Available") : t("Disabled")}</Badge></p>
-              <Table head={[t("Ad generations"), t("Forecasts"), t("AI text requests")]}><tr><td>{p.limits.generations}</td><td>{p.limits.forecasts}</td><td>{p.limits.ai}</td></tr></Table>
+              <Table head={[t("Requests"), t("Reset schedule"), t("AI ad images per day"), t("AI text requests")]}><tr><td>{p.limits.requests}</td><td>{t(p.requestPeriod === "day" ? "Every day at 00:00" : "1st of every month at 00:00")}</td><td>{p.dailyImageLimit ?? "—"}</td><td>{p.limits.ai} / {t("month")}</td></tr></Table>
               <ul className="list-disc pl-5 text-sm muted">{p.benefits.map((b) => <li key={b}>{b}</li>)}</ul>
             </Section>
           ))}
@@ -94,12 +103,45 @@ function Subscriptions() {
         </Section>
       )}
       {tab === "usage" && (
-        <Section title={t("Usage this month (closest to the limit first)")}>
-          {usage.error && <ErrorAlert error={usage.error} />}
-          <Table head={[t("User"), t("Plan"), t("Ad generations"), t("Forecasts"), t("AI text requests"), "%"]} empty={usage.data?.items.length === 0}>
-            {(usage.data?.items ?? []).map((u) => <tr key={u.userId}><td><Link to={`/admin/users/${u.userId}`} className="hover:underline">{u.email}</Link></td><td>{u.plan}</td><td>{u.used.generations}/{u.limits.generations}</td><td>{u.used.forecasts}/{u.limits.forecasts}</td><td>{u.used.ai}/{u.limits.ai}</td><td><Badge tone={u.maxPct >= 100 ? "red" : u.maxPct >= 80 ? "amber" : "slate"}>{u.maxPct}%</Badge></td></tr>)}
-          </Table>
-        </Section>
+        <div className="space-y-4">
+          {summary.data && (
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+              <Stat label={t("Requests today")} value={summary.data.today.byService.reduce((x, r) => x + r.n, 0)} hint={summary.data.timezone} />
+              <Stat label={t("Requests this month")} value={summary.data.month.byService.reduce((x, r) => x + r.n, 0)} tone="green" />
+              <Stat label={t("AI ads this month")} value={summary.data.month.byService.find((r) => r.service === "generation")?.n ?? 0} tone="slate" />
+              <Stat label={t("Forecasts this month")} value={summary.data.month.byService.find((r) => r.service === "forecast")?.n ?? 0} tone="slate" />
+            </div>
+          )}
+          {summary.data && (
+            <Section title={t("Counted requests per day")}>
+              <div className="h-56">
+                <ResponsiveContainer>
+                  <BarChart data={summary.data.daily}><CartesianGrid stroke={ch.grid} strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="date" tick={{ fill: ch.axis, fontSize: 11 }} tickFormatter={(v: string) => v.slice(5)} minTickGap={16} /><YAxis tick={{ fill: ch.axis, fontSize: 11 }} allowDecimals={false} /><Tooltip {...ch.tooltip} />
+                    <Bar dataKey="generation" stackId="a" name={t("AI ads")} fill={SERIES_COLORS[1]} />
+                    <Bar dataKey="forecast" stackId="a" name={t("Forecasts")} fill={SERIES_COLORS[0]} radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              <p className="text-xs muted">{t("By plan this month")}: {summary.data.month.byPlan.map((x) => `${x.plan}: ${x.n}`).join(" · ") || "—"}{summary.data.inProgress ? ` · ${t("in progress now")}: ${summary.data.inProgress}` : ""}</p>
+            </Section>
+          )}
+          <Section title={t("Current usage per user (closest to the limit first)")}>
+            {usage.error && <ErrorAlert error={usage.error} />}
+            <Table head={[t("User"), t("Plan"), t("Requests"), t("Next reset"), t("AI text requests"), "%"]} empty={usage.data?.items.length === 0}>
+              {(usage.data?.items ?? []).map((u) => (
+                <tr key={u.userId}>
+                  <td><Link to={`/admin/users/${u.userId}`} className="hover:underline">{u.email}</Link></td>
+                  <td>{u.plan}</td>
+                  <td>{u.requests.used}/{u.requests.limit} <span className="text-xs muted">({t(u.requests.period === "day" ? "per day" : "per month")})</span></td>
+                  <td className="text-xs">{fmtInZone(u.requests.resetsAt, u.timezone)} <span className="muted">{u.timezone}</span></td>
+                  <td>{u.ai.used}/{u.ai.limit}</td>
+                  <td><Badge tone={u.maxPct >= 100 ? "red" : u.maxPct >= 80 ? "amber" : "slate"}>{u.maxPct}%</Badge></td>
+                </tr>
+              ))}
+            </Table>
+          </Section>
+        </div>
       )}
       {editing && <PlanEditor plan={editing} onClose={() => setEditing(null)} />}
     </div>
@@ -126,7 +168,7 @@ function PaymentsPage() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <div><h1 className="text-2xl font-bold">{t("Payments and revenue")}</h1><p className="text-sm muted">{t("Only payments confirmed by Stripe webhooks are shown. Nothing is entered or marked as paid by hand.")}</p></div>
+        <div><h1 className="text-[26px] font-extrabold tracking-[-0.03em]">{t("Payments and revenue")}</h1><p className="text-sm muted">{t("Only payments confirmed by Stripe webhooks are shown. Nothing is entered or marked as paid by hand.")}</p></div>
         <div className="flex flex-wrap gap-2"><DateRange from={range.from} to={range.to} onChange={(r) => { setRange(r); setPage(1); }} /><button type="button" className="inline-flex items-center gap-1 text-sm text-brand-600 hover:underline" onClick={() => downloadUrl(`/admin/payments/export?from=${range.from}&to=${range.to}`)}><Download className="h-4 w-4" />CSV</button></div>
       </div>
       {!d.connected && <Alert tone="warning">{t("Stripe is not connected (STRIPE_SECRET_KEY, STRIPE_PRICE_PRO, STRIPE_WEBHOOK_SECRET), so there are no payments to show.")}</Alert>}

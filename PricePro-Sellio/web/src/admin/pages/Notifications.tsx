@@ -42,7 +42,7 @@ export default function Notifications() {
   const valid = f.title.trim().length >= 2 && f.body.trim().length >= 2 && (f.audience === "all" || emails.length > 0) && (!f.schedule || Boolean(f.publishAt));
   return (
     <div className="space-y-4">
-      <div><h1 className="text-2xl font-bold">{t("Notifications")}</h1><p className="text-sm muted">{t("Send announcements to users. They appear in the bell menu inside Vendora.")}</p></div>
+      <div><h1 className="text-[26px] font-extrabold tracking-[-0.03em]">{t("Notifications")}</h1><p className="text-sm muted">{t("Send announcements to users. They appear in the bell menu inside Vendora.")}</p></div>
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,420px)_1fr]">
         <Section title={t("New announcement")}>
           <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); setConfirmSend(true); }}>

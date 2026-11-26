@@ -32,7 +32,11 @@ const SERVER_PATTERNS: [RegExp, string, string[]][] = [
   [/^Demand — (.+)$/s, "Demand — {x}", ["x"]],
   [/^Ad — (.+)$/s, "Ad — {x}", ["x"]],
   [/^Business data: (.+)$/s, "Business data: {x}", ["x"]],
-  [/^Advisor: (.+)$/s, "Advisor: {x}", ["x"]],
+  [/^Your (.+) plan is active$/s, "Your {x} plan is active", ["x"]],
+  [/^Your payment was confirmed\. (.+) limits are active until (.+)\.$/s, "Your payment was confirmed. {x} limits are active until {y}.", ["x", "y"]],
+  [/^Your payment for (.+) was not confirmed\. Reason: (.+)\. You can upload a new receipt and send it again\.$/s, "Your payment for {x} was not confirmed. Reason: {y}. You can upload a new receipt and send it again.", ["x", "y"]],
+  [/^Payment started: (.+)$/s, "Payment started: {x}", ["x"]],
+  [/^Payment receipt sent for review: (.+)$/s, "Payment receipt sent for review: {x}", ["x"]],
 ];
 
 export function read(): Lang {

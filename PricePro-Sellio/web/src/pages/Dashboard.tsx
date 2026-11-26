@@ -6,14 +6,16 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { StatCard } from "../components/shared";
-import { Badge, Button, Card, EmptyState, PageLoader, Progress, cx } from "../components/ui";
+import { StatCard, UsageMeter } from "../components/shared";
+import { Alert, Button, Card, EmptyState, PageLoader, Progress, cx } from "../components/ui";
 import { get } from "../lib/api";
 import { fmtPct, fmtToday, timeAgo } from "../lib/format";
 import { useI18n } from "../lib/i18n";
 import { useQty } from "../lib/qty";
+import type { PaymentItem } from "./Payment";
 import { useMsg, type Msg } from "../lib/msg";
 import type { Activity, Generation, Usage, User } from "../lib/types";
+import { PLAN_NAME } from "../lib/types";
 
 type DashboardData = {
   user: User;
@@ -33,11 +35,12 @@ const SERVICE_ICON: Record<string, ReactNode> = {
 function ServicePanel({ icon, title, gradient, action, to, children }: { icon: ReactNode; title: string; gradient: string; action: string; to: string; children: ReactNode }) {
   return (
     <Card className="flex flex-col overflow-hidden">
-      <div className={cx("flex items-center justify-between bg-gradient-to-r p-4 text-white", gradient)}>
-        <div className="flex items-center gap-2 font-semibold">{icon}{title}</div>
+      <div className="flex items-center gap-3 px-5 pt-5">
+        <span className={cx("tile", gradient)}>{icon}</span>
+        <h2 className="text-[15px] font-bold">{title}</h2>
       </div>
-      <div className="flex flex-1 flex-col gap-3 p-4">{children}</div>
-      <div className="border-t border-slate-100 p-3 dark:border-slate-800">
+      <div className="flex flex-1 flex-col gap-3 p-5">{children}</div>
+      <div className="border-t border-[var(--v-line-soft)] p-3">
         <Link to={to}><Button className="w-full" icon={<ArrowRight className="h-4 w-4" />}>{action}</Button></Link>
       </div>
     </Card>
@@ -75,6 +78,19 @@ function GrowthCard() {
   );
 }
 
+/** Current card payment: being checked, or rejected (with the reason). */
+function PaymentBanner() {
+  const { t } = useI18n();
+  const q = useQuery({ queryKey: ["payments"], queryFn: () => get<{ items: PaymentItem[]; open: PaymentItem | null }>("/payments"), refetchInterval: (s) => (s.state.data?.open?.submitted ? 30_000 : false) });
+  const latest = q.data?.items[0];
+  if (!latest) return null;
+  if (latest.status === "pending" && latest.submitted)
+    return <Alert tone="warning" title={t("Your payment is being checked. Wait for the administrator's confirmation.")}><Link to="/payment" className="font-semibold underline">{t("Payment page →")}</Link></Alert>;
+  if (latest.status === "rejected")
+    return <Alert tone="error" title={t("Your last payment was not confirmed")}>{t("Reason")}: {latest.rejectReason || t("not given")}. <Link to="/payment" className="font-semibold underline">{t("Send a new receipt")}</Link></Alert>;
+  return null;
+}
+
 export default function Dashboard() {
   const { t, tr } = useI18n();
   const qty = useQty();
@@ -88,20 +104,22 @@ export default function Dashboard() {
   return (
     <div className="space-y-6">
       <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-        className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-brand-700 via-brand-600 to-cyan-600 p-6 text-white sm:p-8">
-        <div className="absolute -right-16 -top-20 h-72 w-72 rounded-full bg-white/10 blur-2xl" />
-        <div className="relative flex flex-col gap-6">
-          <div>
-            <p className="text-sm opacity-85">{fmtToday()}</p>
-            <h1 className="mt-1 text-3xl font-extrabold tracking-tight">{greeting}, {d.user.firstName}!</h1>
-            <p className="mt-2 max-w-xl text-sm opacity-90">
-              {t("You are on the {plan} plan. Create advertisements and see where demand is growing — all in one place.", { plan: d.user.plan === "pro" ? "Pro" : "Free" })}
-            </p>
-          </div>
+        className="flex flex-col gap-4 px-1.5 pt-2.5 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="eyebrow mb-1.5">{fmtToday()}</p>
+          <h1 className="text-[26px] font-extrabold leading-tight tracking-[-0.03em] sm:text-[30px]">{greeting}, {d.user.firstName}!</h1>
+          <p className="mt-1.5 max-w-xl text-[14.5px] muted">
+            {t("You are on the {plan} plan. Create advertisements and see where demand is growing — all in one place.", { plan: PLAN_NAME[d.user.plan] })}
+          </p>
+        </div>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          <Link to="/analytics"><Button variant="secondary" icon={<BarChart3 className="h-4 w-4" />}>{t("Analytics")}</Button></Link>
+          <Link to="/studio"><Button icon={<Sparkles className="h-4 w-4" />}>{t("Create Advertisement")}</Button></Link>
         </div>
       </motion.div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <PaymentBanner />
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3">
         <StatCard icon={<FolderKanban className="h-4 w-4" />} label={t("Total projects")} value={qty(d.stats.totalProjects)} />
         <StatCard icon={<ImageIcon className="h-4 w-4" />} label={t("Ads created")} value={qty(d.stats.adsCreated)} tone="violet" />
         <StatCard icon={<BarChart3 className="h-4 w-4" />} label={t("Products analyzed")} value={qty(d.stats.productsAnalyzed)} hint={t("{n} forecasts completed", { n: d.stats.forecastsCompleted })} tone="cyan" />
@@ -109,8 +127,8 @@ export default function Dashboard() {
 
       <GrowthCard />
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <ServicePanel icon={<Sparkles className="h-5 w-5" />} title={t("AI Product Studio")} gradient="from-violet-600 to-brand-600" action={t("Create Advertisement")} to="/studio">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <ServicePanel icon={<Sparkles className="h-5 w-5" />} title={t("AI Product Studio")} gradient="t-lilac" action={t("Create Advertisement")} to="/studio">
           {latest ? (
             <Link to={`/studio?generation=${latest.id}`} className="group relative block overflow-hidden rounded-xl bg-slate-100 dark:bg-slate-800">
               <img src={latest.resultUrl ?? latest.originalUrl} alt={latest.productName} className="aspect-[4/3] w-full object-cover transition group-hover:scale-105" />
@@ -122,7 +140,7 @@ export default function Dashboard() {
           {d.generations.length > 0 && <Link to="/projects?type=advertisement" className="text-sm font-medium text-brand-600 hover:underline dark:text-brand-400">{t("Previous advertising projects →")}</Link>}
         </ServicePanel>
 
-        <ServicePanel icon={<LineChart className="h-5 w-5" />} title={t("Demand Forecast")} gradient="from-cyan-600 to-sky-600" action={t("View Forecast")} to="/forecast">
+        <ServicePanel icon={<LineChart className="h-5 w-5" />} title={t("Demand Forecast")} gradient="" action={t("View Forecast")} to="/forecast">
           {d.analyses.length === 0 ? (
             <EmptyState icon={<LineChart className="h-5 w-5" />} title={t("No analyses yet.")} text={t("See where demand for a product is growing — worldwide and by country.")} />
           ) : (
@@ -157,7 +175,7 @@ export default function Dashboard() {
             <ul className="divide-y divide-slate-100 dark:divide-slate-800">
               {d.recentActivity.map((a) => (
                 <li key={a.id} className="flex items-center gap-3 py-2.5">
-                  <span className="rounded-lg bg-slate-100 p-2 text-slate-600 dark:bg-slate-800 dark:text-slate-300">{SERVICE_ICON[a.service] ?? <ActivityIcon className="h-4 w-4" />}</span>
+                  <span className="tile h-8 w-8 rounded-[10px]">{SERVICE_ICON[a.service] ?? <ActivityIcon className="h-4 w-4" />}</span>
                   <span className="min-w-0 flex-1 truncate text-sm">{tr(a.title)}</span>
                   {a.success ? <CheckCircle2 className="h-4 w-4 text-emerald-500" /> : <XCircle className="h-4 w-4 text-rose-500" />}
                   <span className="w-20 text-right text-xs muted">{timeAgo(a.createdAt)}</span>
@@ -167,23 +185,9 @@ export default function Dashboard() {
           )}
         </Card>
         <Card className="p-5">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="font-semibold">{t("Monthly usage")}</h2>
-            <Badge tone={d.usage.plan === "pro" ? "violet" : "slate"}>{d.usage.plan === "pro" ? "Pro" : "Free"}</Badge>
-          </div>
-          <div className="space-y-4">
-            {([
-              ["generations", "Ad generations"],
-              ["forecasts", "Forecasts"],
-              ["ai", "AI text requests"],
-            ] as const).map(([k, label]) => (
-              <div key={k}>
-                <div className="mb-1 flex justify-between text-sm"><span>{t(label)}</span><span className="muted">{d.usage.metrics[k].used} / {d.usage.metrics[k].limit}</span></div>
-                <Progress value={d.usage.metrics[k].used} max={d.usage.metrics[k].limit} />
-              </div>
-            ))}
-          </div>
-          {d.usage.plan === "free" && <Link to="/subscription"><Button variant="secondary" className="mt-5 w-full">{t("Upgrade to Pro")}</Button></Link>}
+          <h2 className="mb-4 font-semibold">{t("Your requests")}</h2>
+          <UsageMeter usage={d.usage} />
+          {d.usage.plan === "free" && <Link to="/subscription"><Button variant="secondary" className="mt-5 w-full">{t("More requests: Pro or Max")}</Button></Link>}
         </Card>
       </div>
     </div>

@@ -3,6 +3,8 @@ import { newId, nowIso } from "../lib/util.js";
 
 export type ActivityType =
   | "signup"
+  | "payment_started"
+  | "payment_submitted"
   | "login"
   | "email_verified"
   | "password_changed"

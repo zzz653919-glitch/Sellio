@@ -6,7 +6,7 @@ import { inspectImage } from "../../lib/image.js";
 import { newId, nowIso, safeJson } from "../../lib/util.js";
 import { logActivity } from "../../services/activity.js";
 import { notify } from "../../services/notifications.js";
-import { assertWithinLimit } from "../../services/plans.js";
+import { consumeRequest, releaseRequest, reserveRequest } from "../../services/quota.js";
 import { deleteUpload, getOwnedUpload, readUpload, saveImage } from "../../services/storage.js";
 import { buildPrompt, SIZES, STYLES, type BackgroundKey, type LightingKey, type SizeKey, type StyleKey } from "./options.js";
 import { getImageProvider } from "./provider.js";
@@ -119,12 +119,14 @@ async function processGeneration(id: string) {
       "UPDATE generations SET status = 'succeeded', result_upload_id = ?, error = NULL, updated_at = ?, completed_at = ? WHERE id = ?",
       saved.id, now, now, id,
     );
+    await consumeRequest("generation", id);
     await logActivity(g.user_id, "ad_created", "studio", `Advertisement created: ${g.product_name}`, { refId: id, durationMs: Date.now() - started });
     await notify(g.user_id, "generation", "Advertisement ready", `Your advertisement for "${g.product_name}" has been generated.`, `/studio?generation=${id}`);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Generation failed";
     const now = nowIso();
     await run("UPDATE generations SET status = 'failed', error = ?, updated_at = ?, completed_at = ? WHERE id = ?", message.slice(0, 500), now, now, id);
+    await releaseRequest("generation", id);
     await logActivity(g.user_id, "ad_failed", "studio", `Advertisement failed: ${g.product_name}`, { refId: id, success: false, durationMs: Date.now() - started });
     await notify(g.user_id, "generation", "Advertisement failed", `Generation for "${g.product_name}" failed: ${message}`, `/studio?generation=${id}`);
   }
@@ -142,6 +144,8 @@ export async function recoverInterruptedGenerations(olderThanMs = 0) {
     "UPDATE generations SET status = 'failed', error = 'Interrupted before it finished. Use Retry to generate again.', updated_at = ?, completed_at = ? WHERE status IN ('queued','processing') AND updated_at <= ?",
     nowIso(), nowIso(), cutoff,
   );
+  // Interrupted generations do not use up a request.
+  await run("DELETE FROM usage_events WHERE service = 'generation' AND status = 'reserved' AND ref_id IN (SELECT id FROM generations WHERE status = 'failed')");
 }
 
 // ---------------------------------------------------------------- API
@@ -153,10 +157,11 @@ export async function uploadProductImage(userId: string, file: Buffer, originalN
 
 export async function createGeneration(userId: string, input: GenerationInput, retryOf?: string) {
   const provider = getImageProvider(); // throws SERVICE_NOT_CONFIGURED before anything is stored
-  await assertWithinLimit(userId, "generations");
   const upload = await getOwnedUpload(userId, input.uploadId);
   if (upload.kind !== "product") throw badRequest("Choose an uploaded product image.");
   const id = newId();
+  // One request is reserved now; it is counted when the image is ready and given back if generation fails.
+  await reserveRequest(userId, "generation", id);
   const now = nowIso();
   const prompt = buildPrompt({
     productName: input.productName,
@@ -167,12 +172,17 @@ export async function createGeneration(userId: string, input: GenerationInput, r
     brandColor: input.settings.brandColor,
     instructions: input.settings.instructions,
   });
-  await run(
-    `INSERT INTO generations (id,user_id,upload_id,product_name,category,style,background,settings_json,prompt,status,provider,model,retry_of,created_at,updated_at)
-     VALUES (?,?,?,?,?,?,?,?,?, 'queued', ?,?,?,?,?)`,
-    id, userId, upload.id, input.productName, input.category, input.style, input.background,
-    JSON.stringify(input.settings), prompt, provider.name, provider.model, retryOf ?? null, now, now,
-  );
+  try {
+    await run(
+      `INSERT INTO generations (id,user_id,upload_id,product_name,category,style,background,settings_json,prompt,status,provider,model,retry_of,created_at,updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?, 'queued', ?,?,?,?,?)`,
+      id, userId, upload.id, input.productName, input.category, input.style, input.background,
+      JSON.stringify(input.settings), prompt, provider.name, provider.model, retryOf ?? null, now, now,
+    );
+  } catch (err) {
+    await releaseRequest("generation", id);
+    throw err;
+  }
   enqueue(id);
   return getGeneration(userId, id);
 }

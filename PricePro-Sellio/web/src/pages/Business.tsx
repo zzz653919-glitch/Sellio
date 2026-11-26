@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, Bot, Briefcase, Download, FileSpreadsheet, FileText, Lightbulb, Plus, Trash2, Upload as UploadIcon } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { Area, Bar, CartesianGrid, ComposedChart, Legend, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { SourceNote, useChartTheme } from "../components/charts";
 import { ErrorAlert, StatCard } from "../components/shared";
@@ -217,7 +217,6 @@ function Overview({ id }: { id: string }) {
   const qty = useQty();
   const msg = useMsg();
   const ch = useChartTheme();
-  const navigate = useNavigate();
   const q = useQuery({ queryKey: ["business", id], queryFn: () => get<{ dataset: DatasetSummary; analysis: Analysis }>(`/business/datasets/${id}`) });
   if (q.isLoading) return <div className="flex items-center gap-3 p-6 text-sm muted"><Spinner />{t("Analysing your data…")}</div>;
   if (q.error) return <ErrorAlert error={q.error} />;
@@ -232,7 +231,6 @@ function Overview({ id }: { id: string }) {
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm muted">{ds.name} · {fmtDate(a.period.start)} — {fmtDate(a.period.end)} · {t("{n} rows", { n: a.rows })}</p>
-        <Button size="sm" variant="secondary" icon={<Bot className="h-4 w-4" />} onClick={() => navigate(`/advisor?q=${encodeURIComponent(t("Look at my sales data: what are my main risks and what should I do in the next month?"))}`)}>{t("Ask the advisor")}</Button>
       </div>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard icon={<Briefcase className="h-4 w-4" />} label={t("Revenue")} value={fmtCompact(a.totals.revenue)} hint={ds.currency} />

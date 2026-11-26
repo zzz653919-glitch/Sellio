@@ -9,6 +9,7 @@ import { currentUser, type AdminRole } from "../../middleware/auth.js";
 import { logAudit } from "../../services/audit.js";
 import { smtpSummary } from "../../services/email.js";
 import { llmProvider } from "../../services/llm.js";
+import { isValidTimezone } from "../../services/quota.js";
 import { saveSetting, settings } from "../../services/settings.js";
 import { newTotpSecret, otpauthUrl, verifyTotp } from "../../services/totp.js";
 import { mfaState, PERMISSIONS, requireAdmin, requirePermission, ROLE_PERMISSIONS } from "./permissions.js";
@@ -141,6 +142,15 @@ const settingsSchema = z.object({
   maintenance: z.object({ enabled: z.boolean(), message: z.string().trim().max(300) }).optional(),
   requireAdmin2fa: z.boolean().optional(),
   accountEmails: z.boolean().optional(),
+  manualPayment: z.object({
+    enabled: z.boolean(),
+    cardNumber: z.string().trim().regex(/^\d{16}$/, "Card number: 16 digits"),
+    cardholder: z.string().trim().min(2).max(80),
+    bank: z.string().trim().min(2).max(60),
+    cardType: z.string().trim().min(2).max(30),
+    uzsPerUsd: z.number().min(1000).max(100_000),
+  }).optional(),
+  defaultTimezone: z.string().trim().max(64).refine(isValidTimezone, "Unknown time zone").optional(),
   ai: z.object({
     imageModel: z.string().trim().max(60).regex(/^[\w.:-]*$/).nullable(),
     textProvider: z.enum(["gemini", "openai"]).nullable(),
@@ -162,6 +172,8 @@ systemRouter.put("/settings", requireAdmin(), requirePermission("settings.manage
     await saveSetting("requireAdmin2fa", b.requireAdmin2fa, admin); changed.push(`admin 2FA ${b.requireAdmin2fa ? "required" : "optional"}`);
   }
   if (b.accountEmails !== undefined) { await saveSetting("accountEmails", b.accountEmails, admin); changed.push(`account emails ${b.accountEmails ? "on" : "off"}`); }
+  if (b.manualPayment) { await saveSetting("manualPayment", b.manualPayment, admin); changed.push(`card payments ${b.manualPayment.enabled ? "on" : "off"} (card ****${b.manualPayment.cardNumber.slice(-4)}, rate ${b.manualPayment.uzsPerUsd})`); }
+  if (b.defaultTimezone !== undefined) { await saveSetting("defaultTimezone", b.defaultTimezone, admin); changed.push(`default time zone ${b.defaultTimezone}`); }
   if (b.ai) {
     const clean = { imageModel: b.ai.imageModel || null, textProvider: b.ai.textProvider, openaiTextModel: b.ai.openaiTextModel || null, geminiModel: b.ai.geminiModel || null };
     await saveSetting("ai", clean, admin); changed.push("AI configuration");
@@ -196,7 +208,7 @@ systemRouter.get("/system", requireAdmin(), requirePermission("dashboard.view"),
       integ(`AI images (${settings().ai.imageModel || config.IMAGE_MODEL})`, features.imageGeneration, "openai_image", "OPENAI_API_KEY"),
       integ("World Bank Open Data", features.worldBank, "world_bank", "WORLD_BANK_ENABLED"),
       integ("UN Comtrade", features.comtrade, "comtrade", "COMTRADE_API_KEY"),
-      integ("Stripe payments", features.payments, null, "STRIPE_SECRET_KEY, STRIPE_PRICE_PRO"),
+      integ("Stripe payments", features.payments, null, "STRIPE_SECRET_KEY, STRIPE_PRICE_PRO, STRIPE_PRICE_MAX_MONTHLY, STRIPE_PRICE_MAX_YEARLY"),
       integ("Daily cron", Boolean(config.CRON_SECRET), null, "CRON_SECRET"),
     ],
     canEditSettings: true,

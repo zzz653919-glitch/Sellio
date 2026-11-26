@@ -4,11 +4,11 @@ import { features } from "../../config.js";
 import { all, get } from "../../db/index.js";
 import { csvFilename, toCsv } from "../../lib/csv.js";
 import { badRequest } from "../../lib/errors.js";
-import { startOfMonthIso } from "../../lib/util.js";
 import { param, parseBody, parseQuery } from "../../lib/validate.js";
 import { currentUser } from "../../middleware/auth.js";
 import { logAudit } from "../../services/audit.js";
-import { getPlans, PLANS } from "../../services/plans.js";
+import { getPlans, PLAN_KEYS, PLANS, usage, type Plan } from "../../services/plans.js";
+import { defaultTimezone, periodBounds } from "../../services/quota.js";
 import { saveSetting, settings } from "../../services/settings.js";
 import { requirePermission } from "./permissions.js";
 import { confirmPassword, daysBetween, like, pageOf, rangeOf } from "./util.js";
@@ -20,7 +20,7 @@ billingAdminRouter.get("/plans", requirePermission("subscriptions.view"), async 
   const counts = await all<{ plan: string; n: number }>("SELECT plan, COUNT(*) AS n FROM users GROUP BY plan");
   const plans = getPlans();
   res.json({
-    plans: (["free", "pro"] as const).map((key) => ({ key, ...plans[key], users: counts.find((c) => c.plan === key)?.n ?? 0, defaults: PLANS[key] })),
+    plans: PLAN_KEYS.map((key) => ({ key, ...plans[key], users: counts.find((c) => c.plan === key)?.n ?? 0, defaults: PLANS[key] })),
     paymentsConnected: features.payments,
   });
 });
@@ -28,7 +28,10 @@ billingAdminRouter.get("/plans", requirePermission("subscriptions.view"), async 
 const planSchema = z.object({
   name: z.string().trim().min(1).max(40),
   priceMonthlyUsd: z.number().min(0).max(10_000),
-  limits: z.object({ generations: z.number().int().min(0).max(1_000_000), forecasts: z.number().int().min(0).max(1_000_000), ai: z.number().int().min(0).max(1_000_000) }),
+  priceYearlyUsd: z.number().min(0).max(100_000).nullable().default(null),
+  limits: z.object({ requests: z.number().int().min(0).max(1_000_000), ai: z.number().int().min(0).max(1_000_000) }),
+  requestPeriod: z.enum(["day", "month"]),
+  dailyImageLimit: z.number().int().min(0).max(100_000).nullable().default(null),
   benefits: z.array(z.string().trim().min(1).max(160)).max(12),
   enabled: z.boolean().default(true),
   password: z.string().min(1),
@@ -37,15 +40,15 @@ const planSchema = z.object({
 /** Edit plan details and limits (Super Admin). The price shown does not change the Stripe price. */
 billingAdminRouter.put("/plans/:plan", requirePermission("plans.manage"), async (req, res) => {
   const plan = param(req, "plan");
-  if (plan !== "free" && plan !== "pro") throw badRequest("Unknown plan");
+  if (!(PLAN_KEYS as readonly string[]).includes(plan)) throw badRequest("Unknown plan");
   const b = parseBody(req, planSchema);
   await confirmPassword(req, b.password);
   if (plan === "free" && !b.enabled) throw badRequest("The Free plan cannot be disabled.");
-  const before = getPlans()[plan];
-  const next = { ...settings().plans, [plan]: { name: b.name, priceMonthlyUsd: b.priceMonthlyUsd, limits: b.limits, benefits: b.benefits, enabled: plan === "free" ? true : b.enabled } };
+  const before = getPlans()[plan as Plan];
+  const next = { ...settings().plans, [plan]: { name: b.name, priceMonthlyUsd: b.priceMonthlyUsd, priceYearlyUsd: plan === "free" ? null : b.priceYearlyUsd, limits: b.limits, requestPeriod: b.requestPeriod, dailyImageLimit: b.dailyImageLimit, benefits: b.benefits, enabled: plan === "free" ? true : b.enabled } };
   await saveSetting("plans", next, currentUser(req).id);
   await logAudit(req, "plan.updated", { type: "plan", id: plan }, `Updated the ${plan} plan`, { before, after: { ...b, password: undefined } });
-  res.json({ plan: getPlans()[plan] });
+  res.json({ plan: getPlans()[plan as Plan] });
 });
 
 const subsSchema = z.object({ status: z.enum(["active", "ended", "admin", "all"]).default("active"), q: z.string().trim().max(200).optional() });
@@ -55,7 +58,7 @@ billingAdminRouter.get("/subscriptions", requirePermission("subscriptions.view")
   const { page, limit, offset } = pageOf(req);
   const where: string[] = [];
   const p: (string | number)[] = [];
-  if (q.status === "active") where.push("s.plan = 'pro' AND s.status IN ('active','trialing','past_due')");
+  if (q.status === "active") where.push("s.plan IN ('pro','max') AND s.status IN ('active','trialing','past_due')");
   if (q.status === "ended") where.push("s.provider = 'stripe' AND (s.status IN ('canceled','unpaid','incomplete_expired') OR s.plan = 'free')");
   if (q.status === "admin") where.push("s.provider = 'admin'");
   if (q.q) { where.push("u.email LIKE ? ESCAPE '\\'"); p.push(like(q.q)); }
@@ -64,7 +67,7 @@ billingAdminRouter.get("/subscriptions", requirePermission("subscriptions.view")
     `SELECT s.user_id, u.email, s.plan, s.status, s.provider, s.current_period_end, s.cancel_at_period_end, s.updated_at FROM subscriptions s JOIN users u ON u.id = s.user_id ${w} ORDER BY s.updated_at DESC LIMIT ? OFFSET ?`, ...p, limit, offset);
   const total = (await get<{ n: number }>(`SELECT COUNT(*) AS n FROM subscriptions s JOIN users u ON u.id = s.user_id ${w}`, ...p))?.n ?? 0;
   const summary = await get<{ active: number; ended: number; admin: number }>(
-    `SELECT SUM(CASE WHEN plan = 'pro' AND status IN ('active','trialing','past_due') THEN 1 ELSE 0 END) AS active,
+    `SELECT SUM(CASE WHEN plan IN ('pro','max') AND status IN ('active','trialing','past_due') THEN 1 ELSE 0 END) AS active,
             SUM(CASE WHEN provider = 'stripe' AND (status IN ('canceled','unpaid','incomplete_expired') OR plan = 'free') THEN 1 ELSE 0 END) AS ended,
             SUM(CASE WHEN provider = 'admin' THEN 1 ELSE 0 END) AS admin FROM subscriptions`);
   res.json({
@@ -84,24 +87,43 @@ billingAdminRouter.get("/subscriptions/events", requirePermission("subscriptions
   res.json({ items: rows.map((r) => ({ id: r.id, type: r.type, plan: r.plan, amountCents: r.amount_cents, currency: r.currency, reference: r.provider_ref, user: r.email, createdAt: r.created_at })), total, page, limit });
 });
 
-/** Monthly usage against plan limits: who is close to the limit. */
+/** Current-period usage per user (each user's own plan period and time zone): who is close to the limit. */
 billingAdminRouter.get("/subscriptions/usage", requirePermission("subscriptions.view"), async (_req, res) => {
-  const since = startOfMonthIso();
-  const plans = getPlans();
-  const rows = await all<{ id: string; email: string; plan: "free" | "pro"; generations: number; forecasts: number; ai: number }>(
-    `SELECT u.id, u.email, u.plan,
-       (SELECT COUNT(*) FROM generations g WHERE g.user_id = u.id AND g.created_at >= ? AND g.status != 'failed' AND g.provider != 'vendora-templates') AS generations,
-       (SELECT COUNT(*) FROM market_analyses m WHERE m.user_id = u.id AND m.created_at >= ? AND m.status = 'completed') AS forecasts,
-       (SELECT COUNT(*) FROM ai_requests a WHERE a.user_id = u.id AND a.created_at >= ?) AS ai
-     FROM users u WHERE u.id IN (
-       SELECT user_id FROM generations WHERE created_at >= ? UNION SELECT user_id FROM market_analyses WHERE created_at >= ? UNION SELECT user_id FROM ai_requests WHERE created_at >= ?)
-     LIMIT 500`, since, since, since, since, since, since);
-  const items = rows.map((r) => {
-    const l = plans[r.plan].limits;
-    const pct = Math.max(r.generations / Math.max(1, l.generations), r.forecasts / Math.max(1, l.forecasts), r.ai / Math.max(1, l.ai)) * 100;
-    return { userId: r.id, email: r.email, plan: r.plan, used: { generations: r.generations, forecasts: r.forecasts, ai: r.ai }, limits: l, maxPct: Math.round(pct) };
-  }).sort((a, b) => b.maxPct - a.maxPct).slice(0, 50);
-  res.json({ periodStart: since, items });
+  const since = new Date(Date.now() - 32 * 86_400_000).toISOString();
+  const users = await all<{ id: string; email: string; plan: Plan }>(
+    `SELECT u.id, u.email, u.plan FROM users u WHERE u.id IN (
+       SELECT user_id FROM usage_events WHERE created_at >= ? UNION SELECT user_id FROM ai_requests WHERE created_at >= ?) LIMIT 300`, since, since);
+  const items = await Promise.all(users.map(async (u) => {
+    const s = await usage(u.id);
+    const r = s.metrics.requests, ai = s.metrics.ai;
+    const pct = Math.max(r.used / Math.max(1, r.limit), ai.used / Math.max(1, ai.limit)) * 100;
+    return { userId: u.id, email: u.email, plan: u.plan, timezone: s.timezone, requests: r, ai, maxPct: Math.round(pct) };
+  }));
+  items.sort((x, y) => y.maxPct - x.maxPct);
+  res.json({ items: items.slice(0, 100) });
+});
+
+/** Counted requests across the platform: today, this month and per day (in the platform's default time zone). */
+billingAdminRouter.get("/usage/summary", requirePermission("subscriptions.view"), async (_req, res) => {
+  const tz = defaultTimezone();
+  const day = periodBounds("day", tz), month = periodBounds("month", tz);
+  const iso = (t: number) => new Date(t).toISOString();
+  const totals = async (from: number) => all<{ service: string; n: number }>(
+    "SELECT service, COUNT(*) AS n FROM usage_events WHERE status = 'consumed' AND created_at >= ? GROUP BY service", iso(from));
+  const byPlan = await all<{ plan: string; n: number }>(
+    "SELECT plan, COUNT(*) AS n FROM usage_events WHERE status = 'consumed' AND created_at >= ? GROUP BY plan", iso(month.start));
+  const since30 = Date.now() - 29 * 86_400_000;
+  const daily = await all<{ d: string; service: string; n: number }>(
+    "SELECT substr(created_at,1,10) AS d, service, COUNT(*) AS n FROM usage_events WHERE status = 'consumed' AND created_at >= ? GROUP BY d, service", iso(since30));
+  const days = Array.from({ length: 30 }, (_, i) => new Date(since30 + i * 86_400_000).toISOString().slice(0, 10));
+  const reserved = (await get<{ n: number }>("SELECT COUNT(*) AS n FROM usage_events WHERE status = 'reserved'"))?.n ?? 0;
+  res.json({
+    timezone: tz,
+    today: { from: iso(day.start), byService: await totals(day.start) },
+    month: { from: iso(month.start), byService: await totals(month.start), byPlan },
+    inProgress: reserved,
+    daily: days.map((d) => ({ date: d, generation: daily.find((x) => x.d === d && x.service === "generation")?.n ?? 0, forecast: daily.find((x) => x.d === d && x.service === "forecast")?.n ?? 0 })),
+  });
 });
 
 // ---------- Payments and revenue ----------
