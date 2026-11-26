@@ -142,7 +142,7 @@ function NotificationsTab() {
   const set = (k: keyof Settings["notifications"]) => (v: boolean) => save({ notifications: { [k]: v } });
   return (
     <Card className="divide-y divide-slate-100 px-6 dark:divide-slate-800">
-      <Toggle checked={n.inApp} onChange={set("inApp")} label={t("In-app notifications")} description={t("Show notifications inside PricePro.")} />
+      <Toggle checked={n.inApp} onChange={set("inApp")} label={t("In-app notifications")} description={t("Show notifications inside Vendora.")} />
       <Toggle checked={n.email} onChange={set("email")} label={t("Email notifications")} description={t("Email important account updates.")} />
       <Toggle checked={n.generation} disabled={!n.inApp} onChange={set("generation")} label={t("Advertisement generation")} description={t("When an advertisement is ready or fails.")} />
       <Toggle checked={n.forecast} disabled={!n.inApp} onChange={set("forecast")} label={t("Demand analysis")} description={t("When a forecast is completed.")} />

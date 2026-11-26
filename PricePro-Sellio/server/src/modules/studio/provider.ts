@@ -1,3 +1,5 @@
+import { recordApiCall } from "../../services/apiLog.js";
+import { settings } from "../../services/settings.js";
 import { config } from "../../config.js";
 import { notConfigured, upstreamError } from "../../lib/errors.js";
 
@@ -42,6 +44,8 @@ export class OpenAIImageProvider implements ImageProvider {
     form.append("n", "1");
     if (req.transparent) form.append("background", "transparent");
 
+    const started = Date.now();
+    const log = (ok: boolean, status: number | null, error: string | null) => recordApiCall({ provider: "openai_image", operation: `edit ${this.model}`, ok, status, ms: Date.now() - started, error });
     let response: Response;
     try {
       response = await this.fetchFn(`${this.baseUrl.replace(/\/$/, "")}/images/edits`, {
@@ -52,12 +56,14 @@ export class OpenAIImageProvider implements ImageProvider {
       });
     } catch (err) {
       const reason = err instanceof Error && err.name === "TimeoutError" ? "timed out" : "could not be reached";
+      await log(false, null, reason);
       throw upstreamError("image_generation", `The AI image service ${reason}. Please retry.`);
     }
 
     const body = (await response.json().catch(() => null)) as
       | { data?: { b64_json?: string; url?: string }[]; error?: { message?: string } }
       | null;
+    await log(response.ok, response.status, response.ok ? null : (body?.error?.message ?? `HTTP ${response.status}`));
     if (!response.ok) {
       const msg = body?.error?.message ?? `HTTP ${response.status}`;
       throw upstreamError("image_generation", `The AI image service returned an error: ${msg}`);
@@ -88,5 +94,5 @@ export function getImageProvider(): ImageProvider {
       "AI image generation is not configured on this server. An administrator must set OPENAI_API_KEY.",
     );
   }
-  return new OpenAIImageProvider(config.OPENAI_API_KEY, config.IMAGE_MODEL, config.OPENAI_BASE_URL);
+  return new OpenAIImageProvider(config.OPENAI_API_KEY, settings().ai.imageModel || config.IMAGE_MODEL, config.OPENAI_BASE_URL);
 }

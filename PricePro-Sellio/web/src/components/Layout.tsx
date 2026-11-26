@@ -1,8 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
 import {
-  BarChart3, Bell, Bot, Briefcase, CalendarRange, Compass, Megaphone, Radar, CreditCard, FolderKanban, Heart, LayoutDashboard, LineChart, LogOut, Menu, Moon, Settings,
-  Sparkles, Sun, User as UserIcon, X,
+  BarChart3, Bell, Bot, Briefcase, Compass, Megaphone, Radar, CreditCard, FolderKanban, Heart, LayoutDashboard, LifeBuoy, LineChart, LogOut, Menu, Moon, Settings,
+  ShieldCheck, Sparkles, Sun, User as UserIcon, X,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
@@ -20,7 +20,6 @@ export const NAV = [
   { to: "/growth", label: "Growth Hub", icon: Compass },
   { to: "/studio", label: "AI Product Studio", icon: Sparkles },
   { to: "/ads", label: "Ad Studio", icon: Megaphone },
-  { to: "/campaigns", label: "Campaigns", icon: CalendarRange },
   { to: "/intelligence", label: "Market Intelligence", icon: Radar },
   { to: "/forecast", label: "Demand Forecast", icon: LineChart },
   { to: "/business", label: "My Business", icon: Briefcase },
@@ -29,6 +28,7 @@ export const NAV = [
   { to: "/analytics", label: "Analytics", icon: BarChart3 },
   { to: "/favorites", label: "Favorites", icon: Heart },
   { to: "/notifications", label: "Notifications", icon: Bell },
+  { to: "/support", label: "Support", icon: LifeBuoy },
   { to: "/settings", label: "Settings", icon: Settings },
 ];
 
@@ -36,7 +36,7 @@ export function Logo({ className }: { className?: string }) {
   return (
     <Link to="/" className={cx("flex items-center gap-2.5", className)}>
       <img src="/favicon.svg" alt="" className="h-9 w-9" />
-      <span className="text-lg font-extrabold tracking-tight">Price<span className="text-brand-600 dark:text-brand-400">Pro</span></span>
+      <span className="text-lg font-extrabold tracking-tight">Vend<span className="text-brand-600 dark:text-brand-400">ora</span></span>
     </Link>
   );
 }
@@ -58,7 +58,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <div className="flex h-full flex-col gap-6 p-4">
       <Logo className="px-2 pt-1" />
-      <nav className="flex flex-1 flex-col gap-1" aria-label="Main">
+      <nav className="-mx-1 flex flex-1 flex-col gap-1 overflow-y-auto px-1" aria-label="Main">
         {NAV.map(({ to, label, icon: Icon, end }) => (
           <NavLink key={to} to={to} end={end} onClick={onNavigate}
             className={({ isActive }) => cx(
@@ -71,6 +71,11 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
           </NavLink>
         ))}
       </nav>
+      {user?.adminRole && (
+        <Link to="/admin" onClick={onNavigate} className="flex items-center gap-3 rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">
+          <ShieldCheck className="h-[18px] w-[18px] text-brand-600" />{t("Admin panel")}
+        </Link>
+      )}
       {user && (
         <Link to="/subscription" onClick={onNavigate} className="rounded-2xl bg-gradient-to-br from-brand-600 to-cyan-600 p-4 text-white">
           <p className="text-xs uppercase tracking-wider opacity-80">{t("Current plan")}</p>
@@ -109,6 +114,8 @@ function UserMenu() {
     { to: "/profile", label: "Profile", icon: UserIcon },
     { to: "/subscription", label: "Subscription", icon: CreditCard },
     { to: "/settings", label: "Settings", icon: Settings },
+    { to: "/support", label: "Support", icon: LifeBuoy },
+    ...(user.adminRole ? [{ to: "/admin", label: "Admin panel", icon: ShieldCheck }] : []),
   ];
   return (
     <div className="relative" ref={ref}>

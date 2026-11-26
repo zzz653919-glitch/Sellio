@@ -18,7 +18,7 @@ type Area = {
   geo: string; name: string; status: "ok" | "no_data" | "error"; error?: string; note?: string; granularity?: Granularity;
   history: Point[]; forecast: { date: string; value: number; lower: number; upper: number }[];
   recentAvg: number | null; forecastAvg: number | null; changePct: number | null; periodChangePct?: number | null;
-  trend: "growing" | "declining" | "stable" | null; confidence: "high" | "medium" | "low" | null; peak: Point | null;
+  trend: "growing" | "declining" | "stable" | null; confidence: "high" | "medium" | "low" | null; accuracyPct?: number | null; peak: Point | null;
   seasonality?: Seasonality | null;
   horizons?: Horizon[];
 };
@@ -72,13 +72,15 @@ function AreaCard({ a, color }: { a: Area; color: string }) {
             {a.trend === "growing" ? t("Demand is rising") : a.trend === "declining" ? t("Demand is falling") : a.trend === "stable" ? t("Demand is stable") : t(a.note ?? "")}
           </p>
           <p className="text-xs muted">
-            {t("Interest now")}: <b className="text-slate-700 dark:text-slate-200">{fmtNumber(a.recentAvg ?? 0)}</b>/100
-            {a.forecastAvg !== null && <> · {t("expected")}: <b className="text-slate-700 dark:text-slate-200">{fmtNumber(a.forecastAvg)}</b>/100</>}
+            <span title={t("Google Trends: 100% = the highest search interest in this period, 50% = half of it. It is not the number of sales.")}>{t("Search interest now")}</span>: <b className="text-slate-700 dark:text-slate-200">{fmtNumber(a.recentAvg ?? 0)}%</b>
+            {a.forecastAvg !== null && <> · {t("expected")}: <b className="text-slate-700 dark:text-slate-200">{fmtNumber(a.forecastAvg)}%</b></>}
           </p>
           {a.periodChangePct != null && (
             <p className="text-xs muted">{t(a.seasonality ? "Last 12 months vs the year before" : "Since the start of the period")}: <b className={a.periodChangePct > 0 ? "text-emerald-600 dark:text-emerald-400" : a.periodChangePct < 0 ? "text-rose-600 dark:text-rose-400" : ""}>{fmtPct(a.periodChangePct)}</b></p>
           )}
-          {a.confidence && <p className="text-xs muted">{t("Model confidence")}: {t(a.confidence)}</p>}
+          {a.accuracyPct != null
+            ? <p className="text-xs muted" title={t("How close the model came when it was tested on the last months of real data.")}>{t("Forecast accuracy")}: <b className={a.accuracyPct >= 85 ? "text-emerald-600 dark:text-emerald-400" : a.accuracyPct >= 70 ? "text-amber-600 dark:text-amber-400" : "text-rose-600 dark:text-rose-400"}>{a.accuracyPct}%</b></p>
+            : a.confidence && <p className="text-xs muted">{t("Model confidence")}: {t(a.confidence)}</p>}
         </div>
       )}
     </div>
@@ -111,9 +113,9 @@ function InterestChart({ areas }: { areas: Area[] }) {
         <LineChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
           <CartesianGrid stroke={grid} strokeDasharray="3 3" />
           <XAxis dataKey="date" tick={{ fill: axis, fontSize: 11 }} tickFormatter={(d: string) => fmtAxis(d, granularity === "month" ? "month" : "day")} minTickGap={28} />
-          <YAxis domain={[0, 100]} tick={{ fill: axis, fontSize: 11 }} width={36} />
+          <YAxis domain={[0, 100]} tick={{ fill: axis, fontSize: 11 }} tickFormatter={(v: number) => `${v}%`} width={42} />
           <Tooltip contentStyle={{ background: resolved === "dark" ? "#0f172a" : "#fff", border: `1px solid ${grid}`, borderRadius: 12 }}
-            labelFormatter={(d) => fmtAxis(String(d), granularity === "month" ? "month" : "day")} formatter={(v: unknown, n: unknown) => [fmtNumber(Number(v), 1), String(n)]} />
+            labelFormatter={(d) => fmtAxis(String(d), granularity === "month" ? "month" : "day")} formatter={(v: unknown, n: unknown) => [`${fmtNumber(Number(v), 1)}%`, String(n)]} />
           <Legend />
           {areas.map((a, i) => a.status === "ok" && a.history.length > 0 && [
             <Line key={a.geo} type="monotone" dataKey={a.geo} name={label(a)} stroke={COLORS[i % COLORS.length]} strokeWidth={2} dot={false} connectNulls />,
@@ -127,6 +129,8 @@ function InterestChart({ areas }: { areas: Area[] }) {
 
 const HORIZON_LABEL = { 7: "7 days", 30: "30 days", 90: "90 days", 365: "365 days" } as const;
 const CONF_TONE = { high: "green", medium: "amber", low: "red" } as const;
+/** Back-test accuracy in percent (100 − sMAPE). */
+const accuracyOf = (smapePct: number) => Math.max(0, Math.min(100, Math.round(100 - smapePct)));
 
 /** Expected search interest over 7 / 30 / 90 / 365 days, per area, with the model's back-test error. */
 function HorizonTable({ areas }: { areas: Area[] }) {
@@ -150,8 +154,10 @@ function HorizonTable({ areas }: { areas: Area[] }) {
                     {h.status === "ok" && h.changePct !== null ? (
                       <>
                         <b className={h.changePct > 3 ? "text-emerald-600 dark:text-emerald-400" : h.changePct < -3 ? "text-rose-600 dark:text-rose-400" : ""}>{fmtPct(h.changePct)}</b>
-                        <span className="block text-xs muted">{fmtNumber(h.expected!, 1)} ({fmtNumber(h.lower!, 0)}–{fmtNumber(h.upper!, 0)})</span>
-                        {h.confidence && <Badge tone={CONF_TONE[h.confidence]} className="mt-1">{t(h.confidence === "high" ? "High confidence" : h.confidence === "medium" ? "Medium confidence" : "Low confidence")}</Badge>}
+                        <span className="block text-xs muted">{fmtNumber(h.expected!, 0)}% ({fmtNumber(h.lower!, 0)}–{fmtNumber(h.upper!, 0)}%)</span>
+                        {h.smapePct != null && h.confidence
+                          ? <Badge tone={CONF_TONE[h.confidence]} className="mt-1">{t("Accuracy {n}%", { n: accuracyOf(h.smapePct) })}</Badge>
+                          : h.confidence && <Badge tone={CONF_TONE[h.confidence]} className="mt-1">{t(h.confidence === "high" ? "High confidence" : h.confidence === "medium" ? "Medium confidence" : "Low confidence")}</Badge>}
                       </>
                     ) : <span className="text-xs muted">{t("Not enough data")}</span>}
                   </td>
@@ -161,12 +167,12 @@ function HorizonTable({ areas }: { areas: Area[] }) {
           </tbody>
         </table>
       </div>
-      <p className="text-xs muted">{t("Change of the average search interest over the period versus the same length just before. In brackets: expected index and its likely range. Confidence comes from testing the model on the last months of real data (back-test); seasonal patterns can break when something new happens (prices, laws, new products).")}</p>
+      <p className="text-xs muted">{t("Change of the average search interest over the period versus the same length just before. Below: expected interest (in % of the peak) and its likely range. Accuracy: how close the model came when it was tested on the last months of real data (100% = no error). Seasonal patterns can break when something new happens (prices, laws, new products).")}</p>
     </div>
   );
 }
 
-/** Turn a demand analysis into a Growth Hub plan (ads → campaign → results). */
+/** Turn a demand analysis into a Growth Hub plan (AI explanation → direction → ads). */
 function GrowthPlanButton({ analysisId, product }: { analysisId: string; product: string }) {
   const { t } = useI18n();
   const navigate = useNavigate();
@@ -211,7 +217,7 @@ function AnalysisResult({ a, onDelete }: { a: Analysis; onDelete: () => void }) 
       </div>
 
       <Alert tone="info">
-        {t("The numbers show how much people search for this product on Google (0–100, where 100 is the highest interest in the chosen period). This is real search data, not sales volume: it shows where interest is rising or falling.")}
+        {t("The numbers show how much people search for this product on Google, in % of the highest interest in the chosen period (100% = the peak). This is real search data, not sales volume: it shows where interest is rising or falling.")}
       </Alert>
 
       {a.status === "no_data" && <Alert tone="warning">{t("Google has too little search data for this product in the chosen areas. Try a more general or English product name.")}</Alert>}
@@ -249,12 +255,12 @@ function AnalysisResult({ a, onDelete }: { a: Analysis; onDelete: () => void }) 
                 <span className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
                   <span className="block h-full rounded-full bg-gradient-to-r from-brand-500 to-cyan-500" style={{ width: `${Math.max(2, c.value)}%` }} />
                 </span>
-                <span className="w-8 text-right font-semibold">{c.value}</span>
+                <span className="w-10 text-right font-semibold">{c.value}%</span>
               </li>
             ))}
           </ul>
         )}
-        <p className="mt-2 text-xs muted">{t("Here countries are compared with each other: 100 = the country where the product is searched most relative to all searches there.")}</p>
+        <p className="mt-2 text-xs muted">{t("Here countries are compared with each other: 100% = the country where the product is searched most relative to all searches there.")}</p>
       </div>
 
       <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-4 dark:border-slate-800">

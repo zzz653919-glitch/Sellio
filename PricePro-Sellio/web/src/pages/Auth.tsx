@@ -9,6 +9,7 @@ import { LanguageSwitch } from "../components/LanguageSwitch";
 import { Alert, Button, Field, Input } from "../components/ui";
 import { errorMessage, post } from "../lib/api";
 import { useAuth } from "../lib/auth";
+import { usePlatformStatus } from "../lib/status";
 import { useI18n } from "../lib/i18n";
 import type { User } from "../lib/types";
 
@@ -19,7 +20,7 @@ function AuthShell({ title, subtitle, children }: { title: string; subtitle?: st
       <div className="relative hidden overflow-hidden bg-gradient-to-br from-brand-700 via-brand-600 to-cyan-600 p-12 text-white lg:flex lg:flex-col lg:justify-between">
         <div className="absolute -right-24 -top-24 h-96 w-96 rounded-full bg-white/10 blur-3xl" />
         <div className="absolute -bottom-32 -left-16 h-96 w-96 rounded-full bg-cyan-300/20 blur-3xl" />
-        <div className="relative flex items-center gap-2.5 text-xl font-extrabold"><img src="/favicon.svg" alt="" className="h-10 w-10" /> PricePro</div>
+        <div className="relative flex items-center gap-2.5 text-xl font-extrabold"><img src="/favicon.svg" alt="" className="h-10 w-10" /> Vendora</div>
         <div className="relative space-y-6">
           <h2 className="text-4xl font-extrabold leading-tight">{t("Product intelligence for modern sellers")}</h2>
           {[
@@ -32,7 +33,7 @@ function AuthShell({ title, subtitle, children }: { title: string; subtitle?: st
             </div>
           ))}
         </div>
-        <p className="relative text-sm opacity-75">© {new Date().getFullYear()} PricePro</p>
+        <p className="relative text-sm opacity-75">© {new Date().getFullYear()} Vendora</p>
       </div>
       <div className="relative flex items-center justify-center p-6">
         <LanguageSwitch className="absolute right-4 top-4" />
@@ -74,7 +75,7 @@ export function LoginPage() {
     );
   }
   return (
-    <AuthShell title={t("Welcome back")} subtitle={t("Sign in to your PricePro account")}>
+    <AuthShell title={t("Welcome back")} subtitle={t("Sign in to your Vendora account")}>
       <form onSubmit={submit} className="space-y-4">
         {m.error && <Alert tone="error">{t(errorMessage(m.error))}</Alert>}
         <Field label={t("Email")}>
@@ -99,6 +100,8 @@ export function SignupPage() {
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement>) => setF((s) => ({ ...s, [k]: e.target.value }));
   const strong = f.password.length >= 8 && /[A-Za-z]/.test(f.password) && /\d/.test(f.password);
   const [step, setStep] = useState<CodeChallenge | null>(null);
+  const status = usePlatformStatus();
+  const closed = status.data?.registrationOpen === false;
   const m = useMutation({
     mutationFn: () => post<CodeChallenge>("/auth/signup", { ...f, language: lang }),
     onSuccess: (d) => setStep(d),
@@ -113,6 +116,7 @@ export function SignupPage() {
   return (
     <AuthShell title={t("Create your account")} subtitle={t("Start with the Free plan. No card required.")}>
       <form onSubmit={(e) => { e.preventDefault(); m.mutate(); }} className="space-y-4">
+        {closed && <Alert tone="warning">{t("New registrations are closed right now.")}</Alert>}
         {m.error && <Alert tone="error">{t(errorMessage(m.error))}</Alert>}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label={t("First name")}><div className="relative"><Icon><UserIcon className="h-4 w-4" /></Icon><Input className="pl-9" required autoComplete="given-name" value={f.firstName} onChange={set("firstName")} /></div></Field>
@@ -127,7 +131,7 @@ export function SignupPage() {
             <CheckCircle2 className="h-3.5 w-3.5" />{strong ? t("Password meets the requirements") : t("Add more characters, a letter and a number")}
           </p>
         )}
-        <Button type="submit" className="w-full" size="lg" loading={m.isPending} disabled={!strong}>{t("Create account")}</Button>
+        <Button type="submit" className="w-full" size="lg" loading={m.isPending} disabled={!strong || closed}>{t("Create account")}</Button>
         <p className="text-center text-sm muted">{t("Already have an account?")} <Link to="/login" className="font-semibold text-brand-600 hover:underline dark:text-brand-400">{t("Sign in")}</Link></p>
       </form>
     </AuthShell>

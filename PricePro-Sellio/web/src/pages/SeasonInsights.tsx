@@ -168,8 +168,8 @@ export function SeasonPanel({ s, title }: { s: Seasonality; title: string }) {
               <ComposedChart data={outlookData} margin={{ top: 5, right: 5, left: -10, bottom: 0 }}>
                 <CartesianGrid stroke={grid} strokeDasharray="3 3" vertical={false} />
                 <XAxis dataKey="date" tick={{ fill: axis, fontSize: 11 }} tickFormatter={(d: string) => fmtMonthName(Number(d.slice(5, 7)), true)} minTickGap={12} />
-                <YAxis domain={[0, 100]} tick={{ fill: axis, fontSize: 11 }} />
-                <Tooltip contentStyle={tip} labelFormatter={(d) => fmtMonth(String(d))} formatter={(v: unknown, n: unknown) => [Array.isArray(v) ? `${fmtNumber(v[0])} – ${fmtNumber(v[1])}` : fmtNumber(Number(v), 1), String(n)]} />
+                <YAxis domain={[0, 100]} tick={{ fill: axis, fontSize: 11 }} tickFormatter={(v: number) => `${v}%`} />
+                <Tooltip contentStyle={tip} labelFormatter={(d) => fmtMonth(String(d))} formatter={(v: unknown, n: unknown) => [Array.isArray(v) ? `${fmtNumber(v[0])}% – ${fmtNumber(v[1])}%` : `${fmtNumber(Number(v), 1)}%`, String(n)]} />
                 <Legend />
                 <Area dataKey="band" name={t("80% prediction interval")} fill="#6366f1" fillOpacity={0.15} stroke="none" />
                 <Line dataKey="actual" name={t("Actual")} stroke="#0ea5e9" strokeWidth={2} dot={false} />
@@ -306,8 +306,8 @@ export function CompareView({ r, onDelete }: { r: CompareResult; onDelete: () =>
               <LineChart data={chart} margin={{ top: 5, right: 5, left: -10, bottom: 0 }}>
                 <CartesianGrid stroke={grid} strokeDasharray="3 3" vertical={false} />
                 <XAxis dataKey="month" tick={{ fill: axis, fontSize: 11 }} tickFormatter={(m: string) => `${fmtMonthName(Number(m.slice(5, 7)), true)} ${m.slice(2, 4)}`} minTickGap={16} />
-                <YAxis domain={[0, 100]} tick={{ fill: axis, fontSize: 11 }} />
-                <Tooltip contentStyle={{ background: resolved === "dark" ? "#0f172a" : "#fff", border: `1px solid ${grid}`, borderRadius: 12 }} labelFormatter={(m) => fmtMonth(`${m}-01`)} />
+                <YAxis domain={[0, 100]} tick={{ fill: axis, fontSize: 11 }} tickFormatter={(v: number) => `${v}%`} />
+                <Tooltip contentStyle={{ background: resolved === "dark" ? "#0f172a" : "#fff", border: `1px solid ${grid}`, borderRadius: 12 }} labelFormatter={(m) => fmtMonth(`${m}-01`)} formatter={(v: unknown, n: unknown) => [`${fmtNumber(Number(v), 1)}%`, String(n)]} />
                 <Legend />
                 {r.items.map((i, k) => i.seasonality && <Line key={i.query} dataKey={i.query} stroke={COLORS[k % COLORS.length]} strokeWidth={2} dot={false} />)}
               </LineChart>

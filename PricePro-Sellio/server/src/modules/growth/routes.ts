@@ -70,7 +70,7 @@ async function serializeMany(userId: string, rows: Row[]) {
     "SELECT campaign_id, COUNT(*) AS n, SUM(CASE WHEN status = 'done' THEN 1 ELSE 0 END) AS done FROM campaign_items WHERE user_id = ? GROUP BY campaign_id", userId) : [];
   const genById = new Map(gens.map((g) => [g.id, g]));
   const copyById = new Map(copies.map((c) => [c.id, c]));
-  const order = ["opportunity", "explain", "direction", "assets", "campaign", "results"] as const;
+  const order = ["opportunity", "explain", "direction", "assets"] as const;
   return rows.map((r) => {
     const mine = assets.filter((a) => a.initiative_id === r.id);
     // Keep only assets that still exist.

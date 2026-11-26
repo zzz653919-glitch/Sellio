@@ -1,13 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  BarChart3, Bot, CheckCircle2, Compass, ExternalLink, Lightbulb, Megaphone, PenLine, Plus, Rocket, Sparkles, Target, Trash2, TrendingUp,
+  Bot, CheckCircle2, Compass, Megaphone, PenLine, Plus, Sparkles, Target, Trash2, TrendingUp,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { ErrorAlert, IntegrationNotice } from "../components/shared";
 import { Alert, Badge, Button, Card, ConfirmDialog, EmptyState, Field, Input, PageHeader, Spinner, cx, useToast } from "../components/ui";
 import { del, get, post } from "../lib/api";
-import { fmtAmount, fmtDate, fmtMonthName, fmtNumber, fmtPct, timeAgo } from "../lib/format";
+import { fmtDate, fmtMonthName, fmtPct, timeAgo } from "../lib/format";
 import { useMeta } from "../lib/hooks";
 import { useI18n, type Lang } from "../lib/i18n";
 import { useMsg, type Msg } from "../lib/msg";
@@ -19,7 +19,7 @@ type Evidence =
   | { kind: "opportunity"; source: string; computedAt: string; label: string; nowVsAvgPct: number; yoyPct: number | null; next3Pct: number | null; peakMonths: number[]; nextRise: { date: string; months: number } | null; confidence: string | null; score: number | null; reasons: Msg[] }
   | { kind: "forecast"; source: string; computedAt: string; analysisId: string; areas: { area: string; geo: string; changePct: number | null; trend: string | null; peakMonths: number[]; yoyPct: number | null; confidence: string | null }[] }
   | null;
-type Step = "opportunity" | "explain" | "direction" | "assets" | "campaign" | "results";
+type Step = "opportunity" | "explain" | "direction" | "assets";
 type Initiative = {
   id: string; product: string; query: string | null; source: "opportunity" | "forecast" | "manual"; evidence: Evidence;
   explanation: string | null; directions: Direction[]; direction: Direction | null;
@@ -34,8 +34,8 @@ type Learnings = {
 type Opportunity = { query: string; label: string; score: number; mine: { initiativeId: string } | null };
 
 const CHANNELS: Record<string, string> = { instagram: "Instagram", telegram: "Telegram", facebook: "Facebook", google: "Google Ads", tiktok: "TikTok", youtube: "YouTube", offline: "Offline", other: "Other" };
-const STEP_LABEL: Record<Step, string> = { opportunity: "Opportunity", explain: "AI explanation", direction: "Marketing direction", assets: "Ads", campaign: "Campaign", results: "Results" };
-const STEPS: Step[] = ["opportunity", "explain", "direction", "assets", "campaign", "results"];
+const STEP_LABEL: Record<Step, string> = { opportunity: "Opportunity", explain: "AI explanation", direction: "Marketing direction", assets: "Ads" };
+const STEPS: Step[] = ["opportunity", "explain", "direction", "assets"];
 const AD_PLATFORMS = ["instagram", "telegram", "facebook", "google"];
 
 function Text({ children }: { children: string }) {
@@ -57,49 +57,8 @@ function StepCard({ n, step, done, active, title, children }: { n: number; step:
   );
 }
 
-function ResultsLine({ r, currency }: { r: Results; currency: string }) {
-  const { t } = useI18n();
-  return (
-    <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
-      <p><span className="muted">{t("Spend")}:</span> <b>{fmtAmount(r.spend, currency)}</b></p>
-      <p><span className="muted">CTR:</span> <b>{r.ctrPct ?? "—"}%</b></p>
-      <p><span className="muted">CPA:</span> <b>{r.cpa === null ? "—" : fmtAmount(r.cpa, currency)}</b></p>
-      <p><span className="muted">ROAS:</span> <b>{r.roas === null ? "—" : `${r.roas}×`}</b></p>
-    </div>
-  );
-}
-
-function LearningsCard({ l }: { l: Learnings | undefined }) {
-  const { t } = useI18n();
-  const msg = useMsg();
-  if (!l) return null;
-  return (
-    <Card className="space-y-3 p-5">
-      <h3 className="flex items-center gap-2 font-semibold"><Lightbulb className="h-4 w-4 text-amber-500" />{t("What worked")}</h3>
-      {!l.overall ? <p className="text-sm muted">{t("Enter the results of your campaigns (Campaigns → Results). Then PricePro shows which channels and creatives bring sales, and uses this in the next plans.")}</p> : (
-        <>
-          {l.insights.map((m, i) => <p key={i} className="flex gap-2 text-sm"><span className="text-amber-500">•</span>{msg({ ...m, vars: Object.fromEntries(Object.entries(m.vars ?? {}).map(([k, v]) => [k, k === "channel" ? t(CHANNELS[String(v)] ?? String(v)) : v])) })}</p>)}
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead className="text-left text-xs uppercase tracking-wide text-slate-500"><tr><th className="py-1.5">{t("Channel")}</th><th>{t("Spend")}</th><th>CTR</th><th>CPA</th><th>ROAS</th></tr></thead>
-              <tbody>
-                {l.byChannel.map((c) => (
-                  <tr key={c.channel} className="border-t border-slate-100 dark:border-slate-800">
-                    <td className="py-1.5">{t(CHANNELS[c.channel] ?? c.channel)}</td><td>{fmtAmount(c.spend, l.currency ?? "")}</td><td>{c.ctrPct ?? "—"}%</td><td>{c.cpa === null ? "—" : fmtNumber(c.cpa)}</td><td>{c.roas ?? "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <p className="text-xs muted">{t("Based on {n} result rows you entered ({c} clicks, {s} sales).", { n: l.sample.rows, c: fmtNumber(l.sample.clicks), s: fmtNumber(l.sample.conversions) })}</p>
-        </>
-      )}
-    </Card>
-  );
-}
-
 // ------------------------------------------------------------------ one plan
-function PlanView({ id, learnings }: { id: string; learnings: Learnings | undefined }) {
+function PlanView({ id }: { id: string }) {
   const { t, lang } = useI18n();
   const msg = useMsg();
   const toast = useToast();
@@ -120,11 +79,6 @@ function PlanView({ id, learnings }: { id: string; learnings: Learnings | undefi
     }),
     onSuccess: () => { void q.refetch(); void qc.invalidateQueries({ queryKey: ["growth"], exact: true }); void qc.invalidateQueries({ queryKey: ["ad-copies"] }); toast("success", t("Ad texts are ready. Open them in Ad Studio → Ad copy.")); },
   });
-  const [budget, setBudget] = useState("");
-  const campaign = useMutation({
-    mutationFn: () => post<{ initiative: Initiative; campaignId: string }>(`/growth/${id}/campaign`, { budget: budget === "" ? null : Number(budget) }),
-    onSuccess: (d) => { set(d.initiative); void qc.invalidateQueries({ queryKey: ["campaigns"] }); void qc.invalidateQueries({ queryKey: ["intel-opportunities"] }); },
-  });
   if (q.isLoading) return <Spinner />;
   if (q.error) return <ErrorAlert error={q.error} />;
   const i = q.data!;
@@ -136,7 +90,7 @@ function PlanView({ id, learnings }: { id: string; learnings: Learnings | undefi
       <StepCard n={1} step="opportunity" done active={false} title={`${t(STEP_LABEL.opportunity)}: ${t(i.product)}`}>
         {e?.kind === "opportunity" ? (
           <>
-            <p className="text-sm">{t("Last 12 months")}: <b>{fmtPct(e.yoyPct)}</b> · {t("Next 3 months")}: <b>{fmtPct(e.next3Pct)}</b> · {t("Now vs yearly average")}: <b>{fmtPct(e.nowVsAvgPct)}</b>{e.score !== null && <> · {t("Score")}: <b>{e.score}/100</b></>}</p>
+            <p className="text-sm">{t("Last 12 months")}: <b>{fmtPct(e.yoyPct)}</b> · {t("Next 3 months")}: <b>{fmtPct(e.next3Pct)}</b> · {t("Now vs yearly average")}: <b>{fmtPct(e.nowVsAvgPct)}</b>{e.score !== null && <> · {t("Score")}: <b>{t("{n} points out of 100", { n: e.score })}</b></>}</p>
             {e.peakMonths.length > 0 && <p className="text-sm">{t("Season")}: {e.peakMonths.map((m) => fmtMonthName(m)).join(", ")}{e.nextRise && <> · {t("Next rise")}: {e.nextRise.months === 0 ? t("this month") : t("in {n} months", { n: e.nextRise.months })}</>}</p>}
             {e.reasons.map((r, k) => <p key={k} className="flex gap-2 text-sm"><span className="text-brand-500">•</span>{msg(r)}</p>)}
             <p className="text-xs muted">{t("Source")}: Google Trends · {t("Uzbekistan")} · {fmtDate(e.computedAt)}</p>
@@ -150,7 +104,7 @@ function PlanView({ id, learnings }: { id: string; learnings: Learnings | undefi
       </StepCard>
 
       <StepCard n={2} step="explain" done={i.steps.explain} active={active === "explain"} title={t("AI explanation")}>
-        {i.explanation ? <Text>{i.explanation}</Text> : <p className="text-sm muted">{t("The AI advisor explains why this matters for your business, using the market data, your sales and your past campaign results.")}</p>}
+        {i.explanation ? <Text>{i.explanation}</Text> : <p className="text-sm muted">{t("The AI advisor explains why this matters for your business, using the market data and your sales.")}</p>}
         {!textAi && <IntegrationNotice service="textAi" />}
         {explain.error && <ErrorAlert error={explain.error} />}
         <Button size="sm" variant={i.explanation ? "secondary" : "primary"} icon={<Bot className="h-4 w-4" />} loading={explain.isPending} disabled={!textAi} onClick={() => explain.mutate()}>{i.explanation ? t("Explain again") : t("Explain with AI")}</Button>
@@ -212,35 +166,6 @@ function PlanView({ id, learnings }: { id: string; learnings: Learnings | undefi
         {i.copies.length > 0 && <div className="space-y-1">{i.copies.map((c) => <p key={c.id} className="text-sm">📝 {c.headline ?? c.product} <Link to="/ads?tab=copy" className="text-xs text-brand-600 hover:underline dark:text-brand-400">{t("Open")}</Link></p>)}</div>}
         {i.banners.length > 0 && <div className="flex flex-wrap gap-2">{i.banners.map((b) => b.resultUrl && <a key={b.id} href={b.resultUrl} target="_blank" rel="noreferrer"><img src={b.resultUrl} alt={b.productName} className="h-20 w-20 rounded-lg object-cover" /></a>)}</div>}
       </StepCard>
-
-      <StepCard n={5} step="campaign" done={i.steps.campaign} active={active === "campaign"} title={t("Campaign")}>
-        {i.campaign ? (
-          <div className="space-y-2 text-sm">
-            <p><b>{i.campaign.name}</b> · {fmtDate(i.campaign.start_date)} — {fmtDate(i.campaign.end_date)}{i.campaign.budget ? ` · ${fmtAmount(i.campaign.budget, i.campaign.currency)}` : ""}</p>
-            <p className="muted">{t("Posts and ads done")}: {i.campaign.itemsDone} / {i.campaign.itemsTotal}</p>
-            <Link to={`/campaigns?id=${i.campaign.id}`}><Button size="sm" variant="secondary" icon={<ExternalLink className="h-4 w-4" />}>{i.campaign.itemsTotal ? t("Open the campaign") : t("Open and plan the calendar with AI")}</Button></Link>
-          </div>
-        ) : !i.direction ? <p className="text-sm muted">{t("Choose a direction first.")}</p> : (
-          <div className="space-y-2">
-            <p className="text-sm muted">{t("A campaign is created from the chosen direction: its audience and channels, and dates up to the end of the season peak when the data shows one.")}</p>
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <Input type="number" min={0} value={budget} onChange={(ev) => setBudget(ev.target.value)} placeholder={t("Budget (UZS, optional)")} className="sm:w-56" />
-              <Button size="sm" icon={<Rocket className="h-4 w-4" />} loading={campaign.isPending} onClick={() => campaign.mutate()}>{t("Create campaign")}</Button>
-            </div>
-            {campaign.error && <ErrorAlert error={campaign.error} />}
-          </div>
-        )}
-      </StepCard>
-
-      <StepCard n={6} step="results" done={i.steps.results} active={active === "results"} title={t("Results")}>
-        {i.campaign?.results ? <ResultsLine r={i.campaign.results} currency={i.campaign.currency} /> : <p className="text-sm muted">{t("When the ads run, enter impressions, clicks, sales and spend from your ad accounts. PricePro calculates the cost per sale and return, and learns what works for you.")}</p>}
-        {i.campaign && <Link to={`/campaigns?id=${i.campaign.id}&tab=results`}><Button size="sm" variant="secondary" icon={<BarChart3 className="h-4 w-4" />}>{t("Enter results")}</Button></Link>}
-      </StepCard>
-
-      <StepCard n={7} step="learn" done={i.steps.results && Boolean(learnings?.overall)} active={false} title={t("What it teaches")}>
-        {learnings?.overall ? <p className="text-sm">{t("Your results are now used by the AI advisor, the next AI campaign plans (budget goes to channels that sold cheaper) and the opportunity list.")}</p> : <p className="text-sm muted">{t("After results are entered, the next recommendations use them.")}</p>}
-        <Button size="sm" variant="secondary" icon={<Bot className="h-4 w-4" />} onClick={() => navigate(`/advisor?q=${encodeURIComponent(t("Look at my plan for \"{x}\" and my campaign results. What should I do next?", { x: t(i.product) }))}`)}>{t("Ask the advisor what to do next")}</Button>
-      </StepCard>
     </div>
   );
 }
@@ -265,7 +190,7 @@ export default function Growth() {
   const fresh = (opps.data?.items ?? []).filter((o) => !o.mine).slice(0, 4);
   return (
     <div className="space-y-6">
-      <PageHeader title={t("Growth Hub")} subtitle={t("One path from a market opportunity to ads, a campaign and measured results — and back to better recommendations.")} icon={<Compass className="h-5 w-5" />} />
+      <PageHeader title={t("Growth Hub")} subtitle={t("One path from a market opportunity to an AI explanation, a marketing direction and ready ads.")} icon={<Compass className="h-5 w-5" />} />
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
         <div className="space-y-5">
           <Card className="space-y-3 p-5">
@@ -276,7 +201,7 @@ export default function Growth() {
                 {fresh.map((o) => (
                   <div key={o.query} className="flex items-center gap-2 rounded-xl border border-slate-100 p-2.5 dark:border-slate-800">
                     <TrendingUp className="h-4 w-4 flex-none text-emerald-500" />
-                    <p className="min-w-0 flex-1 truncate text-sm">{t(o.label)} <span className="text-xs muted">· {o.score}/100</span></p>
+                    <p className="min-w-0 flex-1 truncate text-sm">{t(o.label)} <span className="text-xs muted">· {t("{n} points out of 100", { n: o.score })}</span></p>
                     <Button size="sm" loading={create.isPending && create.variables?.query === o.query} onClick={() => create.mutate({ source: "opportunity", product: t(o.label), query: o.query })}>{t("Begin")}</Button>
                   </div>
                 ))}
@@ -301,19 +226,18 @@ export default function Growth() {
               </div>
             ))}
           </Card>
-          <LearningsCard l={list.data?.learnings} />
         </div>
         <div className="xl:col-span-2">
-          {id ? <PlanView key={id} id={id} learnings={list.data?.learnings} /> : (
+          {id ? <PlanView key={id} id={id} /> : (
             <EmptyState icon={<Target className="h-6 w-6" />} title={t("Choose or start a plan")}
-              text={t("Each plan follows one product: why it is an opportunity, how to advertise it, the ads, the campaign and the results.")}
+              text={t("Each plan follows one product: why it is an opportunity, how to advertise it and the ads.")}
               action={<Button variant="secondary" icon={<Sparkles className="h-4 w-4" />} onClick={() => navigate("/intelligence?tab=opportunities")}>{t("See opportunities")}</Button>} />
           )}
           {list.error && <ErrorAlert error={list.error} />}
         </div>
       </div>
-      <Alert tone="info">{t("Market numbers come from Google Trends, business numbers from your own data, results from what you enter. AI only explains and suggests; it does not create numbers.")}</Alert>
-      <ConfirmDialog open={Boolean(remove)} title={t("Delete this plan?")} text={t("The plan is deleted; its ads and campaign stay.")} confirmLabel={t("Delete")} loading={delMut.isPending} onConfirm={() => remove && delMut.mutate(remove)} onClose={() => setRemove(null)} />
+      <Alert tone="info">{t("Market numbers come from Google Trends, business numbers from your own data. AI only explains and suggests; it does not create numbers.")}</Alert>
+      <ConfirmDialog open={Boolean(remove)} title={t("Delete this plan?")} text={t("The plan is deleted; its ads stay.")} confirmLabel={t("Delete")} loading={delMut.isPending} onConfirm={() => remove && delMut.mutate(remove)} onClose={() => setRemove(null)} />
     </div>
   );
 }

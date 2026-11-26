@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { all, get, run, transaction, type Statement } from "../../db/index.js";
+import { all, get, run } from "../../db/index.js";
 import { badRequest, notFound } from "../../lib/errors.js";
 import { inspectImage } from "../../lib/image.js";
 import { imageUpload } from "../../lib/upload.js";
@@ -9,7 +9,8 @@ import { param, parseBody } from "../../lib/validate.js";
 import { clearSessionCookie, currentUser, requireAuth } from "../../middleware/auth.js";
 import { logActivity } from "../../services/activity.js";
 import { usage } from "../../services/plans.js";
-import { deleteAllFilesOf, deleteUpload, getOwnedUpload, saveImage, sendUpload, type UploadRow } from "../../services/storage.js";
+import { deleteAccount } from "../../services/accounts.js";
+import { deleteUpload, getOwnedUpload, saveImage, sendUpload, type UploadRow } from "../../services/storage.js";
 import { changePasswordSchema } from "../auth/schemas.js";
 import { changePassword, verifyPassword } from "../auth/service.js";
 import { publicUser } from "./serialize.js";
@@ -199,21 +200,7 @@ userRouter.delete("/account", async (req, res) => {
   const { password } = parseBody(req, deleteAccountSchema);
   const row = await get<{ password_hash: string }>("SELECT password_hash FROM users WHERE id = ?", user.id);
   if (!row || !(await verifyPassword(password, row.password_hash))) throw badRequest("Your password is incorrect.");
-  await deleteAllFilesOf(user.id);
-  // Delete every owned record explicitly (children first). Do not rely on ON DELETE CASCADE:
-  // hosted libSQL connections may not have foreign-key enforcement switched on.
-  const u = user.id;
-  await transaction([
-    ["DELETE FROM initiative_assets WHERE user_id = ?", u],
-    ["DELETE FROM initiatives WHERE user_id = ?", u],
-    ["DELETE FROM campaign_stats WHERE user_id = ?", u],
-    ["DELETE FROM campaign_items WHERE user_id = ?", u],
-    ["DELETE FROM sales_points WHERE dataset_id IN (SELECT id FROM sales_datasets WHERE user_id = ?)", u],
-    ...["login_challenges", "sessions", "email_tokens", "competitors", "business_datasets", "business_reports", "advisor_messages", "campaigns", "competitor_ads", "ad_copies", "ai_requests", "brand_profiles", "notifications", "activity", "favorites", "projects", "market_analyses",
-      "price_searches", "forecasts", "sales_datasets", "assistant_messages", "generations", "uploads", "subscription_events",
-      "subscriptions", "user_settings"].map((t): Statement => [`DELETE FROM ${t} WHERE user_id = ?`, u]),
-    ["DELETE FROM users WHERE id = ?", u],
-  ]);
+  await deleteAccount(user.id);
   clearSessionCookie(res);
   res.json({ ok: true });
 });

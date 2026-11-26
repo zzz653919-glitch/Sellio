@@ -9,6 +9,7 @@ import { Alert, Badge, Button, Card, ConfirmDialog, EmptyState, Field, Input, Pa
 import { del, errorMessage, get, post, api } from "../lib/api";
 import { fmtAmount, fmtCompact, fmtDate, fmtDateTime, fmtMonth, fmtMonthName, fmtNumber, fmtPct } from "../lib/format";
 import { useI18n } from "../lib/i18n";
+import { useQty } from "../lib/qty";
 import { useMsg, type Msg } from "../lib/msg";
 import { buildRows, guessMapping, readFile, TEMPLATE_CSV, type Cell, type CleanRow, type Field as Col, type Mapping } from "../lib/sheet";
 
@@ -108,7 +109,7 @@ function Importer({ onDone }: { onDone: (id: string) => void }) {
       <div className="flex flex-wrap gap-2">
         <input ref={inputRef} type="file" accept=".csv,.xlsx" className="hidden" onChange={(e) => void pick(e.target.files?.[0])} />
         <Button icon={<UploadIcon className="h-4 w-4" />} loading={reading} onClick={() => inputRef.current?.click()}>{t("Choose file")}</Button>
-        <Button variant="ghost" icon={<Download className="h-4 w-4" />} onClick={() => download("pricepro-sales-template.csv", TEMPLATE_CSV)}>{t("Download a template")}</Button>
+        <Button variant="ghost" icon={<Download className="h-4 w-4" />} onClick={() => download("vendora-sales-template.csv", TEMPLATE_CSV)}>{t("Download a template")}</Button>
       </div>
       {readError && <Alert tone="error">{readError}</Alert>}
       {file && built && (
@@ -213,6 +214,7 @@ function ManualEntry({ onDone }: { onDone: (id: string) => void }) {
 // ------------------------------------------------------------------ overview
 function Overview({ id }: { id: string }) {
   const { t } = useI18n();
+  const qty = useQty();
   const msg = useMsg();
   const ch = useChartTheme();
   const navigate = useNavigate();
@@ -259,7 +261,7 @@ function Overview({ id }: { id: string }) {
         {a.forecast.status === "ok" ? (
           <p className="text-sm">
             {t("Forecast for the next 3 months")}: <b>{money(a.forecast.totalNext3)}</b> (<Pct v={a.forecast.changePct} /> {t("vs the last 3 months")}) ·{" "}
-            <span className="muted">{t("Back-test error {pct}%", { pct: fmtNumber(a.forecast.smapePct, 1) })} · {t(a.forecast.confidence === "high" ? "High confidence" : a.forecast.confidence === "medium" ? "Medium confidence" : "Low confidence")}</span>
+            <span className="muted">{t("Forecast accuracy")}: {Math.max(0, Math.min(100, Math.round(100 - a.forecast.smapePct)))}%</span>
           </p>
         ) : <p className="text-sm muted">{msg(a.forecast.reason)}</p>}
       </Card>
@@ -285,7 +287,7 @@ function Overview({ id }: { id: string }) {
                 {a.products.map((p) => (
                   <tr key={p.name} className="border-t border-slate-100 dark:border-slate-800">
                     <td className="py-2 font-medium">{p.name}</td><td>{money(p.revenue)}</td><td>{fmtNumber(p.sharePct, 1)}%</td>
-                    {a.hasUnits && <td>{p.units !== null ? fmtNumber(p.units) : "—"}</td>}
+                    {a.hasUnits && <td>{p.units !== null ? qty(p.units) : "—"}</td>}
                     {a.hasCost && <td>{p.grossMarginPct !== null ? `${fmtNumber(p.grossMarginPct, 1)}%` : "—"}</td>}
                     <td><Pct v={p.last3VsPrev3Pct} /></td>
                   </tr>

@@ -17,8 +17,8 @@ filesRouter.get("/:id", async (req, res) => {
   res.setHeader("Cache-Control", "private, max-age=3600");
   res.setHeader("X-Content-Type-Options", "nosniff");
   if (req.query.download === "1") {
-    const base = (row.original_name ?? `pricepro-${row.kind}`).replace(/\.[a-z0-9]+$/i, "").replace(/[^\w.-]+/g, "_").slice(0, 80);
-    res.attachment(`${base || "pricepro"}.${EXT[row.mime] ?? "bin"}`);
+    const base = (row.original_name ?? `vendora-${row.kind}`).replace(/\.[a-z0-9]+$/i, "").replace(/[^\w.-]+/g, "_").slice(0, 80);
+    res.attachment(`${base || "vendora"}.${EXT[row.mime] ?? "bin"}`);
   }
   await sendUpload(res, row);
 });

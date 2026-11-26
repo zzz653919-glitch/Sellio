@@ -5,6 +5,7 @@ import { notFound } from "../../lib/errors.js";
 import { nowIso } from "../../lib/util.js";
 import { param, parseQuery } from "../../lib/validate.js";
 import { currentUser, requireAuth } from "../../middleware/auth.js";
+import { deliverDueAnnouncements } from "../../services/announcements.js";
 
 export const notificationsRouter = Router();
 notificationsRouter.use(requireAuth);
@@ -20,6 +21,7 @@ const listSchema = z.object({
 notificationsRouter.get("/", async (req, res) => {
   const user = currentUser(req);
   const q = parseQuery(req, listSchema);
+  await deliverDueAnnouncements();
   const unreadOnly = q.filter === "unread" ? "AND read_at IS NULL" : "";
   const rows = await all<Row>(
     `SELECT * FROM notifications WHERE user_id = ? ${unreadOnly} ORDER BY created_at DESC LIMIT ? OFFSET ?`,

@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { get, run } from "../../db/index.js";
-import { unauthorized } from "../../lib/errors.js";
+import { forbidden, unauthorized } from "../../lib/errors.js";
+import { recordLoginAttempt } from "../../services/audit.js";
 import { parseBody } from "../../lib/validate.js";
 import { clearSessionCookie, createSession, currentUser, requireAuth, type AuthUser } from "../../middleware/auth.js";
 import { authLimiter } from "../../middleware/rateLimit.js";
@@ -21,18 +22,37 @@ authRouter.post("/signup", authLimiter, async (req, res) => {
 
 authRouter.post("/login", authLimiter, async (req, res) => {
   const { email, password } = parseBody(req, loginSchema);
-  const row = await get<{ id: string; email: string; password_hash: string }>("SELECT id, email, password_hash FROM users WHERE email = ?", email);
+  const row = await get<{ id: string; email: string; password_hash: string; status: string }>("SELECT id, email, password_hash, status FROM users WHERE email = ?", email);
   const ok = await auth.verifyPassword(password, row?.password_hash);
-  if (!row || !ok) throw unauthorized("Incorrect email or password.");
+  if (!row || !ok) {
+    await recordLoginAttempt(req, email, row?.id ?? null, false, row ? "wrong_password" : "unknown_email");
+    throw unauthorized("Incorrect email or password.");
+  }
+  if (row.status === "suspended") {
+    await recordLoginAttempt(req, email, row.id, false, "suspended");
+    throw forbidden("This account is suspended. Contact support if you think this is a mistake.", "ACCOUNT_SUSPENDED");
+  }
   res.json(await auth.startCodeChallenge(row.id, row.email, "login"));
 });
 
 authRouter.post("/verify-code", authLimiter, async (req, res) => {
   const { challenge, code } = parseBody(req, verifyCodeSchema);
-  const { userId, purpose } = await auth.verifyCode(challenge, code, req.user?.id);
+  let verified: Awaited<ReturnType<typeof auth.verifyCode>>;
+  try {
+    verified = await auth.verifyCode(challenge, code, req.user?.id);
+  } catch (err) {
+    await recordLoginAttempt(req, "(code)", null, false, "wrong_code");
+    throw err;
+  }
+  const { userId, purpose } = verified;
+  const status = (await get<{ status: string; email: string }>("SELECT status, email FROM users WHERE id = ?", userId));
+  if (status?.status === "suspended") throw forbidden("This account is suspended. Contact support if you think this is a mistake.", "ACCOUNT_SUSPENDED");
   if (purpose !== "verify") {
     await createSession(res, userId, req);
-    if (purpose === "login") await logActivity(userId, "login", "account", "Signed in");
+    if (purpose === "login") {
+      await logActivity(userId, "login", "account", "Signed in");
+      await recordLoginAttempt(req, status?.email ?? "", userId, true, null);
+    }
   }
   const user = (await get<AuthUser>(`SELECT ${USER_COLUMNS} FROM users WHERE id = ?`, userId))!;
   res.json({ user: publicUser(user) });
@@ -51,7 +71,7 @@ authRouter.post("/logout", async (req, res) => {
 
 authRouter.get("/me", (req, res) => {
   if (!req.user) throw unauthorized();
-  res.json({ user: publicUser(req.user) });
+  res.json({ user: { ...publicUser(req.user), adminRole: req.user.admin_role ?? null } });
 });
 
 /** For sessions created before codes were required: send a code to verify the email. */

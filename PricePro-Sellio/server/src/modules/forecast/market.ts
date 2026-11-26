@@ -48,6 +48,8 @@ export type AreaResult = {
   periodChangePct: number | null;
   trend: "growing" | "declining" | "stable" | null;
   confidence: "high" | "medium" | "low" | null;
+  /** Back-test accuracy of the chosen model: 100 − sMAPE, in percent (null without a model). */
+  accuracyPct?: number | null;
   peak: Point | null;
   /** Seasons, rise/fall timing and a 12-month outlook (null with less than two years of data). */
   seasonality?: SeasonalAnalysis | null;
@@ -128,6 +130,8 @@ export function computeHorizons(history: Point[], seasonality: SeasonalAnalysis 
 
 const avg = (a: number[]) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0);
 const r1 = (v: number) => Math.round(v * 10) / 10;
+/** Accuracy shown to users: how close the model came on held-back real data (100 − sMAPE, 0–100). */
+const accuracy = (smapePct: number | null | undefined) => (smapePct == null || !Number.isFinite(smapePct) ? null : Math.max(0, Math.min(100, Math.round(100 - smapePct))));
 
 function analyseArea(geo: string, history: Point[], horizonDays: number): AreaResult {
   const name = geo === WORLDWIDE ? "Worldwide" : (COUNTRY_NAME.get(geo) ?? geo);
@@ -167,6 +171,7 @@ function analyseArea(geo: string, history: Point[], horizonDays: number): AreaRe
       periodChangePct: seasonality.yoyPct,
       trend: changePct === null ? "stable" : changePct > threshold ? "growing" : changePct < -threshold ? "declining" : "stable",
       confidence: seasonality.model.confidence,
+      accuracyPct: accuracy(seasonality.model.smapePct),
       peak,
       seasonality,
       horizons,
@@ -188,6 +193,7 @@ function analyseArea(geo: string, history: Point[], horizonDays: number): AreaRe
     periodChangePct,
     trend: out.trend,
     confidence: out.model.confidence,
+    accuracyPct: accuracy(out.model.backtest.smapePct),
     peak,
     seasonality,
     horizons,

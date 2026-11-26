@@ -5,8 +5,9 @@ import { Bar, BarChart, CartesianGrid, Cell, Legend, Pie, PieChart, ResponsiveCo
 import { ErrorAlert, StatCard } from "../components/shared";
 import { Badge, Button, Card, Input, PageHeader, PageLoader, Select, Tabs } from "../components/ui";
 import { get } from "../lib/api";
-import { downloadCsv, fmtAxis, fmtDateTime, fmtNumber } from "../lib/format";
+import { downloadCsv, fmtAxis, fmtDateTime } from "../lib/format";
 import { useI18n } from "../lib/i18n";
+import { useQty } from "../lib/qty";
 import { useTheme } from "../lib/theme";
 import type { Activity } from "../lib/types";
 
@@ -24,6 +25,7 @@ const iso = (d: Date) => d.toISOString().slice(0, 10);
 
 export default function Analytics() {
   const { t, tr } = useI18n();
+  const qty = useQty();
   const { resolved } = useTheme();
   const [preset, setPreset] = useState<"7" | "30" | "90" | "custom">("30");
   const [custom, setCustom] = useState({ from: iso(new Date(Date.now() - 29 * 86_400_000)), to: iso(new Date()) });
@@ -48,8 +50,8 @@ export default function Analytics() {
 
   const exportReport = () => {
     if (!s) return;
-    downloadCsv(`pricepro-usage-${range.from}-to-${range.to}.csv`, [
-      ["PricePro usage report", `${range.from} to ${range.to}`],
+    downloadCsv(`vendora-usage-${range.from}-to-${range.to}.csv`, [
+      ["Vendora usage report", `${range.from} to ${range.to}`],
       [],
       ["metric", "value"],
       ...Object.entries(s.totals).map(([k, v]) => [k, v]),
@@ -64,7 +66,7 @@ export default function Analytics() {
 
   return (
     <div>
-      <PageHeader icon={<BarChart3 className="h-6 w-6" />} title={t("Analytics")} subtitle={t("Calculated from your actual activity on PricePro.")}
+      <PageHeader icon={<BarChart3 className="h-6 w-6" />} title={t("Analytics")} subtitle={t("Calculated from your actual activity on Vendora.")}
         actions={<Button variant="secondary" disabled={!s} onClick={exportReport} icon={<Download className="h-4 w-4" />}>{t("Usage report (CSV)")}</Button>} />
 
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -84,10 +86,10 @@ export default function Analytics() {
       {!s ? <PageLoader /> : (
         <div className="space-y-6">
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-            <StatCard icon={<ImageIcon className="h-4 w-4" />} label={t("Ads generated")} value={fmtNumber(s.totals.adsGenerated)} hint={s.totals.adsFailed ? t("{n} failed", { n: s.totals.adsFailed }) : undefined} tone="violet" />
-            <StatCard icon={<LineChart className="h-4 w-4" />} label={t("Products analyzed")} value={fmtNumber(s.totals.productsAnalyzed)} hint={t("{n} forecasts completed", { n: s.totals.forecastsCompleted })} tone="cyan" />
-            <StatCard icon={<FolderKanban className="h-4 w-4" />} label={t("Projects saved")} value={fmtNumber(s.totals.projectsSaved)} />
-            <StatCard icon={<Heart className="h-4 w-4" />} label={t("Favorites added")} value={fmtNumber(s.totals.favoritesAdded)} tone="amber" />
+            <StatCard icon={<ImageIcon className="h-4 w-4" />} label={t("Ads generated")} value={qty(s.totals.adsGenerated)} hint={s.totals.adsFailed ? t("{n} failed", { n: s.totals.adsFailed }) : undefined} tone="violet" />
+            <StatCard icon={<LineChart className="h-4 w-4" />} label={t("Products analyzed")} value={qty(s.totals.productsAnalyzed)} hint={t("{n} forecasts completed", { n: s.totals.forecastsCompleted })} tone="cyan" />
+            <StatCard icon={<FolderKanban className="h-4 w-4" />} label={t("Projects saved")} value={qty(s.totals.projectsSaved)} />
+            <StatCard icon={<Heart className="h-4 w-4" />} label={t("Favorites added")} value={qty(s.totals.favoritesAdded)} tone="amber" />
           </div>
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">

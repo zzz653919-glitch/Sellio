@@ -2,9 +2,14 @@ import { get, run } from "../db/index.js";
 import { tooMany } from "../lib/errors.js";
 import { newId, nowIso, startOfMonthIso } from "../lib/util.js";
 
-export type Plan = "free" | "pro";
-export type Metric = "generations" | "forecasts" | "ai";
+import { settings, type Metric } from "./settings.js";
 
+export type Plan = "free" | "pro";
+export type { Metric };
+
+export type PlanInfo = { name: string; priceMonthlyUsd: number; limits: Record<Metric, number>; benefits: string[]; enabled: boolean };
+
+/** Built-in plans; the admin panel can override names, prices shown, limits, benefits and availability. */
 export const PLANS: Record<Plan, { name: string; priceMonthlyUsd: number; limits: Record<Metric, number>; benefits: string[] }> = {
   free: {
     name: "Free",
@@ -29,6 +34,18 @@ export const PLANS: Record<Plan, { name: string; priceMonthlyUsd: number; limits
   },
 };
 
+export function getPlans(): Record<Plan, PlanInfo> {
+  const o = settings().plans;
+  const merge = (p: Plan): PlanInfo => ({
+    name: o[p]?.name || PLANS[p].name,
+    priceMonthlyUsd: o[p]?.priceMonthlyUsd ?? PLANS[p].priceMonthlyUsd,
+    limits: { ...PLANS[p].limits, ...(o[p]?.limits ?? {}) },
+    benefits: o[p]?.benefits?.length ? o[p]!.benefits! : PLANS[p].benefits,
+    enabled: p === "free" ? true : o[p]?.enabled ?? true,
+  });
+  return { free: merge("free"), pro: merge("pro") };
+}
+
 const COUNTERS: Record<Metric, string> = {
   // Template banners are made in the browser and are not counted; only AI image generations are.
   generations: "SELECT COUNT(*) AS n FROM generations WHERE user_id = ? AND created_at >= ? AND status != 'failed' AND provider != 'vendora-templates'",
@@ -46,7 +63,7 @@ export async function usage(userId: string) {
   const result = {} as Record<Metric, { used: number; limit: number }>;
   for (const metric of Object.keys(COUNTERS) as Metric[]) {
     const used = (await get<{ n: number }>(COUNTERS[metric], userId, since))?.n ?? 0;
-    result[metric] = { used, limit: PLANS[plan].limits[metric] };
+    result[metric] = { used, limit: getPlans()[plan].limits[metric] };
   }
   return { plan, periodStart: since, metrics: result };
 }
@@ -55,10 +72,11 @@ export async function assertWithinLimit(userId: string, metric: Metric) {
   const since = startOfMonthIso();
   const plan = await userPlan(userId);
   const used = (await get<{ n: number }>(COUNTERS[metric], userId, since))?.n ?? 0;
-  const limit = PLANS[plan].limits[metric];
+  const plans = getPlans();
+  const limit = plans[plan].limits[metric];
   if (used >= limit) {
     throw tooMany(
-      `You have reached your ${PLANS[plan].name} plan limit for this month (${used}/${limit}).` +
+      `You have reached your ${plans[plan].name} plan limit for this month (${used}/${limit}).` +
         (plan === "free" ? " Upgrade to Pro for higher limits." : ""),
       { metric, used, limit, plan },
     );

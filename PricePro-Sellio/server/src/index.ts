@@ -8,7 +8,7 @@ await recoverInterruptedGenerations();
 
 const app = createApp();
 app.listen(config.PORT, () => {
-  console.log(`PricePro API listening on http://localhost:${config.PORT}`);
+  console.log(`Vendora API listening on http://localhost:${config.PORT}`);
   const missing = Object.entries(features)
     .filter(([, on]) => !on)
     .map(([name]) => name);

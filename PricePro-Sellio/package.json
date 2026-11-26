@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "PricePro — AI product intelligence platform (AI Product Studio, Demand Forecast, Smart Price Finder)",
+  "description": "Vendora — AI market intelligence and advertising platform",
   "workspaces": [
     "server",
     "web"

@@ -15,7 +15,12 @@ export type AuthUser = {
   email_verified_at: string | null;
   plan: "free" | "pro";
   created_at: string;
+  /** Admin panel role (null for normal users). Super Admins listed in SUPER_ADMIN_EMAILS always get it. */
+  admin_role?: AdminRole | null;
+  admin_totp?: boolean;
+  admin_mfa_at?: string | null;
 };
+export type AdminRole = "super_admin" | "admin" | "moderator";
 
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
@@ -55,15 +60,19 @@ export async function loadSession(req: Request, _res: Response, next: NextFuncti
   const token = req.cookies?.[SESSION_COOKIE];
   if (typeof token === "string" && token.length >= 20 && token.length <= 100) {
     const id = sha256(token);
-    const row = await get<AuthUser & { session_id: string; expires_at: string; last_seen_at: string }>(
-      `SELECT u.id, u.email, u.first_name, u.last_name, u.avatar_key, u.email_verified_at, u.plan, u.created_at,
-              s.id AS session_id, s.expires_at, s.last_seen_at
-         FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.id = ?`,
+    const row = await get<Omit<AuthUser, "admin_totp"> & { session_id: string; expires_at: string; last_seen_at: string; status: string; totp_enabled_at: string | null }>(
+      `SELECT u.id, u.email, u.first_name, u.last_name, u.avatar_key, u.email_verified_at, u.plan, u.created_at, u.status,
+              s.id AS session_id, s.expires_at, s.last_seen_at, s.admin_mfa_at, a.role AS admin_role, a.totp_enabled_at
+         FROM sessions s JOIN users u ON u.id = s.user_id LEFT JOIN admin_roles a ON a.user_id = u.id WHERE s.id = ?`,
       id,
     );
-    if (row && row.expires_at > nowIso()) {
-      const { session_id, expires_at: _e, last_seen_at, ...user } = row;
-      req.user = user;
+    if (row && row.status === "suspended") {
+      // A suspended account is signed out everywhere.
+      await run("DELETE FROM sessions WHERE user_id = ?", row.id);
+    } else if (row && row.expires_at > nowIso()) {
+      const { session_id, expires_at: _e, last_seen_at, status: _s, totp_enabled_at, ...user } = row;
+      const superAdmin = config.SUPER_ADMIN_EMAILS.includes(user.email.toLowerCase());
+      req.user = { ...user, admin_role: superAdmin ? "super_admin" : (user.admin_role ?? null), admin_totp: Boolean(totp_enabled_at) };
       req.sessionId = session_id;
       // Touch at most once per minute.
       if (Date.now() - Date.parse(last_seen_at) > 60_000) {

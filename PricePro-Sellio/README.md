@@ -1,4 +1,4 @@
-# PricePro
+# Vendora
 
 AI-powered product intelligence platform with two core services:
 
@@ -60,7 +60,7 @@ Without SMTP in development, emails are printed to the server log and the sign-i
 
 1. Turn on 2-Step Verification for the Google account.
 2. Create an App password: Google Account → Security → App passwords.
-3. In `.env`: `SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=465`, `SMTP_SECURE=true`, `SMTP_USER=your@gmail.com`, `SMTP_PASS=<app password>`, `EMAIL_FROM="PricePro <your@gmail.com>"`.
+3. In `.env`: `SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=465`, `SMTP_SECURE=true`, `SMTP_USER=your@gmail.com`, `SMTP_PASS=<app password>`, `EMAIL_FROM="Vendora <your@gmail.com>"`.
 
 ## Tests
 
@@ -114,5 +114,14 @@ function instance.
 | --- | --- | --- |
 | Email | `SMTP_*` | dev: code shown on screen and in the log; prod: sign-up/sign-in refused |
 | AI images | `OPENAI_API_KEY`, `IMAGE_MODEL` | Studio shows "not connected"; generation refused |
-| Demand forecast | `SERPAPI_API_KEY` (Google Trends engine) | Page shows "not connected"; nothing is estimated |
+| Demand forecast, Market Radar, opportunities, regions, seasons | `SERPAPI_API_KEY` (Google Trends engine) | Pages show "not connected"; nothing is estimated |
+| Economic statistics (Uzbekistan, country comparison) | none — World Bank Open Data is free (`WORLD_BANK_ENABLED=false` turns it off) | — |
+| Import / export by product group | `COMTRADE_API_KEY` (free key, comtradedeveloper.un.org) | Card shows "not connected" |
+| AI Business Advisor, AI report summaries | `GEMINI_API_KEY` (free tier, aistudio.google.com) or `OPENAI_API_KEY`; `LLM_PROVIDER` picks one if both are set | Advisor shows "not connected"; reports are still made without the AI summary |
+| My Business (sales data analysis, forecast, reports) | none | — |
+| Ad Studio templates, banner maker, Creative Score (measured), promo videos, brand kit, campaign planner and results | none (runs in the browser / own database) | — |
+| AI ad copy, AI creative review, competitor ad analysis, AI campaign plans | `GEMINI_API_KEY` or `OPENAI_API_KEY` (same as the advisor) | Buttons show "not connected"; manual work still possible |
+| Growth Hub (opportunity → AI explanation → direction → ads → campaign → results → learnings) | the same keys as above; learnings need none | Each step says what is missing |
+| Daily refresh of shared market data (Vercel Cron, `vercel.json`) | `CRON_SECRET` (any long random text) | Data is refreshed on the first visit instead |
+| AI video scenes and voice-over | not integrated (needs a video service) | Promo videos are made in the browser from the user's photos |
 | Payments | `STRIPE_*` | Upgrades disabled |

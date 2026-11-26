@@ -8,6 +8,7 @@ import { get, post } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { fmtDate, fmtDateTime, fmtMoney } from "../lib/format";
 import { useI18n } from "../lib/i18n";
+import { useQty } from "../lib/qty";
 import type { Usage } from "../lib/types";
 
 type PlanInfo = { name: string; priceMonthlyUsd: number; limits: Record<string, number>; benefits: string[] };
@@ -28,6 +29,7 @@ const EVENT_LABEL: Record<string, string> = {
 
 export default function Subscription() {
   const { t } = useI18n();
+  const qty = useQty();
   const { refresh } = useAuth();
   const [params] = useSearchParams();
   const checkoutState = params.get("checkout");
@@ -66,13 +68,12 @@ export default function Subscription() {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <Card className="p-6">
-          <p className="text-sm muted">{t("Current plan")}</p>
-          <p className="mt-1 flex items-center gap-2 text-3xl font-extrabold">{isPro && <Crown className="h-7 w-7 text-amber-500" />}{d.plans[d.plan].name}</p>
-          {d.subscription && <p className="mt-1 text-sm muted">{t("Status")}: {t(d.subscription.status)}{d.subscription.currentPeriodEnd && ` · ${d.subscription.cancelAtPeriodEnd ? t("ends") : t("renews")} ${fmtDate(d.subscription.currentPeriodEnd)}`}</p>}
+          <h3 className="flex items-center gap-2 text-lg font-bold">{isPro && <Crown className="h-5 w-5 text-amber-500" />}{t("Usage this month")}</h3>
+          {d.subscription?.currentPeriodEnd && <p className="mt-1 text-sm muted">{d.subscription.cancelAtPeriodEnd ? t("ends") : t("renews")} {fmtDate(d.subscription.currentPeriodEnd)}</p>}
           <div className="mt-6 space-y-4">
             {([["generations", "Ad generations"], ["forecasts", "Forecasts"], ["ai", "AI text requests"]] as const).map(([k, label]) => (
               <div key={k}>
-                <div className="mb-1 flex justify-between text-sm"><span>{t(label)}</span><span className="muted">{d.usage.metrics[k].used} / {d.usage.metrics[k].limit}</span></div>
+                <div className="mb-1 flex justify-between text-sm"><span>{t(label)}</span><span className="muted">{d.usage.metrics[k].used} / {qty(d.usage.metrics[k].limit)}</span></div>
                 <Progress value={d.usage.metrics[k].used} max={d.usage.metrics[k].limit} />
               </div>
             ))}

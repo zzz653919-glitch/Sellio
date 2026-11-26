@@ -1,6 +1,7 @@
 import { get, run } from "../db/index.js";
 import { newId, nowIso } from "../lib/util.js";
 import { sendEmail } from "./email.js";
+import { settings } from "./settings.js";
 
 export type NotificationType = "generation" | "forecast" | "account";
 
@@ -31,10 +32,10 @@ export async function notify(
       newId(), userId, type, title.slice(0, 200), body.slice(0, 1000), link ?? null, nowIso(),
     );
   }
-  if (type === "account" && (!prefs || (prefs.notify_email === 1 && prefs.notify_account === 1))) {
+  if (type === "account" && settings().accountEmails && (!prefs || (prefs.notify_email === 1 && prefs.notify_account === 1))) {
     const user = await get<{ email: string }>("SELECT email FROM users WHERE id = ?", userId);
     if (user) {
-      void sendEmail({ to: user.email, subject: `PricePro: ${title}`, text: body }).catch((err) =>
+      void sendEmail({ to: user.email, subject: `Vendora: ${title}`, text: body }).catch((err) =>
         console.error("[notify] email failed", err),
       );
     }

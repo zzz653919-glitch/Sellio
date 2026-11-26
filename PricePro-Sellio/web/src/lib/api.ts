@@ -30,6 +30,7 @@ export async function api<T>(path: string, opts: Options = {}): Promise<T> {
   const data = isJson ? await res.json().catch(() => null) : null;
   if (!res.ok) {
     const e = (data as { error?: { code?: string; message?: string; details?: unknown } } | null)?.error;
+    if (e?.code === "MAINTENANCE" && typeof window !== "undefined") window.dispatchEvent(new Event("vendora:maintenance"));
     throw new ApiError(res.status, e?.code ?? "HTTP_ERROR", e?.message ?? `Request failed (${res.status})`, e?.details);
   }
   return data as T;

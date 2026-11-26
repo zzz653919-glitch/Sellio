@@ -9,8 +9,9 @@ import { Link } from "react-router-dom";
 import { StatCard } from "../components/shared";
 import { Badge, Button, Card, EmptyState, PageLoader, Progress, cx } from "../components/ui";
 import { get } from "../lib/api";
-import { fmtNumber, fmtPct, fmtToday, timeAgo } from "../lib/format";
+import { fmtPct, fmtToday, timeAgo } from "../lib/format";
 import { useI18n } from "../lib/i18n";
+import { useQty } from "../lib/qty";
 import { useMsg, type Msg } from "../lib/msg";
 import type { Activity, Generation, Usage, User } from "../lib/types";
 
@@ -44,7 +45,7 @@ function ServicePanel({ icon, title, gradient, action, to, children }: { icon: R
 }
 
 type GrowthPlan = { id: string; product: string; nextStep: string | null; done: number; total: number };
-const NEXT_LABEL: Record<string, string> = { explain: "AI explanation", direction: "Marketing direction", assets: "Ads", campaign: "Campaign", results: "Results" };
+const NEXT_LABEL: Record<string, string> = { explain: "AI explanation", direction: "Marketing direction", assets: "Ads" };
 
 /** The connected workflow on the dashboard: open plans and their next step. */
 function GrowthCard() {
@@ -59,7 +60,7 @@ function GrowthCard() {
         <Link to="/growth" className="text-sm font-medium text-brand-600 hover:underline dark:text-brand-400">{t("Open →")}</Link>
       </div>
       {plans.length === 0 ? (
-        <p className="text-sm muted">{t("Pick a growing product, let the AI explain it, make ads, run a campaign and enter the results — step by step.")} <Link to="/intelligence?tab=opportunities" className="font-medium text-brand-600 hover:underline dark:text-brand-400">{t("See opportunities")}</Link></p>
+        <p className="text-sm muted">{t("Pick a growing product, let the AI explain it and make ads — step by step.")} <Link to="/intelligence?tab=opportunities" className="font-medium text-brand-600 hover:underline dark:text-brand-400">{t("See opportunities")}</Link></p>
       ) : plans.map((p) => (
         <Link key={p.id} to={`/growth?id=${p.id}`} className="flex items-center gap-3 rounded-xl border border-slate-100 p-3 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/50">
           <div className="min-w-0 flex-1">
@@ -76,6 +77,7 @@ function GrowthCard() {
 
 export default function Dashboard() {
   const { t, tr } = useI18n();
+  const qty = useQty();
   const q = useQuery({ queryKey: ["dashboard"], queryFn: () => get<DashboardData>("/dashboard") });
   if (q.isLoading || !q.data) return <PageLoader />;
   const d = q.data;
@@ -100,9 +102,9 @@ export default function Dashboard() {
       </motion.div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <StatCard icon={<FolderKanban className="h-4 w-4" />} label={t("Total projects")} value={fmtNumber(d.stats.totalProjects)} />
-        <StatCard icon={<ImageIcon className="h-4 w-4" />} label={t("Ads created")} value={fmtNumber(d.stats.adsCreated)} tone="violet" />
-        <StatCard icon={<BarChart3 className="h-4 w-4" />} label={t("Products analyzed")} value={fmtNumber(d.stats.productsAnalyzed)} hint={t("{n} forecasts completed", { n: d.stats.forecastsCompleted })} tone="cyan" />
+        <StatCard icon={<FolderKanban className="h-4 w-4" />} label={t("Total projects")} value={qty(d.stats.totalProjects)} />
+        <StatCard icon={<ImageIcon className="h-4 w-4" />} label={t("Ads created")} value={qty(d.stats.adsCreated)} tone="violet" />
+        <StatCard icon={<BarChart3 className="h-4 w-4" />} label={t("Products analyzed")} value={qty(d.stats.productsAnalyzed)} hint={t("{n} forecasts completed", { n: d.stats.forecastsCompleted })} tone="cyan" />
       </div>
 
       <GrowthCard />

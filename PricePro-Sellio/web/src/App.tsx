@@ -1,6 +1,7 @@
 import { lazy, Suspense, type ReactNode } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { AppLayout } from "./components/Layout";
+import { MaintenanceGate } from "./components/Maintenance";
 import { PageLoader } from "./components/ui";
 import { useAuth } from "./lib/auth";
 import { ForgotPasswordPage, LoginPage, ResetPasswordPage, SignupPage } from "./pages/Auth";
@@ -13,7 +14,6 @@ const Intelligence = lazy(() => import("./pages/Intelligence"));
 const Business = lazy(() => import("./pages/Business"));
 const Advisor = lazy(() => import("./pages/Advisor"));
 const AdStudio = lazy(() => import("./pages/AdStudio"));
-const Campaigns = lazy(() => import("./pages/Campaigns"));
 const Growth = lazy(() => import("./pages/Growth"));
 const Projects = lazy(() => import("./pages/Projects"));
 const Analytics = lazy(() => import("./pages/Analytics"));
@@ -22,6 +22,8 @@ const Notifications = lazy(() => import("./pages/Notifications"));
 const Settings = lazy(() => import("./pages/Settings"));
 const Profile = lazy(() => import("./pages/Profile"));
 const Subscription = lazy(() => import("./pages/Subscription"));
+const Support = lazy(() => import("./pages/Support"));
+const AdminApp = lazy(() => import("./admin/AdminApp"));
 
 function Protected({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
@@ -46,7 +48,8 @@ export function App() {
         <Route path="/signup" element={<GuestOnly><SignupPage /></GuestOnly>} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
-        <Route element={<Protected><AppLayout /></Protected>}>
+        <Route path="/admin/*" element={<Protected><AdminApp /></Protected>} />
+        <Route element={<Protected><MaintenanceGate><AppLayout /></MaintenanceGate></Protected>}>
           <Route index element={<Dashboard />} />
           <Route path="growth" element={<Growth />} />
           <Route path="studio" element={<Studio />} />
@@ -55,7 +58,6 @@ export function App() {
           <Route path="business" element={<Business />} />
           <Route path="advisor" element={<Advisor />} />
           <Route path="ads" element={<AdStudio />} />
-          <Route path="campaigns" element={<Campaigns />} />
           <Route path="projects" element={<Projects />} />
           <Route path="analytics" element={<Analytics />} />
           <Route path="favorites" element={<Favorites />} />
@@ -63,6 +65,7 @@ export function App() {
           <Route path="settings" element={<Settings />} />
           <Route path="profile" element={<Profile />} />
           <Route path="subscription" element={<Subscription />} />
+          <Route path="support" element={<Support />} />
           <Route path="*" element={<NotFoundPage />} />
         </Route>
       </Routes>

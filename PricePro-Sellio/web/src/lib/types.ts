@@ -7,6 +7,7 @@ export type User = {
   emailVerified: boolean;
   plan: "free" | "pro";
   createdAt: string;
+  adminRole?: "super_admin" | "admin" | "moderator" | null;
 };
 
 export type Metric = "generations" | "forecasts" | "ai";

@@ -6,7 +6,7 @@ import { newId, nowIso } from "../../lib/util.js";
 import { currentUser, requireAuth } from "../../middleware/auth.js";
 import { logActivity } from "../../services/activity.js";
 import { notify } from "../../services/notifications.js";
-import { PLANS, usage } from "../../services/plans.js";
+import { getPlans, usage } from "../../services/plans.js";
 import { stripeRequest, verifyStripeSignature } from "./stripe.js";
 
 export const subscriptionRouter = Router();
@@ -29,7 +29,7 @@ subscriptionRouter.get("/", async (req, res) => {
     subscription: sub
       ? { plan: sub.plan, status: sub.status, provider: sub.provider, currentPeriodEnd: sub.current_period_end, cancelAtPeriodEnd: sub.cancel_at_period_end === 1, manageable: Boolean(sub.provider_customer_id) }
       : null,
-    plans: PLANS,
+    plans: getPlans(),
     usage: await usage(user.id),
     history: history.map((h) => ({ id: h.id, type: h.type, plan: h.plan, amountCents: h.amount_cents, currency: h.currency, createdAt: h.created_at })),
     paymentsConfigured: features.payments,
@@ -39,6 +39,7 @@ subscriptionRouter.get("/", async (req, res) => {
 subscriptionRouter.post("/checkout", async (req, res) => {
   const user = currentUser(req);
   if (user.plan === "pro") throw badRequest("You are already on the Pro plan.");
+  if (!getPlans().pro.enabled) throw badRequest("The Pro plan is not available for purchase right now.");
   if (!features.payments) {
     await stripeRequest("/checkout/sessions", {}); // throws SERVICE_NOT_CONFIGURED
   }
@@ -96,8 +97,8 @@ async function setPlan(userId: string, plan: "free" | "pro", fields: Partial<Sub
       newId(), userId, event.type, plan, event.amount ?? null, event.currency ?? null, event.ref ?? null, now,],
   ]);
   if (previous !== plan) {
-    await logActivity(userId, "plan_changed", "account", `Plan changed to ${PLANS[plan].name}`);
-    await notify(userId, "account", `You are now on the ${PLANS[plan].name} plan`,
+    await logActivity(userId, "plan_changed", "account", `Plan changed to ${getPlans()[plan].name}`);
+    await notify(userId, "account", `You are now on the ${getPlans()[plan].name} plan`,
       plan === "pro" ? "Your payment was confirmed. Pro limits are active." : "Your Pro subscription has ended. You are on the Free plan.");
   }
 }
@@ -153,6 +154,24 @@ export async function handleStripeEvent(event: StripeEvent) {
       await run(
         "INSERT INTO subscription_events (id,user_id,type,plan,amount_cents,currency,provider_ref,created_at) VALUES (?,?,?,?,?,?,?,?)",
         newId(), byCustomer.user_id, "payment", "pro", (obj.amount_paid as number) ?? null, (obj.currency as string) ?? null, String(obj.id), nowIso(),
+      );
+      return;
+    }
+    case "invoice.payment_failed": {
+      const byCustomer = await get<{ user_id: string }>("SELECT user_id FROM subscriptions WHERE provider_customer_id = ?", String(obj.customer ?? ""));
+      if (!byCustomer) return;
+      await run(
+        "INSERT INTO subscription_events (id,user_id,type,plan,amount_cents,currency,provider_ref,created_at) VALUES (?,?,?,?,?,?,?,?)",
+        newId(), byCustomer.user_id, "payment_failed", "pro", (obj.amount_due as number) ?? null, (obj.currency as string) ?? null, String(obj.id), nowIso(),
+      );
+      return;
+    }
+    case "charge.refunded": {
+      const byCustomer = await get<{ user_id: string }>("SELECT user_id FROM subscriptions WHERE provider_customer_id = ?", String(obj.customer ?? ""));
+      if (!byCustomer) return;
+      await run(
+        "INSERT INTO subscription_events (id,user_id,type,plan,amount_cents,currency,provider_ref,created_at) VALUES (?,?,?,?,?,?,?,?)",
+        newId(), byCustomer.user_id, "refund", "pro", (obj.amount_refunded as number) ?? null, (obj.currency as string) ?? null, String(obj.id), nowIso(),
       );
       return;
     }

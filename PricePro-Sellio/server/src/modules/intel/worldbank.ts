@@ -5,6 +5,7 @@
  */
 import { config, features } from "../../config.js";
 import { notConfigured, upstreamError } from "../../lib/errors.js";
+import { recordApiCall } from "../../services/apiLog.js";
 import { cached, DAY_MS } from "./cache.js";
 
 export const INDICATORS = {
@@ -74,14 +75,17 @@ function toSeries(key: IndicatorKey, points: YearValue[]): IndicatorSeries {
 async function fetchIndicator(key: IndicatorKey, countries: string[]) {
   const to = new Date().getUTCFullYear();
   const url = `${config.WORLD_BANK_API_BASE}/country/${countries.join(";")}/indicator/${INDICATORS[key].id}?format=json&per_page=1000&date=${to - 15}:${to}`;
+  const started = Date.now();
   let res: Response;
   try {
     res = await (fetchOverride ?? fetch)(url, { signal: AbortSignal.timeout(20_000) });
   } catch {
+    await recordApiCall({ provider: "world_bank", operation: key, ok: false, ms: Date.now() - started, error: "unreachable" });
     throw upstreamError("worldBank", "World Bank Open Data could not be reached.");
   }
   const body = await res.json().catch(() => null);
   const parsed = parseWorldBank(body);
+  await recordApiCall({ provider: "world_bank", operation: key, ok: res.ok && !parsed.error, status: res.status, ms: Date.now() - started, error: parsed.error ?? (res.ok ? null : `HTTP ${res.status}`) });
   if (!res.ok || parsed.error) throw upstreamError("worldBank", `World Bank Open Data: ${parsed.error ?? `HTTP ${res.status}`}`);
   return parsed.rows;
 }

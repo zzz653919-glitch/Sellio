@@ -2,7 +2,8 @@ import bcrypt from "bcryptjs";
 import crypto from "node:crypto";
 import { config, features, isProd, isTest } from "../../config.js";
 import { get, run, transaction } from "../../db/index.js";
-import { badRequest, conflict, notConfigured, tooMany, unauthorized } from "../../lib/errors.js";
+import { badRequest, conflict, notConfigured, tooMany, unauthorized, forbidden } from "../../lib/errors.js";
+import { settings } from "../../services/settings.js";
 import { newId, nowIso, randomToken, sha256 } from "../../lib/util.js";
 import { logActivity } from "../../services/activity.js";
 import { sendEmail } from "../../services/email.js";
@@ -73,9 +74,9 @@ async function emailCode(email: string, code: string, purpose: CodePurpose) {
   const action = purpose === "signup" ? "finish creating your account" : purpose === "verify" ? "verify your email address" : "sign in";
   await sendEmail({
     to: email,
-    subject: `${code} is your PricePro code`,
+    subject: `${code} is your Vendora code`,
     text:
-      `Your PricePro code: ${code}\n\nEnter it to ${action}. The code is valid for ${CODE_TTL_MIN} minutes.\n\n` +
+      `Your Vendora code: ${code}\n\nEnter it to ${action}. The code is valid for ${CODE_TTL_MIN} minutes.\n\n` +
       `If you did not try to ${action}, ignore this email and consider changing your password.`,
   });
 }
@@ -151,12 +152,13 @@ export async function verifyCode(token: string, code: string, sessionUserId?: st
   if (user && !user.email_verified_at) {
     await run("UPDATE users SET email_verified_at = ?, updated_at = ? WHERE id = ?", now, now, row.user_id);
     await logActivity(row.user_id, "email_verified", "account", "Email address verified");
-    await notify(row.user_id, "account", "Email verified", "Your email address has been verified. All PricePro services are now available.");
+    await notify(row.user_id, "account", "Email verified", "Your email address has been verified. All Vendora services are now available.");
   }
   return { userId: row.user_id, purpose: row.purpose };
 }
 
 export async function signup(input: { email: string; password: string; firstName: string; lastName: string; language?: "en" | "uz" | "ru" }) {
+  if (!settings().registrationOpen) throw forbidden("New registrations are closed right now.", "REGISTRATION_CLOSED");
   assertEmailDelivery();
   const existing = await get("SELECT id FROM users WHERE email = ?", input.email);
   if (existing) throw conflict("An account with this email already exists.");
@@ -183,8 +185,8 @@ export async function requestPasswordReset(email: string) {
   const url = `${config.APP_URL}/reset-password?token=${token}`;
   await sendEmail({
     to: user.email,
-    subject: "Reset your PricePro password",
-    text: `A password reset was requested for your PricePro account.\n\nOpen this link within 1 hour to choose a new password:\n${url}\n\nIf you did not request this, you can ignore this email.`,
+    subject: "Reset your Vendora password",
+    text: `A password reset was requested for your Vendora account.\n\nOpen this link within 1 hour to choose a new password:\n${url}\n\nIf you did not request this, you can ignore this email.`,
   });
   return { devResetUrl: devValue(url) };
 }
@@ -200,7 +202,7 @@ export async function resetPassword(token: string, password: string) {
     ["DELETE FROM sessions WHERE user_id = ?", userId],
   ]);
   await logActivity(userId, "password_changed", "account", "Password reset via email");
-  await notify(userId, "account", "Password changed", "Your PricePro password was reset. All other sessions were signed out.");
+  await notify(userId, "account", "Password changed", "Your Vendora password was reset. All other sessions were signed out.");
   return userId;
 }
 
@@ -214,5 +216,5 @@ export async function changePassword(userId: string, currentPassword: string, ne
   await run("UPDATE users SET password_hash = ?, password_changed_at = ?, updated_at = ? WHERE id = ?", hash, now, now, userId);
   await run("DELETE FROM sessions WHERE user_id = ? AND id != ?", userId, keepSessionId ?? "");
   await logActivity(userId, "password_changed", "account", "Password changed");
-  await notify(userId, "account", "Password changed", "Your PricePro password was changed. Other sessions were signed out.");
+  await notify(userId, "account", "Password changed", "Your Vendora password was changed. Other sessions were signed out.");
 }
