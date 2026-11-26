@@ -1,3 +1,4 @@
+import { savedRefs, type SavedRefs } from "../../services/savedRefs.js";
 import { waitUntil } from "@vercel/functions";
 import { all, get, run } from "../../db/index.js";
 import { badRequest, notFound } from "../../lib/errors.js";
@@ -32,16 +33,16 @@ type GenerationRow = {
   error: string | null; retry_of: string | null; created_at: string; updated_at: string; completed_at: string | null;
 };
 
-export async function serializeGeneration(g: GenerationRow, userId: string) {
-  const project = await get<{ id: string }>("SELECT id FROM projects WHERE user_id = ? AND type = 'advertisement' AND ref_id = ?", userId, g.id);
-  const favorite = await get<{ id: string }>("SELECT id FROM favorites WHERE user_id = ? AND item_type = 'advertisement' AND ref_id = ?", userId, g.id);
+export async function serializeGeneration(g: GenerationRow, userId: string, refs?: SavedRefs) {
+  const project = refs ? (refs.project.has(g.id) ? { id: refs.project.get(g.id)! } : undefined) : await get<{ id: string }>("SELECT id FROM projects WHERE user_id = ? AND type = 'advertisement' AND ref_id = ?", userId, g.id);
+  const favorite = refs ? (refs.favorite.has(g.id) ? { id: refs.favorite.get(g.id)! } : undefined) : await get<{ id: string }>("SELECT id FROM favorites WHERE user_id = ? AND item_type = 'advertisement' AND ref_id = ?", userId, g.id);
   return {
     id: g.id,
     status: g.status,
     productName: g.product_name,
     category: g.category,
     style: g.style,
-    styleLabel: STYLES[g.style as StyleKey]?.label ?? g.style,
+    styleLabel: g.provider === "vendora-templates" ? "Banner template" : (STYLES[g.style as StyleKey]?.label ?? g.style),
     background: g.background,
     settings: safeJson(g.settings_json, {}),
     provider: g.provider,
@@ -186,6 +187,7 @@ export async function retryGeneration(userId: string, id: string) {
   const g = await get<GenerationRow>("SELECT * FROM generations WHERE id = ? AND user_id = ?", id, userId);
   if (!g) throw notFound("Generation not found");
   if (g.status === "queued" || g.status === "processing") throw badRequest("This generation is still in progress.");
+  if (g.provider === "vendora-templates") throw badRequest("Template banners are edited in Ad Studio; they cannot be regenerated with AI.");
   return createGeneration(
     userId,
     {
@@ -206,7 +208,8 @@ export async function listGenerations(userId: string, limit = 50, offset = 0) {
     userId, limit, offset,
   );
   const total = (await get<{ n: number }>("SELECT COUNT(*) AS n FROM generations WHERE user_id = ?", userId))?.n ?? 0;
-  return { items: (await Promise.all(rows.map((g) => serializeGeneration(g, userId)))), total };
+  const refs = await savedRefs(userId, "advertisement");
+  return { items: (await Promise.all(rows.map((g) => serializeGeneration(g, userId, refs)))), total };
 }
 
 export async function deleteGeneration(userId: string, id: string) {

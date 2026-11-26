@@ -1,35 +1,39 @@
-import { get } from "../db/index.js";
+import { get, run } from "../db/index.js";
 import { tooMany } from "../lib/errors.js";
-import { startOfMonthIso } from "../lib/util.js";
+import { newId, nowIso, startOfMonthIso } from "../lib/util.js";
 
 export type Plan = "free" | "pro";
-export type Metric = "generations" | "forecasts";
+export type Metric = "generations" | "forecasts" | "ai";
 
 export const PLANS: Record<Plan, { name: string; priceMonthlyUsd: number; limits: Record<Metric, number>; benefits: string[] }> = {
   free: {
     name: "Free",
     priceMonthlyUsd: 0,
-    limits: { generations: 5, forecasts: 10 },
+    limits: { generations: 5, forecasts: 10, ai: 50 },
     benefits: [
       "5 AI advertisement generations per month",
       "10 demand analyses per month",
+      "50 AI text requests per month (advisor, ad copy, reviews, plans)",
     ],
   },
   pro: {
     name: "Pro",
     priceMonthlyUsd: 19,
-    limits: { generations: 200, forecasts: 300 },
+    limits: { generations: 200, forecasts: 300, ai: 1000 },
     benefits: [
       "200 AI advertisement generations per month",
       "300 demand analyses per month",
+      "1000 AI text requests per month",
       "Priority generation queue",
     ],
   },
 };
 
 const COUNTERS: Record<Metric, string> = {
-  generations: "SELECT COUNT(*) AS n FROM generations WHERE user_id = ? AND created_at >= ? AND status != 'failed'",
+  // Template banners are made in the browser and are not counted; only AI image generations are.
+  generations: "SELECT COUNT(*) AS n FROM generations WHERE user_id = ? AND created_at >= ? AND status != 'failed' AND provider != 'vendora-templates'",
   forecasts: "SELECT COUNT(*) AS n FROM market_analyses WHERE user_id = ? AND created_at >= ? AND status = 'completed'",
+  ai: "SELECT COUNT(*) AS n FROM ai_requests WHERE user_id = ? AND created_at >= ?",
 };
 
 export async function userPlan(userId: string): Promise<Plan> {
@@ -59,4 +63,9 @@ export async function assertWithinLimit(userId: string, metric: Metric) {
       { metric, used, limit, plan },
     );
   }
+}
+
+/** Record one successful text-AI request (advisor, ad copy, reviews, plans). */
+export async function recordAiRequest(userId: string, kind: string) {
+  await run("INSERT INTO ai_requests (id,user_id,kind,created_at) VALUES (?,?,?,?)", newId(), userId, kind, nowIso());
 }

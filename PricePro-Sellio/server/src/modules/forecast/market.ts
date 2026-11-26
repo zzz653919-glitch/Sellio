@@ -11,6 +11,7 @@ import { notify } from "../../services/notifications.js";
 import { assertWithinLimit } from "../../services/plans.js";
 import { detectGranularity, runForecast, type Granularity, type Point } from "./engine.js";
 import { analyseSeasonality, type SeasonalAnalysis } from "./seasonal.js";
+import { savedRefs, type SavedRefs } from "../../services/savedRefs.js";
 import { TrendsError, trendsProvider, type CountryInterest, type TrendsRange } from "./trends.js";
 
 export const COUNTRIES: { code: string; name: string }[] = [
@@ -50,6 +51,8 @@ export type AreaResult = {
   peak: Point | null;
   /** Seasons, rise/fall timing and a 12-month outlook (null with less than two years of data). */
   seasonality?: SeasonalAnalysis | null;
+  /** Expected interest over the next 7 / 30 / 90 / 365 days compared with the same length just before. */
+  horizons?: Horizon[];
   note?: string;
 };
 
@@ -73,6 +76,56 @@ export type CompareItem = {
 };
 export type CompareResult = { kind: "compare"; source: "google_trends"; fetchedAt: string; geo: string; geoName: string; items: CompareItem[] };
 
+export type Horizon = {
+  days: 7 | 30 | 90 | 365;
+  status: "ok" | "insufficient";
+  expected: number | null; // average search-interest index over the horizon
+  lower: number | null;
+  upper: number | null;
+  previous: number | null; // average over the same length just before today
+  changePct: number | null;
+  model: string | null;
+  smapePct: number | null; // back-test error
+  confidence: "high" | "medium" | "low" | null;
+};
+
+/**
+ * 7 days: weekly model on the weekly series (one step). 30/90/365 days: the back-tested seasonal
+ * model (1, 3, 12 months) when there are two years of data, otherwise the weekly model.
+ */
+export function computeHorizons(history: Point[], seasonality: SeasonalAnalysis | null): Horizon[] {
+  const out: Horizon[] = [];
+  const pct = (a: number, b: number) => (b > 0 ? r1(((a - b) / b) * 100) : null);
+  for (const days of [7, 30, 90, 365] as const) {
+    const empty: Horizon = { days, status: "insufficient", expected: null, lower: null, upper: null, previous: null, changePct: null, model: null, smapePct: null, confidence: null };
+    if (days >= 30 && seasonality && seasonality.outlook.length >= 12) {
+      const months = days === 30 ? 1 : days === 90 ? 3 : 12;
+      const fc = seasonality.outlook.slice(0, months);
+      const prev = seasonality.monthly.slice(-months).map((m) => m.value);
+      if (prev.length === months) {
+        const expected = avg(fc.map((f) => f.value));
+        const previous = avg(prev);
+        out.push({
+          days, status: "ok", expected: r1(expected), lower: r1(Math.max(0, avg(fc.map((f) => f.lower)))), upper: r1(Math.min(100, avg(fc.map((f) => f.upper)))),
+          previous: r1(previous), changePct: pct(expected, previous),
+          model: seasonality.model.name, smapePct: seasonality.model.smapePct, confidence: seasonality.model.confidence,
+        });
+        continue;
+      }
+    }
+    const res = runForecast(history, days, "week");
+    if (res.status !== "ok") { out.push(empty); continue; }
+    const expected = avg(res.forecast.map((f) => f.units));
+    const previous = avg(res.history.slice(-res.horizon).map((p) => p.units));
+    out.push({
+      days, status: "ok", expected: r1(expected), lower: r1(avg(res.forecast.map((f) => f.lower))), upper: r1(Math.min(100, avg(res.forecast.map((f) => f.upper)))),
+      previous: r1(previous), changePct: pct(expected, previous),
+      model: res.model.name, smapePct: res.model.backtest.smapePct, confidence: res.model.confidence,
+    });
+  }
+  return out;
+}
+
 const avg = (a: number[]) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0);
 const r1 = (v: number) => Math.round(v * 10) / 10;
 
@@ -88,10 +141,11 @@ function analyseArea(geo: string, history: Point[], horizonDays: number): AreaRe
   const periodChangePct = first > 0 ? r1(((avg(history.slice(-span).map((p) => p.units)) - first) / first) * 100) : null;
   const granularity = detectGranularity(history);
   const seasonality = analyseSeasonality(history);
+  const horizons = computeHorizons(history, seasonality);
   const out = runForecast(history, horizonDays, granularity);
   if (out.status !== "ok") {
     const recent = history.slice(-4).map((p) => p.units);
-    return { ...base, status: "ok", granularity, peak, periodChangePct, seasonality, recentAvg: r1(avg(recent)), note: "Not enough history for a forecast in this area; only past interest is shown." };
+    return { ...base, status: "ok", granularity, peak, periodChangePct, seasonality, horizons, recentAvg: r1(avg(recent)), note: "Not enough history for a forecast in this area; only past interest is shown." };
   }
   if (seasonality) {
     // Seasonal model (5 years, back-tested) drives the headline numbers and the forecast line.
@@ -115,6 +169,7 @@ function analyseArea(geo: string, history: Point[], horizonDays: number): AreaRe
       confidence: seasonality.model.confidence,
       peak,
       seasonality,
+      horizons,
     };
   }
   const h = out.horizon;
@@ -135,12 +190,13 @@ function analyseArea(geo: string, history: Point[], horizonDays: number): AreaRe
     confidence: out.model.confidence,
     peak,
     seasonality,
+    horizons,
   };
 }
 
 type Row = { id: string; user_id: string; query: string; range: TrendsRange; geos_json: string; status: "completed" | "no_data"; result_json: string; created_at: string };
 
-async function serialize(r: Row) {
+async function serialize(r: Row, refs?: SavedRefs) {
   return {
     id: r.id,
     query: r.query,
@@ -148,8 +204,8 @@ async function serialize(r: Row) {
     geos: safeJson<string[]>(r.geos_json, []),
     status: r.status,
     result: safeJson<MarketResult | CompareResult | null>(r.result_json, null),
-    projectId: (await get<{ id: string }>("SELECT id FROM projects WHERE user_id = ? AND type = 'forecast' AND ref_id = ?", r.user_id, r.id))?.id ?? null,
-    favoriteId: (await get<{ id: string }>("SELECT id FROM favorites WHERE user_id = ? AND item_type = 'forecast' AND ref_id = ?", r.user_id, r.id))?.id ?? null,
+    projectId: refs ? (refs.project.get(r.id) ?? null) : ((await get<{ id: string }>("SELECT id FROM projects WHERE user_id = ? AND type = 'forecast' AND ref_id = ?", r.user_id, r.id))?.id ?? null),
+    favoriteId: refs ? (refs.favorite.get(r.id) ?? null) : ((await get<{ id: string }>("SELECT id FROM favorites WHERE user_id = ? AND item_type = 'forecast' AND ref_id = ?", r.user_id, r.id))?.id ?? null),
     createdAt: r.created_at,
   };
 }
@@ -212,8 +268,9 @@ export async function getMarketAnalysis(userId: string, id: string) {
 }
 
 export async function listMarketAnalyses(userId: string, limit = 20) {
+  const refs = await savedRefs(userId, "forecast");
   return (await Promise.all((await all<Row>("SELECT * FROM market_analyses WHERE user_id = ? ORDER BY created_at DESC LIMIT ?", userId, limit)).map(async (r) => {
-    const s = await serialize(r);
+    const s = await serialize(r, refs);
     // The list only needs the headline numbers.
     if (!s.result) return s;
     if ("kind" in s.result) return { ...s, result: { ...s.result, items: s.result.items.map((i) => ({ ...i, recent: [], seasonality: i.seasonality ? { ...i.seasonality, monthly: [], trendLine: [], outlook: [] } : null })) } };

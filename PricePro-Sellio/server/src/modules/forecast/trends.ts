@@ -16,6 +16,8 @@ export interface TrendsProvider {
   interestOverTime(query: string, geo: string, range: TrendsRange): Promise<Point[]>;
   /** Interest by country, worldwide (comparable between countries). */
   interestByCountry(query: string, range: TrendsRange): Promise<CountryInterest[]>;
+  /** Interest by region inside one country (e.g. the regions of Uzbekistan). */
+  interestByRegion?(query: string, geo: string, range: TrendsRange): Promise<CountryInterest[]>;
 }
 
 export class TrendsError extends Error {}
@@ -89,6 +91,11 @@ export class SerpApiTrendsProvider implements TrendsProvider {
 
   async interestByCountry(query: string, range: TrendsRange) {
     const body = await this.call({ q: query, date: range, data_type: "GEO_MAP_0", region: "COUNTRY" });
+    return body ? parseByRegion(body) : [];
+  }
+
+  async interestByRegion(query: string, geo: string, range: TrendsRange) {
+    const body = await this.call({ q: query, date: range, data_type: "GEO_MAP_0", geo, region: "REGION" });
     return body ? parseByRegion(body) : [];
   }
 }

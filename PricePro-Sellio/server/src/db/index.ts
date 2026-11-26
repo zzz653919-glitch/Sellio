@@ -115,20 +115,28 @@ async function migrate(d: Driver) {
   }
 }
 
+let queries = 0;
+/** Number of database round trips so far (used by tests to catch N+1 query patterns). */
+export const queryCount = () => queries;
+
 export async function all<T = Row>(sql: string, ...params: Param[]): Promise<T[]> {
+  queries++;
   return (await (await getDb()).all(sql, params)) as T[];
 }
 
 export async function get<T = Row>(sql: string, ...params: Param[]): Promise<T | undefined> {
+  queries++;
   return (await (await getDb()).all(sql, params))[0] as T | undefined;
 }
 
 export async function run(sql: string, ...params: Param[]): Promise<{ changes: number }> {
+  queries++;
   return (await getDb()).run(sql, params);
 }
 
 /** Execute write statements atomically (all or nothing). */
 export async function transaction(stmts: Statement[]): Promise<void> {
+  queries++;
   await (await getDb()).batch(stmts);
 }
 

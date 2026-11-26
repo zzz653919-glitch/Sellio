@@ -45,17 +45,35 @@ const EnvSchema = z.object({
   // AI image generation (OpenAI Images API)
   OPENAI_API_KEY: optional,
   OPENAI_BASE_URL: z.string().default("https://api.openai.com/v1"),
-  IMAGE_MODEL: z.string().default("gpt-image-1"),
+  IMAGE_MODEL: z.string().default("gpt-image-2"), // gpt-image-1 was shut down in Oct 2026, gpt-image-1-mini on 1 Dec 2026
 
   // Google Trends via SerpApi (Demand Forecast)
   SERPAPI_API_KEY: optional,
   SERPAPI_BASE_URL: z.url().default("https://serpapi.com"),
+
+  // Economic statistics: World Bank Open Data (free, no key). Set WORLD_BANK_ENABLED=false to turn off.
+  WORLD_BANK_API_BASE: z.url().default("https://api.worldbank.org/v2"),
+  WORLD_BANK_ENABLED: z.string().optional().transform((v) => v !== "false"),
+  // Import / export by product group: UN Comtrade (free subscription key from comtradedeveloper.un.org)
+  COMTRADE_API_KEY: optional,
+  COMTRADE_API_BASE: z.url().default("https://comtradeapi.un.org/data/v1"),
+
+  // Text AI for the Business Advisor, reports and ad copy.
+  // Gemini has a free tier (aistudio.google.com); OpenAI is paid. LLM_PROVIDER picks one when both are set.
+  LLM_PROVIDER: z.enum(["gemini", "openai"]).optional(),
+  GEMINI_API_KEY: optional,
+  GEMINI_MODEL: z.string().default("gemini-flash-latest"), // Google's alias for the current Flash model
+  GEMINI_API_BASE: z.url().default("https://generativelanguage.googleapis.com/v1beta"),
+  OPENAI_TEXT_MODEL: z.string().default("gpt-5.4-mini"),
 
 
   // Payments (Stripe)
   STRIPE_SECRET_KEY: optional,
   STRIPE_WEBHOOK_SECRET: optional,
   STRIPE_PRICE_PRO: optional,
+
+  // Vercel Cron: a daily request refreshes shared market data so users do not wait for it.
+  CRON_SECRET: optional,
 });
 
 const parsed = EnvSchema.safeParse(process.env);
@@ -72,6 +90,9 @@ export const features = {
   email: Boolean(config.SMTP_HOST),
   imageGeneration: Boolean(config.OPENAI_API_KEY),
   serpapi: Boolean(config.SERPAPI_API_KEY),
+  worldBank: config.WORLD_BANK_ENABLED,
+  comtrade: Boolean(config.COMTRADE_API_KEY),
+  llm: Boolean(config.GEMINI_API_KEY || config.OPENAI_API_KEY),
   blobStorage: Boolean(config.BLOB_READ_WRITE_TOKEN || config.BLOB_STORE_ID),
   payments: Boolean(config.STRIPE_SECRET_KEY && config.STRIPE_PRICE_PRO),
 };

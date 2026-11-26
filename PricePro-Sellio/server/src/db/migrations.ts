@@ -305,4 +305,187 @@ CREATE TABLE trend_cache (
 );
 `,
   },
+  {
+    // Market Intelligence: competitors, the user's own business data, reports and the AI advisor.
+    version: 6,
+    sql: `
+CREATE TABLE competitors (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  website TEXT,
+  category TEXT,
+  price_note TEXT,
+  positioning TEXT,
+  notes TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX idx_competitors_user ON competitors(user_id, created_at);
+
+CREATE TABLE business_datasets (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  source TEXT NOT NULL CHECK (source IN ('csv','xlsx','manual')),
+  currency TEXT NOT NULL DEFAULT 'UZS',
+  rows_json TEXT NOT NULL,
+  row_count INTEGER NOT NULL,
+  period_start TEXT,
+  period_end TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX idx_business_datasets_user ON business_datasets(user_id, created_at);
+
+CREATE TABLE business_reports (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  period TEXT NOT NULL CHECK (period IN ('week','month')),
+  title TEXT NOT NULL,
+  content_json TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX idx_business_reports_user ON business_reports(user_id, created_at);
+
+CREATE TABLE advisor_messages (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  role TEXT NOT NULL CHECK (role IN ('user','assistant')),
+  content TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX idx_advisor_user ON advisor_messages(user_id, created_at);
+`,
+  },
+  {
+    // Advertising & Design Studio: brand kit, ad copy, competitor ads, campaigns and their results.
+    version: 7,
+    sql: `
+CREATE TABLE brand_profiles (
+  user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  business_name TEXT,
+  slogan TEXT,
+  logo_upload_id TEXT,
+  primary_color TEXT,
+  secondary_color TEXT,
+  accent_color TEXT,
+  heading_font TEXT,
+  body_font TEXT,
+  tone TEXT,
+  styles_json TEXT NOT NULL DEFAULT '[]',
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE ai_requests (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX idx_ai_requests_user ON ai_requests(user_id, created_at);
+
+CREATE TABLE ad_copies (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  product TEXT NOT NULL,
+  language TEXT NOT NULL,
+  input_json TEXT NOT NULL,
+  result_json TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX idx_ad_copies_user ON ad_copies(user_id, created_at);
+
+CREATE TABLE competitor_ads (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  competitor_name TEXT NOT NULL,
+  ad_text TEXT,
+  had_image INTEGER NOT NULL DEFAULT 0,
+  analysis_json TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX idx_competitor_ads_user ON competitor_ads(user_id, created_at);
+
+CREATE TABLE campaigns (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  objective TEXT NOT NULL,
+  product TEXT,
+  audience TEXT,
+  budget REAL,
+  currency TEXT NOT NULL DEFAULT 'UZS',
+  start_date TEXT NOT NULL,
+  end_date TEXT NOT NULL,
+  channels_json TEXT NOT NULL,
+  plan_json TEXT,
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('draft','active','finished')),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX idx_campaigns_user ON campaigns(user_id, created_at);
+
+CREATE TABLE campaign_items (
+  id TEXT PRIMARY KEY,
+  campaign_id TEXT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  date TEXT NOT NULL,
+  channel TEXT NOT NULL,
+  title TEXT NOT NULL,
+  content TEXT,
+  status TEXT NOT NULL DEFAULT 'planned' CHECK (status IN ('planned','done')),
+  source TEXT NOT NULL DEFAULT 'manual' CHECK (source IN ('manual','ai')),
+  created_at TEXT NOT NULL
+);
+CREATE INDEX idx_campaign_items ON campaign_items(campaign_id, date);
+
+CREATE TABLE campaign_stats (
+  id TEXT PRIMARY KEY,
+  campaign_id TEXT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  date TEXT NOT NULL,
+  creative TEXT NOT NULL,
+  channel TEXT,
+  impressions INTEGER NOT NULL DEFAULT 0,
+  clicks INTEGER NOT NULL DEFAULT 0,
+  conversions INTEGER NOT NULL DEFAULT 0,
+  spend REAL NOT NULL DEFAULT 0,
+  revenue REAL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX idx_campaign_stats ON campaign_stats(campaign_id, date);
+`,
+  },
+  {
+    // Growth workflow: one opportunity followed through explanation, ads, campaign and results.
+    version: 8,
+    sql: `
+CREATE TABLE initiatives (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  product TEXT NOT NULL,
+  query TEXT,
+  source TEXT NOT NULL CHECK (source IN ('opportunity','forecast','manual')),
+  evidence_json TEXT,
+  explanation TEXT,
+  directions_json TEXT,
+  direction_json TEXT,
+  campaign_id TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX idx_initiatives_user ON initiatives(user_id, updated_at);
+
+CREATE TABLE initiative_assets (
+  id TEXT PRIMARY KEY,
+  initiative_id TEXT NOT NULL REFERENCES initiatives(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL CHECK (kind IN ('banner','copy')),
+  ref_id TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX idx_initiative_assets ON initiative_assets(initiative_id);
+`,
+  },
 ];

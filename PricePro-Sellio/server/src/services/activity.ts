@@ -16,7 +16,7 @@ export type ActivityType =
   | "favorite_added"
   | "plan_changed";
 
-export type Service = "studio" | "forecast" | "account" | "projects";
+export type Service = "studio" | "forecast" | "account" | "projects" | "assistant";
 
 export async function logActivity(
   userId: string,
