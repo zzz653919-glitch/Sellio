@@ -26,7 +26,7 @@ dashboardRouter.get("/", async (req, res) => {
     listMarketAnalyses(u, 3),
     all<{ id: string; type: string; service: string; title: string; success: number; created_at: string; ref_id: string | null }>(
       `SELECT id, type, service, title, success, created_at, ref_id FROM activity
-       WHERE user_id = ? AND type IN ('ad_created','ad_failed','market_analysis','project_saved','image_uploaded')
+       WHERE user_id = ? AND type IN ('ad_created','ad_failed','cards_created','market_analysis','project_saved','image_uploaded')
        ORDER BY created_at DESC LIMIT 8`,
       u,
     ),

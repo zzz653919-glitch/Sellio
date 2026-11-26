@@ -3,6 +3,7 @@ import { get } from "../../db/index.js";
 import { badRequest } from "../../lib/errors.js";
 import { param } from "../../lib/validate.js";
 import { currentUser, requireAuth } from "../../middleware/auth.js";
+import { cardsUsingUpload } from "../cards/routes.js";
 import { deleteUpload, getOwnedUpload, sendUpload } from "../../services/storage.js";
 
 export const filesRouter = Router();
@@ -31,6 +32,10 @@ filesRouter.delete("/:id", async (req, res) => {
   const used = (await get<{ n: number }>("SELECT COUNT(*) AS n FROM generations WHERE user_id = ? AND upload_id = ?", user.id, id))?.n ?? 0;
   if (used > 0 && req.query.force !== "1") {
     throw badRequest(`This image is used by ${used} advertisement generation(s). Deleting it also deletes them.`, { generations: used });
+  }
+  const cards = await cardsUsingUpload(user.id, id);
+  if (cards > 0) {
+    throw badRequest(`This image is used by ${cards} product card(s). Delete those cards first.`, { cards });
   }
   await deleteUpload(user.id, id);
   res.json({ ok: true });

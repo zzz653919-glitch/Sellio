@@ -161,3 +161,61 @@ test("only the photo is needed: the AI decides; a finished ad can be changed wit
   const other = await newUser();
   assert.equal((await other.client.post(`/api/studio/generations/${ge.id}/edit`, { instructions: "make it red" })).status, 404);
 });
+
+test("a change request in Uzbek is translated for the image model, and may change the product's colour when asked", async () => {
+  const { config, features } = await import("../src/config.js");
+  const { setLlmFetchForTests } = await import("../src/services/llm.js");
+  const c = config as { GEMINI_API_KEY?: string; LLM_PROVIDER?: string };
+  c.GEMINI_API_KEY = "g-key"; c.LLM_PROVIDER = "gemini"; features.llm = true;
+  const asked: string[] = [];
+  let answer: unknown = { english: "Make the bag itself bright red", changesProduct: true };
+  setLlmFetchForTests((async (_url: string, init: { body: string }) => {
+    asked.push(init.body);
+    if (answer === "fail") return new Response("{}", { status: 500 });
+    return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify(answer) }] } }] }), { status: 200, headers: { "content-type": "application/json" } });
+  }) as never);
+  try {
+    const prompts: string[] = [];
+    setImageProviderForTests({ name: "test", model: "m", edit: async (i: { prompt: string }) => { prompts.push(i.prompt); return makePng(300, 300); } } as ImageProvider);
+    const { client } = await newUser();
+    const r = await client.post("/api/studio/generations", { uploadId: await upload(client) });
+    await waitFor(client, r.data.generation.id);
+    // 1) asks to change the product: translated, and the product may change
+    const e1 = await client.post(`/api/studio/generations/${r.data.generation.id}/edit`, { instructions: "sumkani qizil qil" });
+    assert.equal(e1.status, 202, JSON.stringify(e1.data));
+    await waitFor(client, e1.data.generation.id);
+    assert.match(asked[0], /sumkani qizil qil/);
+    assert.match(prompts[1], /Request: Make the bag itself bright red/);
+    assert.match(prompts[1], /change exactly that/);
+    // 2) a background change: the product is kept exactly
+    answer = { english: "Make the background dark blue", changesProduct: false };
+    const e2 = await client.post(`/api/studio/generations/${e1.data.generation.id}/edit`, { instructions: "fonni to'q ko'k qil" });
+    await waitFor(client, e2.data.generation.id);
+    assert.match(prompts[2], /Request: Make the background dark blue/);
+    assert.match(prompts[2], /Keep the product exactly as it is — same shape, proportions, colours/);
+    assert.doesNotMatch(prompts[2], /unless the request explicitly/);
+    // 2b) hang it on a hanger: the presentation changes, the design is kept
+    answer = { english: "Hang the jacket on a wooden hanger", changesProduct: false, changesPresentation: true };
+    const eh = await client.post(`/api/studio/generations/${e2.data.generation.id}/edit`, { instructions: "veshalkaga il" });
+    await waitFor(client, eh.data.generation.id);
+    const ph = prompts[prompts.length - 1];
+    assert.match(ph, /Request: Hang the jacket on a wooden hanger/);
+    assert.match(ph, /present the product differently/);
+    assert.match(ph, /keep its design exactly/);
+    assert.doesNotMatch(ph, /Keep the product exactly as it is/);
+    // 3) the text AI fails: the request is used as written, never blocked
+    answer = "fail";
+    const e3 = await client.post(`/api/studio/generations/${e2.data.generation.id}/edit`, { instructions: "yorug'likni iliqroq qil" });
+    assert.equal(e3.status, 202);
+    await waitFor(client, e3.data.generation.id);
+    const pf = prompts[prompts.length - 1];
+    assert.match(pf, /Request: yorug'likni iliqroq qil/);
+    assert.match(pf, /unless the request explicitly asks to change the product's colour/);
+    assert.match(pf, /on a hanger/);
+    // the history keeps what the user wrote
+    const g3 = (await client.get(`/api/studio/generations/${e3.data.generation.id}`)).data.generation;
+    assert.equal(g3.status, "succeeded");
+  } finally {
+    c.GEMINI_API_KEY = undefined; c.LLM_PROVIDER = undefined; features.llm = false; setLlmFetchForTests(null);
+  }
+});

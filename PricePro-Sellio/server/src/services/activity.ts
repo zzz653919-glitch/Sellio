@@ -11,6 +11,7 @@ export type ActivityType =
   | "profile_updated"
   | "ad_created"
   | "ad_failed"
+  | "cards_created"
   | "image_uploaded"
   | "market_analysis"
   | "project_saved"

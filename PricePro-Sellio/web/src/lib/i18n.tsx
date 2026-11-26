@@ -22,6 +22,8 @@ const SERVER_PATTERNS: [RegExp, string, string[]][] = [
   [/^Added to Favorites: (.+)$/s, "Added to Favorites: {x}", ["x"]],
   [/^World demand: (.+)$/s, "World demand: {x}", ["x"]],
   [/^Advertisement created: (.+)$/s, "Advertisement created: {x}", ["x"]],
+  [/^Product cards created: (.+)$/s, "Product cards created: {x}", ["x"]],
+  [/^This image is used by (\d+) product card\(s\)\. Delete those cards first\.$/s, "This image is used by {n} product card(s). Delete those cards first.", ["n"]],
   [/^Advertisement failed: (.+)$/s, "Advertisement failed: {x}", ["x"]],
   [/^Product image uploaded: (.+)$/s, "Product image uploaded: {x}", ["x"]],
   [/^Plan changed to (.+)$/s, "Plan changed to {x}", ["x"]],

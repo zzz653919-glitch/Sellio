@@ -23,6 +23,7 @@ import { projectsRouter } from "./modules/projects/routes.js";
 import { studioRouter } from "./modules/studio/routes.js";
 import { adsRouter } from "./modules/ads/routes.js";
 import { campaignsRouter } from "./modules/campaigns/routes.js";
+import { cardsRouter } from "./modules/cards/routes.js";
 import { adminRouter } from "./modules/admin/routes.js";
 import { supportRouter } from "./modules/support/routes.js";
 import { topDemand } from "./modules/forecast/topDemand.js";
@@ -161,6 +162,7 @@ export function createApp() {
   app.use("/api/intel", intelRouter);
   app.use("/api/ads", adsRouter);
   app.use("/api/campaigns", campaignsRouter);
+  app.use("/api/cards", cardsRouter);
   app.use("/api/payments", paymentsRouter);
   app.use("/api/support", supportRouter);
   app.use("/api/admin", adminRouter);

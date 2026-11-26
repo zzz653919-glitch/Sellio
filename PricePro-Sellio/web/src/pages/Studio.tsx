@@ -1,10 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
 import { ChevronDown, Download, ImagePlus, Loader2, PencilLine, RefreshCw, SlidersHorizontal, Sparkles, Trash2, UploadCloud, Wand2, XCircle } from "lucide-react";
-import { useEffect, useRef, useState, type DragEvent } from "react";
+import { lazy, Suspense, useEffect, useRef, useState, type DragEvent } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { ErrorAlert, FavoriteButton, IntegrationNotice, SaveProjectButton } from "../components/shared";
-import { Badge, Button, Card, ConfirmDialog, EmptyState, Field, Input, PageHeader, Select, cx, useToast } from "../components/ui";
+import { Badge, Button, Card, ConfirmDialog, EmptyState, Field, Input, PageHeader, Select, Spinner, Tabs, cx, useToast } from "../components/ui";
 import { del, errorMessage, get, post, upload } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { fmtBytes, timeAgo } from "../lib/format";
@@ -12,7 +12,9 @@ import { useI18n } from "../lib/i18n";
 import type { Generation, StudioOptions, Upload } from "../lib/types";
 
 /** Ready-made change requests for a finished advertisement (the user can also type their own). */
-const EDIT_IDEAS = ["Make the background darker", "Put it on a wooden table", "Make the light warmer", "Add a little more space around the product", "Make it look more premium"];
+const EDIT_IDEAS = ["Make the background darker", "Put it on a wooden table", "Make the light warmer", "Add a little more space around the product", "Make it look more premium", "Make the product black", "Hang it on a hanger", "Put it on a mannequin"];
+
+const CardsTab = lazy(() => import("../cards/CardsTab"));
 
 function statusTone(s: Generation["status"]) {
   return s === "succeeded" ? "green" : s === "failed" ? "red" : "brand";
@@ -144,7 +146,7 @@ function ResultPanel({ id }: { id: string }) {
           <div className="space-y-3 rounded-xl border border-slate-200 p-4 dark:border-slate-800" data-testid="ai-edit">
             <div>
               <p className="flex items-center gap-1.5 font-semibold"><Wand2 className="h-4 w-4 text-brand-600" />{t("Change with AI")}</p>
-              <p className="text-xs muted">{t("Write what to change in plain words. The AI keeps the product and changes only what you ask. Each change uses one AI image from your limit.")}</p>
+              <p className="text-xs muted">{t("Write what to change in plain words, in Uzbek, Russian or English. The AI changes only what you ask; the product stays as it is unless you ask to change it (for example its colour). Each change uses one AI image from your limit.")}</p>
             </div>
             <div className="flex flex-wrap gap-1.5">
               {EDIT_IDEAS.map((idea) => (
@@ -173,6 +175,7 @@ export default function Studio() {
   const qc = useQueryClient();
   const [params, setParams] = useSearchParams();
   const currentId = params.get("generation");
+  const tab = params.get("tab") === "cards" ? "cards" : "ads";
 
   const options = useQuery({ queryKey: ["studio-options"], queryFn: () => get<StudioOptions>("/studio/options") });
   const uploads = useQuery({ queryKey: ["uploads"], queryFn: () => get<{ uploads: Upload[] }>("/user/uploads").then((r) => r.uploads) });
@@ -261,6 +264,10 @@ export default function Studio() {
   return (
     <div>
       <PageHeader icon={<Sparkles className="h-6 w-6" />} title={t("AI Product Studio")} subtitle={t("Turn ordinary product photos into professional advertising images.")} />
+      <div className="mb-6 overflow-x-auto" data-testid="studio-tabs">
+        <Tabs value={tab} onChange={(v) => setParams(v === "cards" ? { tab: "cards" } : {})} tabs={[{ value: "ads", label: t("AI advertisement") }, { value: "cards", label: t("Product cards") }]} />
+      </div>
+      {tab === "cards" ? <Suspense fallback={<div className="grid place-items-center py-16"><Spinner /></div>}><CardsTab /></Suspense> : (<>
       {opts && !opts.configured && <div className="mb-6"><IntegrationNotice service="imageGeneration" /></div>}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
@@ -379,6 +386,7 @@ export default function Studio() {
 
       <ConfirmDialog open={Boolean(deleteGen)} title={t("Delete generation?")} text={t("The generated image and its history entry will be permanently deleted.")}
         confirmLabel={t("Delete")} loading={removeGen.isPending} onClose={() => setDeleteGen(null)} onConfirm={() => deleteGen && removeGen.mutate(deleteGen.id)} />
+      </>)}
     </div>
   );
 }

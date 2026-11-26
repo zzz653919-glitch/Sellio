@@ -750,4 +750,26 @@ CREATE INDEX idx_usage_created ON usage_events(created_at);
 DROP TABLE IF EXISTS competitors;
 `,
   },
+  {
+    // AI Product Studio: marketplace product cards (designs kept on the server, re-editable).
+    version: 19,
+    sql: `
+CREATE TABLE product_cards (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  group_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  marketplace TEXT NOT NULL,
+  layout TEXT NOT NULL,
+  photo_upload_id TEXT,
+  input_json TEXT NOT NULL,
+  copy_json TEXT NOT NULL,
+  doc_json TEXT NOT NULL,
+  thumb TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX idx_cards_user ON product_cards(user_id, updated_at);
+`,
+  },
 ];

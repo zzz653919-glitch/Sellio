@@ -1,10 +1,12 @@
 import { savedRefs, type SavedRefs } from "../../services/savedRefs.js";
 import { waitUntil } from "@vercel/functions";
 import { all, get, run } from "../../db/index.js";
+import { features } from "../../config.js";
 import { badRequest, notFound } from "../../lib/errors.js";
 import { inspectImage } from "../../lib/image.js";
 import { newId, nowIso, safeJson } from "../../lib/util.js";
 import { logActivity } from "../../services/activity.js";
+import { completeJson } from "../../services/llm.js";
 import { notify } from "../../services/notifications.js";
 import { consumeRequest, releaseRequest, reserveRequest } from "../../services/quota.js";
 import { deleteUpload, getOwnedUpload, readUpload, saveImage } from "../../services/storage.js";
@@ -27,6 +29,12 @@ export type GenerationInput = {
     edit?: boolean;
     /** The name was only guessed from the file name: shown in the history, never given to the AI. */
     nameFromFile?: boolean;
+    /** The change request in English, as given to the image model (the user may write in Uzbek or Russian). */
+    promptInstructions?: string;
+    /** Whether the change request asks to change the product itself (e.g. its colour). */
+    changesProduct?: boolean;
+    /** Whether it asks to show the product differently: on a hanger, on a mannequin or model, folded, in a hand… */
+    changesPresentation?: boolean;
   };
 };
 
@@ -173,7 +181,7 @@ export async function createGeneration(userId: string, input: GenerationInput, r
   // One request is reserved now; it is counted when the image is ready and given back if generation fails.
   await reserveRequest(userId, "generation", id);
   const now = nowIso();
-  const prompt = isEdit ? buildEditPrompt(input.settings.instructions ?? "") : buildPrompt({
+  const prompt = isEdit ? buildEditPrompt(input.settings.promptInstructions ?? input.settings.instructions ?? "", input.settings.changesProduct, input.settings.changesPresentation) : buildPrompt({
     productName: input.settings.nameFromFile ? "" : input.productName,
     category: input.category,
     style: input.style,
@@ -250,8 +258,40 @@ export async function editGeneration(userId: string, id: string, instructions: s
   if (!g) throw notFound("Generation not found");
   if (g.status !== "succeeded" || !g.result_upload_id) throw badRequest("Only a finished advertisement can be changed.");
   const s = safeJson<GenerationInput["settings"]>(g.settings_json, { size: "square", quality: "medium", lighting: "soft" });
+  getImageProvider(); // fail fast (before the text AI is asked) when image generation is not configured
+  const understood = await understandEditRequest(instructions);
   return createGeneration(userId, {
     uploadId: g.result_upload_id, productName: g.product_name, category: g.category, style: "auto", background: "auto",
-    settings: { size: s.size, quality: s.quality, lighting: s.lighting, instructions, edit: true },
+    settings: { size: s.size, quality: s.quality, lighting: s.lighting, instructions, edit: true, ...understood },
   }, g.id);
+}
+
+/**
+ * Image models follow English best. The text AI translates the user's request (Uzbek, Russian…) into a clear
+ * English instruction and tells whether it asks to change the product itself. If the text AI is not set up,
+ * busy or slow, the request is used as written and only an explicit request may change the product.
+ */
+export async function understandEditRequest(text: string): Promise<{ promptInstructions?: string; changesProduct?: boolean; changesPresentation?: boolean }> {
+  if (!features.llm) return {};
+  const ask = completeJson<{ english?: unknown; changesProduct?: unknown; changesPresentation?: unknown }>({
+    system: [
+      "You prepare change requests for an AI image editor that edits a product advertisement photo.",
+      "The user writes in Uzbek (Latin or Cyrillic), Russian or English, sometimes informally or with typos.",
+      "Translate the request into one clear, specific English instruction for the image editor. Keep the user's meaning; do not add new ideas.",
+      "Also decide whether the request asks to change the product itself (its colour, material, pattern or finish) rather than the background, scene, light or props,",
+      "and whether it asks to present the product differently: hung on a hanger (veshalka, ilgich), put on a mannequin or worn by a model, folded, held in a hand, laid flat, or seen from another angle.",
+      'Answer only with JSON: {"english": "...", "changesProduct": true|false, "changesPresentation": true|false}',
+    ].join("\n"),
+    messages: [{ role: "user", content: text }],
+    maxTokens: 300,
+  });
+  const timeout = new Promise<null>((done) => setTimeout(() => done(null), 15_000).unref?.());
+  try {
+    const r = await Promise.race([ask, timeout]);
+    if (!r) { ask.catch(() => undefined); return {}; }
+    const english = typeof r.english === "string" ? r.english.trim().slice(0, 600) : "";
+    return { ...(english ? { promptInstructions: english } : {}), ...(typeof r.changesProduct === "boolean" ? { changesProduct: r.changesProduct } : {}), ...(typeof r.changesPresentation === "boolean" ? { changesPresentation: r.changesPresentation } : {}) };
+  } catch {
+    return {};
+  }
 }

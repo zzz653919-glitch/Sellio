@@ -1,12 +1,13 @@
 import {
   AlignCenter, AlignLeft, AlignRight, ArrowDown, ArrowLeft, ArrowUp, Bold, Copy, Download, Eye, Heart, ImagePlus, Italic, Layers, Plus,
-  Redo2, RotateCcw, Square, Strikethrough, Trash2, Type, Undo2, Upload,
+  Redo2, RotateCcw, Shapes, Square, Strikethrough, Trash2, Type, Undo2, Upload,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Button, Modal, Select, cx, useToast } from "../components/ui";
 import { useI18n } from "../lib/i18n";
 import { ensureFonts, fontWeight, FONTS } from "./fonts";
-import { exportDoc, loadSource, renderTo } from "./render";
+import { exportDoc, loadSource, renderTo, sourceUrl, type ExportType } from "./render";
+import { ICON_NAMES, iconSrc, parseIcon } from "./icons";
 import { CATEGORIES, docFromTemplate, getTemplateDef } from "./templates";
 import { cutOut, galleryPhoto, placePhoto, productOf, readPhoto, withPhoto } from "./photo";
 import { docFonts } from "./thumbs";
@@ -346,17 +347,61 @@ function ShapeProps({ e, upd }: { e: ShapeEl; upd: (p: Partial<ShapeEl>, merge?:
 }
 
 // ------------------------------------------------------------------ editor
-type Tab = "content" | "element" | "add" | "layers";
+type Tab = "content" | "element" | "add" | "layers" | "extra";
+/** Grid of icons to choose from. */
+function IconGrid({ color, onPick, current }: { color: string; onPick: (name: string) => void; current?: string }) {
+  const { t } = useI18n();
+  return (
+    <div className="grid grid-cols-6 gap-1.5" data-testid="icon-grid">
+      {ICON_NAMES.map((n) => (
+        <button key={n} type="button" title={n} aria-label={`${t("Icon")}: ${n}`} onClick={() => onPick(n)}
+          className={cx("grid aspect-square place-items-center rounded-lg border bg-white p-1.5 hover:border-[var(--v-sky)] dark:bg-slate-100", n === current ? "border-[var(--v-sky)] ring-2 ring-[var(--v-sky)]/30" : "border-[var(--v-line)]")}>
+          <img src={sourceUrl(iconSrc(n, color)) ?? ""} alt="" className="h-full w-full" draggable={false} />
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function IconProps({ e, upd }: { e: ImageEl; upd: (p: Partial<ImageEl>, merge?: string) => void }) {
+  const { t } = useI18n();
+  const ic = parseIcon(e.src)!;
+  return (
+    <Section title={t("Icon")}>
+      <ColorInput label={t("Icon colour")} value={ic.color} onChange={(v) => upd({ src: iconSrc(ic.name, v) }, `icon:${e.id}`)} />
+      <p className="text-[11px] font-semibold muted">{t("Choose another icon")}</p>
+      <IconGrid color={ic.color} current={ic.name} onPick={(n) => upd({ src: iconSrc(n, ic.color) })} />
+    </Section>
+  );
+}
+
+/**
+ * Card mode: the editor works on a document kept on the server (marketplace product cards) instead of a
+ * gallery template — marketplace sizes, autosave through `onChange`, pictures uploaded through `storeImage`.
+ */
+export type CardMode = {
+  doc: Doc; original: Doc;
+  title: string; subtitle: string; backLabel: string;
+  sizes: { w: number; h: number }[];
+  onChange: (doc: Doc) => void;
+  storeImage: (dataUrl: string) => Promise<string>;
+  fileName: string;
+  /** Extra tab in the side panel (the AI texts). */
+  extra?: { label: string; content: ReactNode };
+  status?: ReactNode;
+};
+
 const FORMAT_KEYS = Object.keys(FORMATS) as Exclude<FormatKey, "custom">[];
 
-export default function Editor({ templateId, photo, onBack, favorite, onToggleFavorite }: { templateId: string; photo?: string; onBack: () => void; favorite: boolean; onToggleFavorite: () => void }) {
+export default function Editor({ templateId = "", photo, onBack, favorite = false, onToggleFavorite, card }: { templateId?: string; photo?: string; onBack: () => void; favorite?: boolean; onToggleFavorite?: () => void; card?: CardMode }) {
   const { t } = useI18n();
   const toast = useToast();
-  const def = getTemplateDef(templateId);
+  const def = card ? null : getTemplateDef(templateId);
   // An AI Product Studio picture opened here gets its own draft.
   const draftId = def ? (photo ? `${def.id}:${photo}` : def.id) : "";
   // Earlier edits of this template are kept in the browser; the user is told and can start over.
   const { initial, restored } = useMemo<{ initial: Doc; restored: boolean }>(() => {
+    if (card) return { initial: card.doc, restored: false };
     if (!def) return { initial: docFromTemplate(getTemplateDef("fashion-new-sneakers")!), restored: false };
     let fresh = docFromTemplate(def);
     if (photo) { const p = productOf(fresh); if (p) fresh = { ...fresh, els: fresh.els.map((e) => (e.id === p.id ? ({ ...e, src: photo } as ImageEl) : e)) }; }
@@ -369,6 +414,7 @@ export default function Editor({ templateId, photo, onBack, favorite, onToggleFa
     } catch { /* storage blocked */ }
     // A photo chosen in the gallery goes straight into the sample picture's place.
     return { initial: photo ? fresh : withPhoto(fresh, galleryPhoto()), restored: false };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [def, photo, draftId]);
   const [showRestored, setShowRestored] = useState(restored);
   const { doc, set, commit, undo, redo, reset, canUndo, canRedo } = useHistory(initial);
@@ -378,6 +424,7 @@ export default function Editor({ templateId, photo, onBack, favorite, onToggleFa
   const [busy, setBusy] = useState<string | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [custom, setCustom] = useState({ w: String(doc.w), h: String(doc.h) });
+  const [customOpen, setCustomOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const uploadTarget = useRef<string | "new" | null>(null);
   const textRef = useRef<HTMLTextAreaElement>(null);
@@ -388,6 +435,11 @@ export default function Editor({ templateId, photo, onBack, favorite, onToggleFa
   useEffect(() => { let alive = true; void ensureFonts(JSON.parse(fontKey)).then(() => alive && setTick((n) => n + 1)); return () => { alive = false; }; }, [fontKey]);
   const srcKey = doc.els.filter((e): e is ImageEl => e.type === "image").map((e) => e.src).join("\n");
   useEffect(() => { let alive = true; void Promise.all(srcKey.split("\n").filter(Boolean).map(loadSource)).then(() => alive && setTick((n) => n + 1)); return () => { alive = false; }; }, [srcKey]);
+  // card mode: every change goes to the owner (it saves to the server)
+  const onCardChange = useRef(card?.onChange);
+  onCardChange.current = card?.onChange;
+  const firstDoc = useRef(doc);
+  useEffect(() => { if (doc !== firstDoc.current) onCardChange.current?.(doc); }, [doc]);
   // keep a draft so work is not lost on reload
   useEffect(() => {
     if (!def) return;
@@ -415,6 +467,7 @@ export default function Editor({ templateId, photo, onBack, favorite, onToggleFa
     setCustom({ w: String(size.w), h: String(size.h) });
   };
   const startOver = () => {
+    if (card) { reset({ ...card.original, w: doc.w, h: doc.h, format: doc.format }); setSelected(null); return; }
     if (!def) return;
     reset(docFromTemplate(def, doc.format, { w: doc.w, h: doc.h }));
     setSelected(null); setShowRestored(false);
@@ -425,7 +478,9 @@ export default function Editor({ templateId, photo, onBack, favorite, onToggleFa
     if (!file) return;
     try {
       setBusy("upload");
-      const { src, cutout } = await readPhoto(file);
+      const read = await readPhoto(file);
+      const cutout = read.cutout;
+      const src = card ? await card.storeImage(read.src) : read.src;
       await loadSource(src);
       const target = targetId ?? uploadTarget.current;
       const old = target && target !== "new" ? doc.els.find((e): e is ImageEl => e.id === target && e.type === "image") : undefined;
@@ -439,20 +494,23 @@ export default function Editor({ templateId, photo, onBack, favorite, onToggleFa
   const removeBg = async (el: ImageEl) => {
     setBusy("cut");
     try {
-      const src = await cutOut(el.src);
-      if (!src) { toast("error", t("The background could not be found. Use a photo on a plain background.")); return; }
+      const cut = await cutOut(el.src);
+      if (!cut) { toast("error", t("The background could not be found. Use a photo on a plain background.")); return; }
+      const src = card ? await card.storeImage(cut) : cut;
       await loadSource(src);
       upd(el.id, { src, ...placePhoto(doc, el, true) });
       toast("success", t("Background removed."));
     } catch { toast("error", t("The background could not be found. Use a photo on a plain background.")); } finally { setBusy(null); }
   };
-  const doExport = async (type: "image/png" | "image/jpeg") => {
+  const doExport = async (type: ExportType) => {
+    const ext = type === "image/png" ? "png" : type === "image/webp" ? "webp" : "jpg";
     try {
       setBusy(type);
       await ensureFonts(docFonts(doc));
       const blob = await exportDoc(doc, type);
-      download(blob, `vendora-${doc.templateId}-${doc.w}x${doc.h}.${type === "image/png" ? "png" : "jpg"}`);
-      toast("success", t("Downloaded {w}×{h} {type}.", { w: doc.w, h: doc.h, type: type === "image/png" ? "PNG" : "JPG" }));
+      if (blob.type !== type) { toast("error", t("This browser cannot save {type}. Use PNG or JPG, or another browser (Chrome, Edge, Firefox).", { type: ext.toUpperCase() })); return; }
+      download(blob, `${card ? card.fileName : `vendora-${doc.templateId}`}-${doc.w}x${doc.h}.${ext}`);
+      toast("success", t("Downloaded {w}×{h} {type}.", { w: doc.w, h: doc.h, type: ext.toUpperCase() }));
     } catch {
       toast("error", t("The file could not be created. Try again."));
     } finally { setBusy(null); }
@@ -483,23 +541,29 @@ export default function Editor({ templateId, photo, onBack, favorite, onToggleFa
     return () => window.removeEventListener("keydown", onKey);
   });
 
-  if (!def) return <div className="card p-6 text-sm">{t("Template not found.")} <button type="button" className="text-[var(--v-sky)] underline" onClick={onBack}>{t("Back to templates")}</button></div>;
+  if (!def && !card) return <div className="card p-6 text-sm">{t("Template not found.")} <button type="button" className="text-[var(--v-sky)] underline" onClick={onBack}>{t("Back to templates")}</button></div>;
   const texts = doc.els.filter((e): e is TextEl => e.type === "text");
   const has = (r: TextRole) => texts.some((x) => x.role === r);
-  const tabs: { v: Tab; label: string }[] = [{ v: "content", label: t("Content") }, { v: "element", label: sel ? t("Selected") : t("Background") }, { v: "add", label: t("Add") }, { v: "layers", label: t("Layers") }];
-  const catLabel = CATEGORIES.find((c) => c.key === def.category)?.label ?? "";
+  const tabs: { v: Tab; label: string }[] = [
+    ...(card?.extra ? [{ v: "extra" as Tab, label: card.extra.label }] : []),
+    { v: "content", label: t("Content") }, { v: "element", label: sel ? t("Selected") : t("Background") }, { v: "add", label: t("Add") }, { v: "layers", label: t("Layers") },
+  ];
+  const catLabel = def ? CATEGORIES.find((c) => c.key === def.category)?.label ?? "" : "";
+  const accent = texts.find((x) => x.role === "headline")?.color ?? "#2563eb";
+  const iconColor = /^#f{3,6}$/i.test(accent) ? "#2563eb" : accent;
 
   return (
     <div className="space-y-4" data-testid="editor">
       <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/avif" className="hidden" onChange={(e) => void onFile(e.target.files?.[0])} data-testid="file-input" />
       {/* top bar */}
       <div className="card flex flex-wrap items-center gap-2 p-2.5 sm:p-3">
-        <Button variant="ghost" size="sm" icon={<ArrowLeft className="h-4 w-4" />} onClick={onBack}>{t("Templates")}</Button>
+        <Button variant="ghost" size="sm" icon={<ArrowLeft className="h-4 w-4" />} onClick={onBack}>{card ? card.backLabel : t("Templates")}</Button>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-bold">{def.name}</p>
-          <p className="truncate text-[11px] muted">{t(catLabel)} · {doc.w}×{doc.h}</p>
+          <p className="truncate text-sm font-bold">{card ? card.title : def!.name}</p>
+          <p className="truncate text-[11px] muted">{card ? card.subtitle : t(catLabel)} · {doc.w}×{doc.h}</p>
         </div>
-        <IconBtn title={t(favorite ? "Remove from favorites" : "Add to favorites")} on={favorite} onClick={onToggleFavorite}><Heart className={cx("h-4 w-4", favorite && "fill-current")} /></IconBtn>
+        {card?.status}
+        {!card && <IconBtn title={t(favorite ? "Remove from favorites" : "Add to favorites")} on={favorite} onClick={() => onToggleFavorite?.()}><Heart className={cx("h-4 w-4", favorite && "fill-current")} /></IconBtn>}
         <IconBtn title={t("Undo")} onClick={undo} disabled={!canUndo}><Undo2 className="h-4 w-4" /></IconBtn>
         <IconBtn title={t("Redo")} onClick={redo} disabled={!canRedo}><Redo2 className="h-4 w-4" /></IconBtn>
         <Button size="sm" variant="secondary" icon={<RotateCcw className="h-4 w-4" />} onClick={startOver} title={t("Reset to the original template")} data-testid="reset">
@@ -520,9 +584,15 @@ export default function Editor({ templateId, photo, onBack, favorite, onToggleFa
         {/* canvas */}
         <div className="space-y-3">
           <div className="flex flex-wrap items-center gap-2">
-            <Select value={doc.format} onChange={(e) => setFormat(e.target.value as FormatKey)} aria-label={t("Format")} className="w-full sm:w-auto"
-              options={[...FORMAT_KEYS.map((k) => ({ value: k, label: `${t(FORMATS[k].label)} · ${FORMATS[k].w}×${FORMATS[k].h}` })), { value: "custom", label: t("Custom size") }]} />
-            {doc.format === "custom" && (
+            {card ? (
+              <Select value={card.sizes.some((z) => z.w === doc.w && z.h === doc.h) ? `${doc.w}x${doc.h}` : "custom"} aria-label={t("Size")} className="w-full sm:w-auto" data-testid="card-size"
+                onChange={(e) => { if (e.target.value === "custom") { setCustomOpen(true); return; } setCustomOpen(false); const [w, h] = e.target.value.split("x").map(Number); setFormat("custom", w, h); }}
+                options={[...card.sizes.map((z) => ({ value: `${z.w}x${z.h}`, label: `${t("Marketplace size")} · ${z.w}×${z.h}` })), { value: "custom", label: t("Custom size") }]} />
+            ) : (
+              <Select value={doc.format} onChange={(e) => setFormat(e.target.value as FormatKey)} aria-label={t("Format")} className="w-full sm:w-auto"
+                options={[...FORMAT_KEYS.map((k) => ({ value: k, label: `${t(FORMATS[k].label)} · ${FORMATS[k].w}×${FORMATS[k].h}` })), { value: "custom", label: t("Custom size") }]} />
+            )}
+            {((!card && doc.format === "custom") || (card && (customOpen || !card.sizes.some((z) => z.w === doc.w && z.h === doc.h)))) && (
               <form className="flex items-center gap-1.5" onSubmit={(e) => { e.preventDefault(); setFormat("custom", Number(custom.w), Number(custom.h)); }}>
                 <input className="input w-20" inputMode="numeric" value={custom.w} onChange={(e) => setCustom((c) => ({ ...c, w: e.target.value.replace(/\D/g, "") }))} aria-label={t("Width")} />
                 <span className="muted">×</span>
@@ -540,6 +610,7 @@ export default function Editor({ templateId, photo, onBack, favorite, onToggleFa
           <div className="flex flex-wrap gap-2">
             <Button icon={<Download className="h-4 w-4" />} loading={busy === "image/png"} onClick={() => void doExport("image/png")} data-testid="export-png">{t("Download PNG")}</Button>
             <Button variant="secondary" icon={<Download className="h-4 w-4" />} loading={busy === "image/jpeg"} onClick={() => void doExport("image/jpeg")} data-testid="export-jpg">{t("Download JPG")}</Button>
+            <Button variant="secondary" icon={<Download className="h-4 w-4" />} loading={busy === "image/webp"} onClick={() => void doExport("image/webp")} data-testid="export-webp">{t("Download WEBP")}</Button>
             <Button variant="ghost" icon={<Eye className="h-4 w-4" />} loading={busy === "preview"} onClick={() => void openPreview()}>{t("Preview")}</Button>
           </div>
           <p className="text-xs muted">{t("Tip: drag to move, pull the round handles to resize, double-click a text to edit it. Ctrl+Z undo, Ctrl+Y redo, Delete removes, arrows nudge.")}</p>
@@ -547,10 +618,11 @@ export default function Editor({ templateId, photo, onBack, favorite, onToggleFa
 
         {/* side panel */}
         <div className="card min-w-0 p-3 sm:p-4 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto">
-          <div className="seg mb-4 w-full text-xs" role="tablist">
+          <div className="seg mb-4 w-full overflow-x-auto text-xs [scrollbar-width:none] [&>button]:shrink-0 [&>button]:whitespace-nowrap" role="tablist">
             {tabs.map((x) => <button key={x.v} type="button" role="tab" aria-selected={tab === x.v} className={cx("seg-btn flex-1 justify-center", tab === x.v && "is-on")} onClick={() => setTab(x.v)}>{x.label}</button>)}
           </div>
 
+          {tab === "extra" && card?.extra && <div data-testid="editor-extra">{card.extra.content}</div>}
           {tab === "content" && (
             <div className="space-y-4">
               <Section title={t("Product photo")}>
@@ -597,7 +669,8 @@ export default function Editor({ templateId, photo, onBack, favorite, onToggleFa
                 </Section>
               )}
               {sel?.type === "text" && <TextProps e={sel} upd={(p, m) => upd(sel.id, p, m)} focusRef={textRef} />}
-              {sel?.type === "image" && <ImageProps e={sel} upd={(p, m) => upd(sel.id, p, m)} onUpload={() => pickFile(sel.id)} onCutOut={() => void removeBg(sel)} cutting={busy === "cut"} />}
+              {sel?.type === "image" && parseIcon(sel.src) && <IconProps e={sel} upd={(p, m) => upd(sel.id, p, m)} />}
+              {sel?.type === "image" && !parseIcon(sel.src) && <ImageProps e={sel} upd={(p, m) => upd(sel.id, p, m)} onUpload={() => pickFile(sel.id)} onCutOut={() => void removeBg(sel)} cutting={busy === "cut"} />}
               {sel?.type === "shape" && <ShapeProps e={sel} upd={(p, m) => upd(sel.id, p, m)} />}
               {sel && (
                 <Section title={t("Arrange")}>
@@ -630,6 +703,9 @@ export default function Editor({ templateId, photo, onBack, favorite, onToggleFa
               <Section title={t("Picture")}>
                 <Button size="sm" className="w-full" variant="secondary" icon={<ImagePlus className="h-4 w-4" />} onClick={() => pickFile("new")}>{t("Upload a picture")}</Button>
               </Section>
+              <Section title={t("Icons")}>
+                <IconGrid color={iconColor} onPick={(n) => add({ id: newId(), type: "image", src: iconSrc(n, iconColor), x: 0.44, y: 0.44, w: 0.1, h: 0.1 * doc.w / doc.h, fit: "contain", shadow: false, name: "Icon" })} />
+              </Section>
               <Section title={t("Shapes and decorations")}>
                 <div className="grid grid-cols-3 gap-2">
                   {SHAPES.map((s) => (
@@ -648,7 +724,7 @@ export default function Editor({ templateId, photo, onBack, favorite, onToggleFa
               {[...doc.els].reverse().map((e) => (
                 <li key={e.id} className={cx("flex items-center gap-2 rounded-xl border px-2 py-1.5 text-xs", e.id === selected ? "border-[var(--v-sky)] bg-[var(--v-sky-soft)]" : "border-[var(--v-line)]")}>
                   <button type="button" className="flex min-w-0 flex-1 items-center gap-2 text-left" onClick={() => { setSelected(e.id); setTab("element"); }}>
-                    {e.type === "text" ? <Type className="h-3.5 w-3.5 shrink-0" /> : e.type === "image" ? <ImagePlus className="h-3.5 w-3.5 shrink-0" /> : <Layers className="h-3.5 w-3.5 shrink-0" />}
+                    {e.type === "text" ? <Type className="h-3.5 w-3.5 shrink-0" /> : e.type === "image" && parseIcon(e.src) ? <Shapes className="h-3.5 w-3.5 shrink-0" /> : e.type === "image" ? <ImagePlus className="h-3.5 w-3.5 shrink-0" /> : <Layers className="h-3.5 w-3.5 shrink-0" />}
                     <span className="truncate">{e.type === "text" ? e.text.replace(/\n/g, " ") || t("Text") : t(e.name ?? (e.type === "image" ? "Picture" : "Shape"))}</span>
                   </button>
                   <button type="button" title={t("Bring forward")} onClick={() => move(e.id, 1)} className="p-1 muted hover:text-current"><ArrowUp className="h-3.5 w-3.5" /></button>

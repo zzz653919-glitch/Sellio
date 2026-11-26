@@ -3,6 +3,7 @@
  * thumbnails and the exported file, so what you see is exactly what you download.
  */
 import { artSvg } from "./art";
+import { iconSvg, parseIcon } from "./icons";
 import type { Doc, El, Fill, ImageEl, ShapeEl, TextEl } from "./types";
 
 type Ctx = CanvasRenderingContext2D;
@@ -18,6 +19,11 @@ export function sourceUrl(src: string): string | null {
     const o: Record<string, string> = {};
     for (const p of opts) { const i = p.indexOf("="); if (i > 0) o[p.slice(0, i)] = p.slice(i + 1); }
     const svg = artSvg(key, o);
+    return svg ? `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}` : null;
+  }
+  const icon = parseIcon(src);
+  if (icon) {
+    const svg = iconSvg(icon.name, icon.color);
     return svg ? `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}` : null;
   }
   return src;
@@ -328,10 +334,11 @@ export function renderTo(canvas: HTMLCanvasElement, doc: Doc, pixelW: number) {
   drawDoc(ctx, doc, doc.w, doc.h);
 }
 
-/** Full-size file (PNG or JPG). */
-export async function exportDoc(doc: Doc, type: "image/png" | "image/jpeg"): Promise<Blob> {
+export type ExportType = "image/png" | "image/jpeg" | "image/webp";
+/** Full-size file (PNG, JPG or WEBP). */
+export async function exportDoc(doc: Doc, type: ExportType): Promise<Blob> {
   await loadDocImages(doc);
   const canvas = document.createElement("canvas");
   renderTo(canvas, doc, doc.w);
-  return new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("Export failed"))), type, type === "image/jpeg" ? 0.95 : undefined));
+  return new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("Export failed"))), type, type === "image/png" ? undefined : 0.95));
 }
