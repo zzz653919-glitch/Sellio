@@ -52,8 +52,6 @@ async function analytics(r: Range) {
   const revenue = await all<{ currency: string | null; cents: number | null; n: number }>("SELECT currency, SUM(amount_cents) AS cents, COUNT(*) AS n FROM subscription_events WHERE type = 'payment' AND created_at BETWEEN ? AND ? GROUP BY currency", r.fromIso, r.toIso);
   const apiByProvider = await all<{ provider: string; total: number; failed: number; avg_ms: number | null }>(
     "SELECT provider, COUNT(*) AS total, SUM(CASE WHEN ok = 0 THEN 1 ELSE 0 END) AS failed, AVG(duration_ms) AS avg_ms FROM api_calls WHERE created_at BETWEEN ? AND ? GROUP BY provider ORDER BY total DESC", r.fromIso, r.toIso);
-  const apiErrors = await all<{ provider: string; error: string | null; n: number; last: string }>(
-    "SELECT provider, error, COUNT(*) AS n, MAX(created_at) AS last FROM api_calls WHERE ok = 0 AND created_at BETWEEN ? AND ? GROUP BY provider, error ORDER BY n DESC LIMIT 20", r.fromIso, r.toIso);
   return {
     range: { from: r.from, to: r.to },
     daily,
@@ -63,7 +61,6 @@ async function analytics(r: Range) {
     conversion: { totalUsers, proUsers, ratePct: totalUsers ? Math.round((proUsers / totalUsers) * 1000) / 10 : 0, upgrades },
     revenue: revenue.map((x) => ({ currency: x.currency, amountCents: x.cents ?? 0, payments: x.n })),
     api: apiByProvider.map((a) => ({ provider: a.provider, total: a.total, failed: a.failed, avgMs: a.avg_ms ? Math.round(a.avg_ms) : null })),
-    apiErrors: apiErrors.map((e) => ({ provider: e.provider, error: e.error, count: e.n, last: e.last })),
   };
 }
 
@@ -71,7 +68,7 @@ insightsAdminRouter.get("/analytics", requirePermission("analytics.view"), async
   res.json(await analytics(rangeOf(req)));
 });
 
-const exportSchema = z.object({ report: z.enum(["daily", "searches", "ai", "api", "api_errors"]) });
+const exportSchema = z.object({ report: z.enum(["daily", "searches", "ai", "api"]) });
 
 insightsAdminRouter.get("/analytics/export", requirePermission("analytics.view"), async (req, res) => {
   const { report } = parseQuery(req, exportSchema.passthrough());
@@ -81,8 +78,7 @@ insightsAdminRouter.get("/analytics/export", requirePermission("analytics.view")
     report === "daily" ? [["date", "signups", "total_users", "active_users", "ai_requests", "ai_ads", "template_banners", "forecasts", "failed_api_calls"], ...a.daily.map((d) => [d.date, d.signups, d.totalUsers, d.activeUsers, d.aiRequests, d.aiAds, d.templateBanners, d.forecasts, d.failedApiCalls])]
     : report === "searches" ? [["product", "analyses", "users"], ...a.topSearches.map((s) => [s.q, s.n, s.users])]
     : report === "ai" ? [["kind", "requests"], ...a.aiByKind.map((k) => [k.kind, k.n])]
-    : report === "api" ? [["provider", "calls", "failed", "avg_ms"], ...a.api.map((x) => [x.provider, x.total, x.failed, x.avgMs])]
-    : [["provider", "error", "count", "last_seen"], ...a.apiErrors.map((e) => [e.provider, e.error, e.count, e.last])];
+    : [["provider", "calls", "failed", "avg_ms"], ...a.api.map((x) => [x.provider, x.total, x.failed, x.avgMs])];
   await logAudit(req, "analytics.exported", { type: "report", id: report }, `Exported the ${report} report (${r.from} – ${r.to})`);
   res.type("text/csv").attachment(csvFilename(`vendora-${report}-${r.from}-${r.to}`)).send(toCsv(rows));
 });

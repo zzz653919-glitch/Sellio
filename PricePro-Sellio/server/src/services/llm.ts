@@ -64,7 +64,8 @@ async function post(url: string, headers: Record<string, string>, body: unknown,
 }
 
 /** Google's free models have separate quotas, so when one is busy the next one usually answers. */
-const GEMINI_FALLBACKS = ["gemini-flash-latest", "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash"];
+// Google retires old models (2.0 / 2.5 are closed to new users), so the fallbacks are current ones and the "-latest" aliases.
+const GEMINI_FALLBACKS = ["gemini-flash-latest", "gemini-3.8-flash", "gemini-flash-lite-latest", "gemini-3.5-flash-lite"];
 const RETRY_MS = process.env.NODE_ENV === "test" ? 0 : 1500;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 

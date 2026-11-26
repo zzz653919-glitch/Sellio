@@ -6,7 +6,7 @@ import { SERIES_COLORS, useChartTheme } from "../../components/charts";
 import { ErrorAlert } from "../../components/shared";
 import { Badge, PageLoader } from "../../components/ui";
 import { get } from "../../lib/api";
-import { fmtNumber, timeAgo } from "../../lib/format";
+import { fmtNumber } from "../../lib/format";
 import { useI18n } from "../../lib/i18n";
 import { DateRange, defaultRange, downloadUrl, Section, Stat, Table } from "../ui";
 import { money, PROVIDER } from "./Dashboard";
@@ -21,7 +21,6 @@ type A = {
   conversion: { totalUsers: number; proUsers: number; ratePct: number; upgrades: { type: string; n: number }[] };
   revenue: { currency: string | null; amountCents: number; payments: number }[];
   api: { provider: string; total: number; failed: number; avgMs: number | null }[];
-  apiErrors: { provider: string; error: string | null; count: number; last: string }[];
 };
 
 const pct = (a: number, b: number) => (b ? `${Math.round((a / b) * 1000) / 10}%` : "—");
@@ -103,11 +102,6 @@ export default function Analytics() {
       <Section title={t("External API calls")} actions={csv("api")}>
         <Table head={[t("Service"), t("Calls"), t("Failed"), t("Average time")]} empty={!d.api.length}>
           {d.api.map((a) => <tr key={a.provider}><td>{PROVIDER[a.provider] ?? a.provider}</td><td>{fmtNumber(a.total)}</td><td>{a.failed ? <Badge tone="red">{a.failed} ({pct(a.failed, a.total)})</Badge> : 0}</td><td>{a.avgMs === null ? "—" : `${fmtNumber(a.avgMs)} ms`}</td></tr>)}
-        </Table>
-      </Section>
-      <Section title={t("API errors")} actions={csv("api_errors")}>
-        <Table head={[t("Service"), t("Error"), t("Count"), t("Last seen")]} empty={!d.apiErrors.length}>
-          {d.apiErrors.map((e, i) => <tr key={i}><td>{PROVIDER[e.provider] ?? e.provider}</td><td className="max-w-[420px] text-xs text-rose-600">{e.error ?? "—"}</td><td>{e.count}</td><td>{timeAgo(e.last)}</td></tr>)}
         </Table>
       </Section>
     </div>

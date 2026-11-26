@@ -32,8 +32,8 @@ export const PLANS: Record<Plan, { name: string; priceMonthlyUsd: number; priceY
   },
   pro: {
     name: "Pro",
-    priceMonthlyUsd: 19,
-    priceYearlyUsd: 190,
+    priceMonthlyUsd: 10,
+    priceYearlyUsd: 100,
     limits: { requests: 10, forecasts: 10, ai: 1000 },
     requestPeriod: "hours",
     periodHours: 3,
@@ -43,7 +43,7 @@ export const PLANS: Record<Plan, { name: string; priceMonthlyUsd: number; priceY
       "10 demand forecasts every 3 hours (a separate limit)",
       "Each request is available again 3 hours after it was used",
       "1000 AI text requests per month",
-      "Yearly payment: $190 instead of $228",
+      "Yearly payment: $100 instead of $120",
     ],
   },
   max: {

@@ -44,15 +44,15 @@ test("user flow: request, receipt checks, submit — the plan never changes befo
   assert.equal(cfgRes.data.card.number, "4466136951534453");
   assert.equal(cfgRes.data.card.bank, "TBC Bank");
   const pro = cfgRes.data.plans.find((p: { key: string }) => p.key === "pro");
-  assert.deepEqual(pro.month, { usd: 19, uzs: 240000 });
+  assert.deepEqual(pro.month, { usd: 10, uzs: 126000 });
 
   const r = await u.client.post("/api/payments", { plan: "pro", interval: "month" });
   assert.equal(r.status, 201);
   assert.equal(r.data.payment.status, "pending");
-  assert.equal(r.data.payment.amountUzs, 240000);
+  assert.equal(r.data.payment.amountUzs, 126000);
   const id = r.data.payment.id;
   const proYear = await u.client.post("/api/payments", { plan: "pro", interval: "year" });
-  assert.equal(proYear.data.payment.amountUzs, 2394000, "Pro yearly: $190");
+  assert.equal(proYear.data.payment.amountUzs, 1260000, "Pro yearly: $100");
   // A receipt uploaded for one amount is dropped when the plan or period changes.
   assert.equal((await uploadReceipt(u, id)).status, 200);
   // Switching plan before sending keeps one open request.
@@ -95,7 +95,7 @@ test("only authorised admins review; no self-approval; approval activates the pl
   const list = await admin.client.get("/api/admin/payment-requests");
   const item = list.data.items.find((p: { id: string }) => p.id === id);
   assert.equal(item.user.email, u.email);
-  assert.equal(item.amountUzs, 240000);
+  assert.equal(item.amountUzs, 126000);
   assert.equal((await admin.client.req("GET", `/api/admin/payment-requests/${id}/receipt`, undefined, { raw: true })).status, 200);
   assert.equal((await admin.client.post(`/api/admin/payment-requests/${id}/approve`, { password: "wrong" })).status, 400);
   assert.equal(await plan(u), "free");
@@ -114,7 +114,7 @@ test("only authorised admins review; no self-approval; approval activates the pl
   assert.equal(sub.subscription.provider, "manual");
   const days = (Date.parse(sub.subscription.currentPeriodEnd) - Date.now()) / 86_400_000;
   assert.ok(days > 27 && days < 32, `about one month (${days})`);
-  assert.ok(sub.history.some((h: { type: string; amountCents: number; currency: string }) => h.type === "payment" && h.amountCents === 24000000 && h.currency === "uzs"));
+  assert.ok(sub.history.some((h: { type: string; amountCents: number; currency: string }) => h.type === "payment" && h.amountCents === 12600000 && h.currency === "uzs"));
   assert.equal((await admin.client.post(`/api/admin/payment-requests/${id}/reject`, { reason: "x" })).status, 409, "cannot reject an approved payment");
   const audit = await get<{ n: number }>("SELECT COUNT(*) AS n FROM audit_logs WHERE action = 'payment.approved' AND target_id = ?", id);
   assert.equal(audit!.n, 1);

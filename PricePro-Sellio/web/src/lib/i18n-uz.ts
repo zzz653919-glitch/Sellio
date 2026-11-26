@@ -2164,4 +2164,5 @@ export const UZ: Record<string, string> = {
   "See your product in all 100 templates": "Mahsulotingizni 100 ta shablonning hammasida ko'ring",
   "Upload one product photo: it takes the place of the sample picture in every template. A plain (white or one-colour) background is removed automatically.": "Bitta mahsulot rasmini yuklang: u har bir shablonda namuna rasm o'rnini egallaydi. Oddiy (oq yoki bir rangli) fon avtomatik olib tashlanadi.",
   "Upload product photo": "Mahsulot rasmini yuklash",
+  "Yearly payment: $100 instead of $120": "Yillik to'lov: $120 o'rniga $100",
 };

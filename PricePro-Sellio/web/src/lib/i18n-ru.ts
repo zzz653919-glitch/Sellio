@@ -2099,4 +2099,5 @@ export const RU: Record<string, string> = {
   "See your product in all 100 templates": "Посмотрите свой товар во всех 100 шаблонах",
   "Upload one product photo: it takes the place of the sample picture in every template. A plain (white or one-colour) background is removed automatically.": "Загрузите одно фото товара: оно встанет на место примера в каждом шаблоне. Однотонный (белый или цветной) фон удаляется автоматически.",
   "Upload product photo": "Загрузить фото товара",
+  "Yearly payment: $100 instead of $120": "Оплата за год: $100 вместо $120",
 };
