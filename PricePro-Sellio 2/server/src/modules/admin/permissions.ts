@@ -11,7 +11,7 @@ export const PERMISSIONS = [
   "users.view", "users.manage", "users.delete", "users.flag",
   "content.view", "content.moderate",
   "studio.view", "forecast.view", "forecast.manage",
-  "subscriptions.view", "plans.manage", "payments.view",
+  "subscriptions.view", "plans.manage", "payments.view", "payments.review",
   "notifications.manage",
   "support.manage",
   "analytics.view",
@@ -23,7 +23,7 @@ export const ROLE_PERMISSIONS: Record<AdminRole, readonly Permission[]> = {
   super_admin: PERMISSIONS,
   admin: [
     "dashboard.view", "users.view", "users.manage", "users.delete", "users.flag", "content.view", "content.moderate",
-    "studio.view", "forecast.view", "forecast.manage", "subscriptions.view", "payments.view", "notifications.manage",
+    "studio.view", "forecast.view", "forecast.manage", "subscriptions.view", "payments.view", "payments.review", "notifications.manage",
     "support.manage", "analytics.view",
   ],
   moderator: ["dashboard.view", "users.view", "users.flag", "content.view", "content.moderate", "support.manage"],

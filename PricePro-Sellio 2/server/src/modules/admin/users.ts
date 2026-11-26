@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { usageHistory } from "../../services/quota.js";
 import { z } from "zod";
 import { config } from "../../config.js";
 import { all, get, run, transaction } from "../../db/index.js";
@@ -19,7 +20,7 @@ export const usersAdminRouter = Router();
 
 const listSchema = z.object({
   q: z.string().trim().max(200).optional(),
-  plan: z.enum(["free", "pro"]).optional(),
+  plan: z.enum(["free", "pro", "max"]).optional(),
   status: z.enum(["active", "suspended"]).optional(),
   role: z.enum(["super_admin", "admin", "moderator", "none"]).optional(),
   flagged: z.enum(["1"]).optional(),
@@ -117,6 +118,7 @@ usersAdminRouter.get("/users/:id", requirePermission("users.view"), async (req, 
     user: { ...shape(u), suspendedReason: u.suspended_reason, planSource: u.plan_source, language, updatedAt: u.updated_at },
     counts: { projects, generations, analyses, datasets, campaigns, tickets },
     usage: await usage(id),
+    usageHistory: (await usageHistory(id, 100)).map((e) => ({ id: e.id, service: e.service, refId: e.ref_id, status: e.status, plan: e.plan, period: e.period, createdAt: e.created_at })),
     subscription: subscription ? { plan: subscription.plan, status: subscription.status, provider: subscription.provider, periodEnd: subscription.current_period_end, cancelAtPeriodEnd: Boolean(subscription.cancel_at_period_end), updatedAt: subscription.updated_at } : null,
     subscriptionEvents: events.map((e) => ({ id: e.id, type: e.type, plan: e.plan, amountCents: e.amount_cents, currency: e.currency, createdAt: e.created_at })),
     activity: activity.map((a) => ({ id: a.id, type: a.type, service: a.service, title: a.title, success: Boolean(a.success), createdAt: a.created_at })),
@@ -127,7 +129,7 @@ usersAdminRouter.get("/users/:id", requirePermission("users.view"), async (req, 
   });
 });
 
-const planSchema = z.object({ plan: z.enum(["free", "pro"]), password: z.string().min(1), note: z.string().trim().max(300).optional() });
+const planSchema = z.object({ plan: z.enum(["free", "pro", "max"]), password: z.string().min(1), note: z.string().trim().max(300).optional() });
 
 /** Manual plan assignment (no payment is created or implied; marked as admin-assigned). */
 usersAdminRouter.post("/users/:id/plan", requirePermission("users.manage"), async (req, res) => {
@@ -145,9 +147,9 @@ usersAdminRouter.post("/users/:id/plan", requirePermission("users.manage"), asyn
       provider = CASE WHEN subscriptions.provider = 'stripe' THEN subscriptions.provider ELSE 'admin' END, updated_at = excluded.updated_at`, id, b.plan, now],
     ["INSERT INTO subscription_events (id,user_id,type,plan,provider_ref,created_at) VALUES (?,?,?,?,?,?)", newId(), id, "admin_assigned", b.plan, `admin:${currentUser(req).email}`, now],
   ]);
-  await notify(id, "account", `You are now on the ${getPlans()[b.plan].name} plan`, b.plan === "pro" ? "An administrator gave your account the Pro plan." : "An administrator moved your account to the Free plan.");
+  await notify(id, "account", `You are now on the ${getPlans()[b.plan].name} plan`, b.plan === "free" ? "An administrator moved your account to the Free plan." : `An administrator gave your account the ${getPlans()[b.plan].name} plan.`);
   await logAudit(req, "user.plan_assigned", { type: "user", id }, `Plan of ${t.email}: ${t.plan} → ${b.plan}`, { note: b.note, stripeSubscriptionActive: Boolean(stripe) });
-  res.json({ ok: true, warning: stripe && b.plan === "free" ? "The user still has an active Stripe subscription. Cancel it in Stripe, or it will set the plan back to Pro on the next payment." : null });
+  res.json({ ok: true, warning: stripe && b.plan === "free" ? "The user still has an active Stripe subscription. Cancel it in Stripe, or it will set the paid plan back on the next payment." : null });
 });
 
 const suspendSchema = z.object({ reason: z.string().trim().min(3, "Write a reason").max(300) });

@@ -1,5 +1,5 @@
 /**
- * Text AI used by the Business Advisor, reports and the ad copywriter.
+ * Text AI used by reports, growth explanations and the ad copywriter.
  * Gemini (free tier from aistudio.google.com) or OpenAI (paid). Keys stay on the server.
  */
 import { config, features } from "../config.js";

@@ -47,8 +47,8 @@ async function analytics(r: Range) {
     "SELECT lower(query) AS q, COUNT(*) AS n, COUNT(DISTINCT user_id) AS users FROM market_analyses WHERE created_at BETWEEN ? AND ? GROUP BY q ORDER BY n DESC LIMIT 20", r.fromIso, r.toIso);
   const forecastStatus = await all<{ status: string; n: number }>("SELECT status, COUNT(*) AS n FROM market_analyses WHERE created_at BETWEEN ? AND ? GROUP BY status", r.fromIso, r.toIso);
   const totalUsers = (await get<{ n: number }>("SELECT COUNT(*) AS n FROM users"))?.n ?? 0;
-  const proUsers = (await get<{ n: number }>("SELECT COUNT(*) AS n FROM users WHERE plan = 'pro'"))?.n ?? 0;
-  const upgrades = await all<{ type: string; n: number }>("SELECT type, COUNT(*) AS n FROM subscription_events WHERE plan = 'pro' AND type IN ('upgraded','admin_assigned') AND created_at BETWEEN ? AND ? GROUP BY type", r.fromIso, r.toIso);
+  const proUsers = (await get<{ n: number }>("SELECT COUNT(*) AS n FROM users WHERE plan IN ('pro','max')"))?.n ?? 0;
+  const upgrades = await all<{ type: string; n: number }>("SELECT type, COUNT(*) AS n FROM subscription_events WHERE plan IN ('pro','max') AND type IN ('upgraded','admin_assigned') AND created_at BETWEEN ? AND ? GROUP BY type", r.fromIso, r.toIso);
   const revenue = await all<{ currency: string | null; cents: number | null; n: number }>("SELECT currency, SUM(amount_cents) AS cents, COUNT(*) AS n FROM subscription_events WHERE type = 'payment' AND created_at BETWEEN ? AND ? GROUP BY currency", r.fromIso, r.toIso);
   const apiByProvider = await all<{ provider: string; total: number; failed: number; avg_ms: number | null }>(
     "SELECT provider, COUNT(*) AS total, SUM(CASE WHEN ok = 0 THEN 1 ELSE 0 END) AS failed, AVG(duration_ms) AS avg_ms FROM api_calls WHERE created_at BETWEEN ? AND ? GROUP BY provider ORDER BY total DESC", r.fromIso, r.toIso);

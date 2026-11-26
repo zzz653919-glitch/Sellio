@@ -61,7 +61,7 @@ export default function Content() {
   const switchTab = (v: Tab) => { setParams({ tab: v }); setStatus(""); setPage(1); };
   return (
     <div className="space-y-4">
-      <div><h1 className="text-2xl font-bold">{t("Projects & content")}</h1><p className="text-sm muted">{t("Review user content and remove what is inappropriate or invalid. Owners are told the reason. Sales data and private chats are not shown.")}</p></div>
+      <div><h1 className="text-[26px] font-extrabold tracking-[-0.03em]">{t("Projects & content")}</h1><p className="text-sm muted">{t("Review user content and remove what is inappropriate or invalid. Owners are told the reason. Sales data and private chats are not shown.")}</p></div>
       <div className="overflow-x-auto"><Tabs value={tab} onChange={switchTab} tabs={[{ value: "ads", label: t("Advertisements") }, { value: "images", label: t("Uploaded images") }, { value: "forecasts", label: t("Demand forecasts") }, { value: "saved", label: t("Saved projects") }, { value: "failed", label: t("Failed tasks") }]} /></div>
       {tab === "failed" ? <Failed /> : (
         <Section title={t("Content")}>

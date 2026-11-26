@@ -123,7 +123,7 @@ test("template banners are saved like ads but do not use the AI image limit", as
   assert.ok(g.resultUrl);
   const file = await client.req("GET", g.resultUrl, undefined, { raw: true });
   assert.equal(file.status, 200);
-  assert.equal((await client.get("/api/dashboard")).data.usage.metrics.generations.used, 0);
+  assert.equal((await client.get("/api/dashboard")).data.usage.metrics.requests.used, 0);
   const list = await client.get("/api/studio/generations");
   assert.ok(JSON.stringify(list.data).includes(g.id));
   const other = await newUser();

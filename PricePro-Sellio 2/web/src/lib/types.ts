@@ -1,3 +1,6 @@
+export type PlanKey = "free" | "pro" | "max";
+export const PLAN_NAME: Record<PlanKey, string> = { free: "Free", pro: "Pro", max: "Max" };
+export const planTone = (p: string): "slate" | "violet" | "brand" => (p === "max" ? "brand" : p === "pro" ? "violet" : "slate");
 export type User = {
   id: string;
   email: string;
@@ -5,13 +8,15 @@ export type User = {
   lastName: string;
   avatarUrl: string | null;
   emailVerified: boolean;
-  plan: "free" | "pro";
+  plan: PlanKey;
   createdAt: string;
   adminRole?: "super_admin" | "admin" | "moderator" | null;
 };
 
-export type Metric = "generations" | "forecasts" | "ai";
-export type Usage = { plan: "free" | "pro"; periodStart: string; metrics: Record<Metric, { used: number; limit: number }> };
+/** requests = AI advertisements + demand forecasts (shared); ai = AI text requests. */
+export type Metric = "requests" | "ai";
+export type UsageMetric = { used: number; limit: number; remaining: number; period: "day" | "month"; periodStart: string; resetsAt: string; imagesToday?: { used: number; limit: number; remaining: number; resetsAt: string } | null };
+export type Usage = { plan: PlanKey; timezone: string; periodStart: string; resetsAt: string; metrics: Record<Metric, UsageMetric> };
 
 export type Meta = {
   integrations: {
@@ -87,6 +92,9 @@ export type Activity = { id: string; type: string; service: string; title: strin
 export type Settings = {
   theme: "light" | "dark" | "system";
   language: "en" | "uz" | "ru";
+  /** IANA time zone for limit resets; null = platform default (effectiveTimezone). */
+  timezone: string | null;
+  effectiveTimezone: string;
   notifications: { inApp: boolean; email: boolean; generation: boolean; forecast: boolean; account: boolean };
 };
 

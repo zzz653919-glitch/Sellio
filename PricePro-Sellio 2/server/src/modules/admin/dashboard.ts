@@ -13,7 +13,7 @@ dashboardAdminRouter.get("/dashboard", requirePermission("dashboard.view"), asyn
   const r = rangeOf(req);
   const since30 = new Date(Date.now() - 30 * 86_400_000).toISOString();
   const since7 = new Date(Date.now() - 7 * 86_400_000).toISOString();
-  const [totalUsers, activeUsers30, activeUsers7, newUsers, suspended, totalProjects, adsAi, adsTemplates, forecasts, aiRequests, freeUsers, proUsers, paidSubs, openTickets, openFlags, failedGen, apiFailed, apiTotal] = await Promise.all([
+  const [totalUsers, activeUsers30, activeUsers7, newUsers, suspended, totalProjects, adsAi, adsTemplates, forecasts, aiRequests, freeUsers, proUsers, maxUsers, paidSubs, openTickets, openFlags, failedGen, apiFailed, apiTotal] = await Promise.all([
     n("SELECT COUNT(*) AS n FROM users"),
     n("SELECT COUNT(DISTINCT user_id) AS n FROM sessions WHERE last_seen_at >= ?", since30),
     n("SELECT COUNT(DISTINCT user_id) AS n FROM sessions WHERE last_seen_at >= ?", since7),
@@ -26,7 +26,8 @@ dashboardAdminRouter.get("/dashboard", requirePermission("dashboard.view"), asyn
     n("SELECT COUNT(*) AS n FROM ai_requests WHERE created_at BETWEEN ? AND ?", r.fromIso, r.toIso),
     n("SELECT COUNT(*) AS n FROM users WHERE plan = 'free'"),
     n("SELECT COUNT(*) AS n FROM users WHERE plan = 'pro'"),
-    n("SELECT COUNT(*) AS n FROM subscriptions WHERE plan = 'pro' AND provider = 'stripe' AND status IN ('active','trialing','past_due')"),
+    n("SELECT COUNT(*) AS n FROM users WHERE plan = 'max'"),
+    n("SELECT COUNT(*) AS n FROM subscriptions WHERE plan IN ('pro','max') AND provider = 'stripe' AND status IN ('active','trialing','past_due')"),
     n("SELECT COUNT(*) AS n FROM support_tickets WHERE status != 'resolved'"),
     n("SELECT COUNT(*) AS n FROM user_flags WHERE resolved_at IS NULL"),
     n("SELECT COUNT(*) AS n FROM generations WHERE status = 'failed' AND created_at >= ?", since7),
@@ -62,6 +63,8 @@ dashboardAdminRouter.get("/dashboard", requirePermission("dashboard.view"), asyn
 
   // System notifications: things that need an administrator.
   const alerts: { kind: string; count: number; link: string }[] = [];
+  const pendingPayments = (await get<{ n: number }>("SELECT COUNT(*) AS n FROM payment_requests WHERE status = 'pending' AND submitted_at IS NOT NULL"))?.n ?? 0;
+  if (pendingPayments && can(currentUser(req).admin_role, "payments.review")) alerts.push({ kind: "pending_payments", count: pendingPayments, link: "/admin/payment-requests" });
   if (openTickets) alerts.push({ kind: "open_tickets", count: openTickets, link: "/admin/support" });
   if (openFlags) alerts.push({ kind: "flagged_users", count: openFlags, link: "/admin/users?flagged=1" });
   if (failedGen) alerts.push({ kind: "failed_generations_7d", count: failedGen, link: "/admin/content?tab=failed" });
@@ -70,7 +73,7 @@ dashboardAdminRouter.get("/dashboard", requirePermission("dashboard.view"), asyn
 
   res.json({
     range: { from: r.from, to: r.to },
-    stats: { totalUsers, activeUsers30, activeUsers7, newUsers, suspended, totalProjects, adsAi, adsTemplates, forecasts, aiRequests, freeUsers, proUsers, paidSubscriptions: paidSubs, openTickets, apiCalls: apiTotal, apiFailed },
+    stats: { totalUsers, activeUsers30, activeUsers7, newUsers, suspended, totalProjects, adsAi, adsTemplates, forecasts, aiRequests, freeUsers, proUsers, maxUsers, paidSubscriptions: paidSubs, openTickets, apiCalls: apiTotal, apiFailed },
     chart, api,
     recentUsers: recentUsers.map((u) => ({ id: u.id, email: u.email, name: `${u.first_name} ${u.last_name}`, plan: u.plan, createdAt: u.created_at })),
     recentProjects: recentProjects.map((p) => ({ id: p.id, type: p.type, title: p.title, owner: p.email, createdAt: p.created_at })),

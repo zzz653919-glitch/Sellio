@@ -1,6 +1,6 @@
 /**
  * What worked: measured from the campaign results the user entered (nothing estimated).
- * Used by the Growth Hub, the AI advisor, AI campaign plans and the opportunity list.
+ * Used by the Growth Hub, AI campaign plans and the opportunity list.
  */
 import { all } from "../../db/index.js";
 import type { Msg } from "../forecast/engine.js";

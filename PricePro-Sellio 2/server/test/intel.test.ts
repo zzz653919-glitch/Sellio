@@ -177,7 +177,7 @@ test("business analysis: margins, growth, product risks and a back-tested foreca
   assert.equal(short.forecast.status, "insufficient");
 });
 
-test("API: business datasets are private; reports work without AI; advisor uses AI only when connected", async () => {
+test("API: business datasets are private; reports work without AI; AI summary only when connected", async () => {
   const { client } = await newUser();
   const other = await newUser();
   const rows = Array.from({ length: 400 }, (_, i) => {
@@ -204,33 +204,13 @@ test("API: business datasets are private; reports work without AI; advisor uses 
   assert.equal(content.market, null);
   assert.equal((await client.get("/api/business/reports")).data.items.length, 1);
 
-  // Advisor: refused without a text AI key, nothing stored or counted.
-  const no = await client.post("/api/advisor/messages", { message: "How is my business?" });
-  assert.equal(no.status, 503);
-  assert.equal((await client.get("/api/advisor/messages")).data.items.length, 0);
+  // The AI Advisor was removed from the product.
+  assert.equal((await client.post("/api/advisor/messages", { message: "How is my business?" })).status, 404);
 
   // With Gemini connected (mocked): the prompt contains the user's real numbers.
   (config as { GEMINI_API_KEY?: string }).GEMINI_API_KEY = "test-key";
   features.llm = true;
-  let sent: { systemInstruction: { parts: { text: string }[] }; contents: { role: string }[] } | null = null;
-  setLlmFetchForTests((async (url: string, init: RequestInit) => {
-    assert.match(url, /:generateContent$/);
-    assert.equal((init.headers as Record<string, string>)["x-goog-api-key"], "test-key");
-    sent = JSON.parse(String(init.body));
-    return json({ candidates: [{ content: { parts: [{ text: "Revenue is stable. Next steps: …" }] } }] });
-  }) as unknown as typeof fetch);
   try {
-    const ok = await client.post("/api/advisor/messages", { message: "How is my business?" });
-    assert.equal(ok.status, 201, JSON.stringify(ok.data));
-    assert.equal(ok.data.answer.content, "Revenue is stable. Next steps: …");
-    assert.match(sent!.systemInstruction.parts[0].text, /Shop 2025/);
-    assert.equal((await client.get("/api/advisor/messages")).data.items.length, 2);
-    assert.equal((await client.get("/api/dashboard")).data.usage.metrics.ai.used, 1);
-    // A failing AI service is an error, never a made-up answer.
-    setLlmFetchForTests((async () => json({ error: { message: "quota" } }, 429)) as unknown as typeof fetch);
-    const limited = await client.post("/api/advisor/messages", { message: "again" });
-    assert.equal(limited.status, 429);
-    assert.equal((await client.get("/api/advisor/messages")).data.items.length, 2);
     // Reports get an AI summary when AI is connected.
     setLlmFetchForTests((async () => json({ candidates: [{ content: { parts: [{ text: "- Revenue steady" }] } }] })) as unknown as typeof fetch);
     const rep2 = await client.post("/api/business/reports", { period: "month" });

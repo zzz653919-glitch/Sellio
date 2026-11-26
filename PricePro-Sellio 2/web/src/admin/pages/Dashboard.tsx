@@ -10,6 +10,7 @@ import { get } from "../../lib/api";
 import { fmtDateTime, fmtNumber, timeAgo } from "../../lib/format";
 import { useI18n } from "../../lib/i18n";
 import { DateRange, defaultRange, Section, Stat, Table } from "../ui";
+import { planTone } from "../../lib/types";
 
 type Dash = {
   stats: Record<string, number>;
@@ -23,6 +24,7 @@ type Dash = {
 type System = { database: { ok: boolean; driver: string }; storage: { ok: boolean; driver: string }; email: { ok: boolean }; maintenance: { enabled: boolean }; integrations: { name: string; configured: boolean; lastFailure: string | null; lastSuccess: string | null }[] };
 
 const ALERT: Record<string, string> = {
+  pending_payments: "Payments waiting for review",
   open_tickets: "Open support requests", flagged_users: "Users reported as suspicious", failed_generations_7d: "Failed AI generations (7 days)",
   failed_api_calls: "Failed external API calls", suspended_users: "Suspended accounts",
 };
@@ -42,7 +44,7 @@ export default function Dashboard() {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <div><h1 className="text-2xl font-bold">{t("Dashboard")}</h1><p className="text-sm muted">{t("All numbers are counted from database records. Refreshes every minute.")}</p></div>
+        <div><h1 className="text-[26px] font-extrabold tracking-[-0.03em]">{t("Dashboard")}</h1><p className="text-sm muted">{t("All numbers are counted from database records. Refreshes every minute.")}</p></div>
         <DateRange from={range.from} to={range.to} onChange={setRange} />
       </div>
       {d.alerts.length > 0 && (
@@ -59,7 +61,7 @@ export default function Dashboard() {
         <Stat label={t("Active users (30 days)")} value={s.activeUsers30} hint={t("{n} in 7 days", { n: s.activeUsers7 })} tone="green" />
         <Stat label={t("New users")} value={s.newUsers} hint={t("in the selected period")} tone="green" />
         <Stat label={t("Free plan")} value={s.freeUsers} tone="slate" />
-        <Stat label={t("Pro plan")} value={s.proUsers} hint={t("{n} paid via Stripe", { n: s.paidSubscriptions })} />
+        <Stat label={t("Pro / Max plans")} value={`${s.proUsers} / ${s.maxUsers ?? 0}`} hint={t("{n} paid via Stripe", { n: s.paidSubscriptions })} />
         <Stat label={t("Total projects")} value={s.totalProjects} tone="slate" />
         <Stat label={t("AI advertisements")} value={s.adsAi} hint={t("+{n} template banners", { n: s.adsTemplates })} />
         <Stat label={t("Demand forecasts")} value={s.forecasts} />
@@ -108,7 +110,7 @@ export default function Dashboard() {
         </Section>
         <Section title={t("Recent registrations")} actions={<Link to="/admin/users" className="text-sm text-brand-600 hover:underline">{t("All users →")}</Link>}>
           <Table head={[t("User"), t("Plan"), t("Registered")]} empty={!d.recentUsers.length}>
-            {d.recentUsers.map((u) => <tr key={u.id}><td><Link to={`/admin/users/${u.id}`} className="font-medium hover:underline">{u.name}</Link><span className="block text-xs muted">{u.email}</span></td><td><Badge tone={u.plan === "pro" ? "violet" : "slate"}>{u.plan}</Badge></td><td title={fmtDateTime(u.createdAt)}>{timeAgo(u.createdAt)}</td></tr>)}
+            {d.recentUsers.map((u) => <tr key={u.id}><td><Link to={`/admin/users/${u.id}`} className="font-medium hover:underline">{u.name}</Link><span className="block text-xs muted">{u.email}</span></td><td><Badge tone={planTone(u.plan)}>{u.plan}</Badge></td><td title={fmtDateTime(u.createdAt)}>{timeAgo(u.createdAt)}</td></tr>)}
           </Table>
         </Section>
         <Section title={t("Recent projects")}>

@@ -90,7 +90,7 @@ function PlanView({ id }: { id: string }) {
       <StepCard n={1} step="opportunity" done active={false} title={`${t(STEP_LABEL.opportunity)}: ${t(i.product)}`}>
         {e?.kind === "opportunity" ? (
           <>
-            <p className="text-sm">{t("Last 12 months")}: <b>{fmtPct(e.yoyPct)}</b> · {t("Next 3 months")}: <b>{fmtPct(e.next3Pct)}</b> · {t("Now vs yearly average")}: <b>{fmtPct(e.nowVsAvgPct)}</b>{e.score !== null && <> · {t("Score")}: <b>{e.score}/100</b></>}</p>
+            <p className="text-sm">{t("Last 12 months")}: <b>{fmtPct(e.yoyPct)}</b> · {t("Next 3 months")}: <b>{fmtPct(e.next3Pct)}</b> · {t("Now vs yearly average")}: <b>{fmtPct(e.nowVsAvgPct)}</b>{e.score !== null && <> · {t("Score")}: <b>{t("{n} points out of 100", { n: e.score })}</b></>}</p>
             {e.peakMonths.length > 0 && <p className="text-sm">{t("Season")}: {e.peakMonths.map((m) => fmtMonthName(m)).join(", ")}{e.nextRise && <> · {t("Next rise")}: {e.nextRise.months === 0 ? t("this month") : t("in {n} months", { n: e.nextRise.months })}</>}</p>}
             {e.reasons.map((r, k) => <p key={k} className="flex gap-2 text-sm"><span className="text-brand-500">•</span>{msg(r)}</p>)}
             <p className="text-xs muted">{t("Source")}: Google Trends · {t("Uzbekistan")} · {fmtDate(e.computedAt)}</p>
@@ -104,7 +104,7 @@ function PlanView({ id }: { id: string }) {
       </StepCard>
 
       <StepCard n={2} step="explain" done={i.steps.explain} active={active === "explain"} title={t("AI explanation")}>
-        {i.explanation ? <Text>{i.explanation}</Text> : <p className="text-sm muted">{t("The AI advisor explains why this matters for your business, using the market data and your sales.")}</p>}
+        {i.explanation ? <Text>{i.explanation}</Text> : <p className="text-sm muted">{t("AI explains why this matters for your business, using the market data and your sales.")}</p>}
         {!textAi && <IntegrationNotice service="textAi" />}
         {explain.error && <ErrorAlert error={explain.error} />}
         <Button size="sm" variant={i.explanation ? "secondary" : "primary"} icon={<Bot className="h-4 w-4" />} loading={explain.isPending} disabled={!textAi} onClick={() => explain.mutate()}>{i.explanation ? t("Explain again") : t("Explain with AI")}</Button>
@@ -201,7 +201,7 @@ export default function Growth() {
                 {fresh.map((o) => (
                   <div key={o.query} className="flex items-center gap-2 rounded-xl border border-slate-100 p-2.5 dark:border-slate-800">
                     <TrendingUp className="h-4 w-4 flex-none text-emerald-500" />
-                    <p className="min-w-0 flex-1 truncate text-sm">{t(o.label)} <span className="text-xs muted">· {o.score}/100</span></p>
+                    <p className="min-w-0 flex-1 truncate text-sm">{t(o.label)} <span className="text-xs muted">· {t("{n} points out of 100", { n: o.score })}</span></p>
                     <Button size="sm" loading={create.isPending && create.variables?.query === o.query} onClick={() => create.mutate({ source: "opportunity", product: t(o.label), query: o.query })}>{t("Begin")}</Button>
                   </div>
                 ))}

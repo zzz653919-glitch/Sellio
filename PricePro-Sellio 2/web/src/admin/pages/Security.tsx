@@ -144,7 +144,7 @@ export default function Security() {
   const tabs = [...(can("admins.manage") ? [{ value: "admins" as const, label: t("Administrators") }] : []), { value: "audit" as const, label: t("Audit log") }, { value: "logins" as const, label: t("Login history") }];
   return (
     <div className="space-y-4">
-      <div><h1 className="text-2xl font-bold">{t("Admins & audit")}</h1><p className="text-sm muted">{t("Roles, the record of administrative actions and login monitoring.")}</p></div>
+      <div><h1 className="text-[26px] font-extrabold tracking-[-0.03em]">{t("Admins & audit")}</h1><p className="text-sm muted">{t("Roles, the record of administrative actions and login monitoring.")}</p></div>
       <div className="overflow-x-auto"><Tabs value={tab} onChange={(v) => setParams({ tab: v })} tabs={tabs} /></div>
       {tab === "admins" && can("admins.manage") ? <AdminsTab /> : tab === "logins" ? <LoginsTab /> : <AuditTab />}
     </div>

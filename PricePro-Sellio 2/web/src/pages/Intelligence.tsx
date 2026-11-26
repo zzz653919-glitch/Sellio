@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  ArrowDownRight, ArrowUpRight, Bot, CalendarDays, Globe2, Lightbulb, LineChart as LineIcon, MapPin, Pencil, Plus, Radar as RadarIcon, Rocket,
+  ArrowDownRight, ArrowUpRight, CalendarDays, Globe2, Lightbulb, LineChart as LineIcon, MapPin, Pencil, Plus, Radar as RadarIcon, Rocket,
   Search, Ship, Swords, Trash2, TrendingDown, TrendingUp,
 } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -152,17 +152,16 @@ function OpportunitiesTab() {
       ) : items.map((o, k) => (
         <Card key={o.query} className="space-y-3 p-5">
           <div className="flex flex-wrap items-start gap-3">
-            <span className="flex h-10 w-10 flex-none items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-cyan-500 font-bold text-white">{k + 1}</span>
+            <span className="flex h-10 w-10 flex-none items-center justify-center rounded-xl bg-[var(--v-sky-soft)] font-extrabold text-[var(--v-sky)]">{k + 1}</span>
             <div className="min-w-0 flex-1">
               <p className="font-semibold">{t(o.label)} <span className="text-xs font-normal muted">«{o.query}»</span></p>
               <div className="mt-1 flex items-center gap-2">
                 <div className="h-2 w-32 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800"><div className="h-full bg-gradient-to-r from-brand-500 to-emerald-500" style={{ width: `${o.score}%` }} /></div>
-                <span className="text-xs muted">{t("Score")}: {o.score}/100</span>
+                <span className="text-xs muted">{t("Score")}: {t("{n} points out of 100", { n: o.score })}</span>
               </div>
             </div>
             <div className="flex flex-wrap gap-2">
               <Button size="sm" variant="secondary" icon={<LineIcon className="h-4 w-4" />} onClick={() => navigate(`/forecast?q=${encodeURIComponent(o.query)}`)}>{t("Detailed analysis")}</Button>
-              <Button size="sm" variant="secondary" icon={<Bot className="h-4 w-4" />} onClick={() => navigate(`/advisor?q=${encodeURIComponent(t("Explain the opportunity \"{x}\" for my business: is it worth it and how should I start?", { x: t(o.label) }))}`)}>{t("Ask the advisor")}</Button>
               {o.mine
                 ? <Button size="sm" icon={<Rocket className="h-4 w-4" />} onClick={() => navigate(`/growth?id=${o.mine!.initiativeId}`)}>{t("Open my plan")}</Button>
                 : <Button size="sm" icon={<Rocket className="h-4 w-4" />} loading={start.isPending && start.variables?.query === o.query} onClick={() => start.mutate(o)}>{t("Start a growth plan")}</Button>}
@@ -273,17 +272,17 @@ function RegionsCard({ options }: { options: Options }) {
       {data && (data.regions.length === 0 ? <Alert tone="warning">{t("Google has too little search data for this product by region. Try a more general name.")}</Alert> : (
         <div style={{ height: data.regions.length * 28 + 20 }}>
           <ResponsiveContainer>
-            <BarChart data={data.regions} layout="vertical" margin={{ left: 0, right: 20 }}>
+            <BarChart data={data.regions.map((r) => ({ ...r, name: t(r.name) }))} layout="vertical" margin={{ left: 0, right: 20 }}>
               <CartesianGrid stroke={ch.grid} horizontal={false} />
-              <XAxis type="number" domain={[0, 100]} tick={{ fill: ch.axis, fontSize: 11 }} />
+              <XAxis type="number" domain={[0, 100]} tick={{ fill: ch.axis, fontSize: 11 }} tickFormatter={(v: number) => `${v}%`} />
               <YAxis type="category" dataKey="name" width={130} tick={{ fill: ch.axis, fontSize: 11 }} />
-              <Tooltip {...ch.tooltip} />
+              <Tooltip {...ch.tooltip} formatter={(v) => `${v}%`} />
               <Bar dataKey="value" name={t("Search interest")} fill="#6366f1" radius={[0, 6, 6, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
       ))}
-      <SourceNote>{t("Source: Google Trends, last 12 months. 100 = the region with the highest share of searches; this compares interest, not sales.")}</SourceNote>
+      <SourceNote>{t("Source: Google Trends, last 12 months. 100% = the region with the highest share of searches; this compares interest, not sales.")}</SourceNote>
     </Card>
   );
 }
@@ -422,7 +421,6 @@ function CompetitorsTab() {
       <Alert tone="info">{t("Write down what you know about competitors from their public pages, prices and ads. Vendora does not collect data from other websites; it compares their search interest on Google and helps you find how to stand out.")}</Alert>
       <div className="flex flex-wrap gap-2">
         <Button icon={<Plus className="h-4 w-4" />} onClick={() => setEditing({ id: null, form: EMPTY_COMPETITOR })}>{t("Add competitor")}</Button>
-        {items.length > 0 && <Button variant="secondary" icon={<Bot className="h-4 w-4" />} onClick={() => navigate(`/advisor?q=${encodeURIComponent(t("Compare me with my saved competitors and suggest how I can stand out (prices, offer, advertising)."))}`)}>{t("How to stand out (AI advisor)")}</Button>}
       </div>
       {list.isLoading ? <Loading text={t("Loading…")} /> : items.length === 0 ? (
         <EmptyState icon={<Swords className="h-6 w-6" />} title={t("No competitors yet")} text={t("Add the shops or brands you compete with: their prices, positioning and notes.")} />
@@ -506,7 +504,7 @@ function SeasonsTab() {
                     <td className="whitespace-nowrap pr-2 text-sm font-medium">{t(i.label)}</td>
                     {Array.from({ length: 12 }, (_, k) => {
                       const e = i.months!.find((m) => m.month === k + 1)?.effectPct ?? 0;
-                      return <td key={k} title={`${fmtPct(e)}`} className={cx("h-8 rounded text-center tabular-nums", k + 1 === now && "ring-2 ring-brand-500")} style={{ background: color(e) }}>{Math.abs(e) >= 10 ? Math.round(e) : ""}</td>;
+                      return <td key={k} title={`${fmtPct(e)}`} className={cx("h-8 rounded text-center tabular-nums", k + 1 === now && "ring-2 ring-brand-500")} style={{ background: color(e) }}>{Math.abs(e) >= 10 ? `${e > 0 ? "+" : ""}${Math.round(e)}%` : ""}</td>;
                     })}
                   </tr>
                 ))}

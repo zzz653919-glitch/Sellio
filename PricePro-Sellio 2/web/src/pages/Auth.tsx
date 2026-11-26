@@ -17,29 +17,27 @@ function AuthShell({ title, subtitle, children }: { title: string; subtitle?: st
   const { t } = useI18n();
   return (
     <div className="grid min-h-screen lg:grid-cols-2">
-      <div className="relative hidden overflow-hidden bg-gradient-to-br from-brand-700 via-brand-600 to-cyan-600 p-12 text-white lg:flex lg:flex-col lg:justify-between">
-        <div className="absolute -right-24 -top-24 h-96 w-96 rounded-full bg-white/10 blur-3xl" />
-        <div className="absolute -bottom-32 -left-16 h-96 w-96 rounded-full bg-cyan-300/20 blur-3xl" />
+      <div className="glass relative m-4 hidden overflow-hidden rounded-[22px] p-12 lg:flex lg:flex-col lg:justify-between">
         <div className="relative flex items-center gap-2.5 text-xl font-extrabold"><img src="/favicon.svg" alt="" className="h-10 w-10" /> Vendora</div>
         <div className="relative space-y-6">
-          <h2 className="text-4xl font-extrabold leading-tight">{t("Product intelligence for modern sellers")}</h2>
+          <h2 className="text-4xl font-extrabold leading-tight tracking-[-0.03em]">{t("Product intelligence for modern sellers")}</h2>
           {[
             { icon: Sparkles, title: "AI Product Studio", text: "Turn product photos into professional advertisements." },
             { icon: LineChart, title: "Demand Forecast", text: "See where demand for a product is growing — worldwide and by country." },
           ].map(({ icon: Icon, title: ft, text }) => (
             <div key={ft} className="flex gap-3">
-              <span className="h-fit rounded-xl bg-white/15 p-2"><Icon className="h-5 w-5" /></span>
-              <div><p className="font-semibold">{t(ft)}</p><p className="text-sm opacity-85">{t(text)}</p></div>
+              <span className="tile"><Icon className="h-5 w-5" /></span>
+              <div><p className="font-semibold">{t(ft)}</p><p className="text-sm muted">{t(text)}</p></div>
             </div>
           ))}
         </div>
-        <p className="relative text-sm opacity-75">© {new Date().getFullYear()} Vendora</p>
+        <p className="relative text-sm muted">© {new Date().getFullYear()} Vendora</p>
       </div>
       <div className="relative flex items-center justify-center p-6">
         <LanguageSwitch className="absolute right-4 top-4" />
-        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-md">
+        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="card w-full max-w-md p-6 sm:p-8">
           <Logo className="mb-8 lg:hidden" />
-          <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
+          <h1 className="text-[26px] font-extrabold tracking-[-0.03em]">{title}</h1>
           {subtitle && <p className="mt-1 text-sm muted">{subtitle}</p>}
           <div className="mt-8">{children}</div>
         </motion.div>

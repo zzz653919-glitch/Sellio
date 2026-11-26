@@ -118,9 +118,10 @@ test("settings: registration closed, maintenance mode, plan limits", async () =>
 
   const plans = await sa.client.get("/api/admin/plans");
   const free = plans.data.plans.find((p: { key: string }) => p.key === "free");
-  const upd = await sa.client.req("PUT", "/api/admin/plans/free", { name: free.name, priceMonthlyUsd: 0, limits: { generations: 7, forecasts: 12, ai: 55 }, benefits: ["7 AI ads"], enabled: true, password: "secret123" });
+  const upd = await sa.client.req("PUT", "/api/admin/plans/free", { name: free.name, priceMonthlyUsd: 0, limits: { requests: 7, ai: 55 }, requestPeriod: "month", benefits: ["7 requests"], enabled: true, password: "secret123" });
   assert.equal(upd.status, 200, JSON.stringify(upd.data));
   assert.equal((await normal.client.get("/api/dashboard")).data.usage.metrics.ai.limit, 55);
+  assert.equal((await normal.client.get("/api/dashboard")).data.usage.metrics.requests.limit, 7);
   await run("DELETE FROM platform_settings WHERE key = 'plans'");
   resetSettingsCache();
 });
@@ -210,7 +211,17 @@ test("announcements now and scheduled; support conversation; content moderation;
   assert.ok(logins.data.items.some((l: { success: boolean }) => l.success));
   assert.equal((await sa.client.get("/api/admin/studio")).status, 200);
   assert.equal((await sa.client.get("/api/admin/forecast")).status, 200);
+  const refreshAll = await sa.client.post("/api/admin/forecast/refresh-all", {});
+  assert.equal(refreshAll.status, 400); // SerpApi is not connected in tests; the full refresh is covered in the browser test
   assert.equal((await sa.client.get("/api/admin/system")).status, 200);
   assert.equal((await sa.client.get("/api/admin/subscriptions?status=all")).status, 200);
   assert.equal((await sa.client.get("/api/admin/subscriptions/usage")).status, 200);
+  const summary = await sa.client.get("/api/admin/usage/summary");
+  assert.equal(summary.status, 200);
+  assert.equal(summary.data.daily.length, 30);
+  assert.equal(summary.data.timezone, "Asia/Tashkent");
+  const someUser = (await sa.client.get("/api/admin/users")).data.items[0];
+  assert.ok(Array.isArray((await sa.client.get(`/api/admin/users/${someUser.id}`)).data.usageHistory));
+  const tzBad = await sa.client.req("PUT", "/api/admin/settings", { defaultTimezone: "Nowhere/City", password: "secret123" });
+  assert.equal(tzBad.status, 400);
 });

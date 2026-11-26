@@ -214,9 +214,9 @@ function TemplatesTab({ draft, onUse, brand, product, logo }: { draft: Draft; on
             return (
               <Card key={tp.key} className="space-y-2 p-3">
                 <TemplateThumb t={tp} content={sample} palette={pal} fonts={{ heading: (draft.useBrand && brand?.headingFont) || tp.fonts.heading, body: (draft.useBrand && brand?.bodyFont) || tp.fonts.body }} />
-                <div className="flex items-center justify-between gap-2">
-                  <div className="min-w-0"><p className="truncate text-sm font-semibold">{t(tp.name)}</p><p className="text-xs muted">{t(STYLE_LABEL[tp.style])}</p></div>
-                  <Button size="sm" onClick={() => onUse(tp.key)}>{t("Use")}</Button>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0"><p className="text-sm font-semibold leading-tight sm:truncate">{t(tp.name)}</p><p className="text-xs muted">{t(STYLE_LABEL[tp.style])}</p></div>
+                  <Button size="sm" className="w-full sm:w-auto" onClick={() => onUse(tp.key)}>{t("Use")}</Button>
                 </div>
               </Card>
             );

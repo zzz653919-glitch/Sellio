@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, Bot, Briefcase, Download, FileSpreadsheet, FileText, Lightbulb, Plus, Trash2, Upload as UploadIcon } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { Area, Bar, CartesianGrid, ComposedChart, Legend, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { SourceNote, useChartTheme } from "../components/charts";
 import { ErrorAlert, StatCard } from "../components/shared";
@@ -9,6 +9,7 @@ import { Alert, Badge, Button, Card, ConfirmDialog, EmptyState, Field, Input, Pa
 import { del, errorMessage, get, post, api } from "../lib/api";
 import { fmtAmount, fmtCompact, fmtDate, fmtDateTime, fmtMonth, fmtMonthName, fmtNumber, fmtPct } from "../lib/format";
 import { useI18n } from "../lib/i18n";
+import { useQty } from "../lib/qty";
 import { useMsg, type Msg } from "../lib/msg";
 import { buildRows, guessMapping, readFile, TEMPLATE_CSV, type Cell, type CleanRow, type Field as Col, type Mapping } from "../lib/sheet";
 
@@ -213,9 +214,9 @@ function ManualEntry({ onDone }: { onDone: (id: string) => void }) {
 // ------------------------------------------------------------------ overview
 function Overview({ id }: { id: string }) {
   const { t } = useI18n();
+  const qty = useQty();
   const msg = useMsg();
   const ch = useChartTheme();
-  const navigate = useNavigate();
   const q = useQuery({ queryKey: ["business", id], queryFn: () => get<{ dataset: DatasetSummary; analysis: Analysis }>(`/business/datasets/${id}`) });
   if (q.isLoading) return <div className="flex items-center gap-3 p-6 text-sm muted"><Spinner />{t("Analysing your data…")}</div>;
   if (q.error) return <ErrorAlert error={q.error} />;
@@ -230,7 +231,6 @@ function Overview({ id }: { id: string }) {
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm muted">{ds.name} · {fmtDate(a.period.start)} — {fmtDate(a.period.end)} · {t("{n} rows", { n: a.rows })}</p>
-        <Button size="sm" variant="secondary" icon={<Bot className="h-4 w-4" />} onClick={() => navigate(`/advisor?q=${encodeURIComponent(t("Look at my sales data: what are my main risks and what should I do in the next month?"))}`)}>{t("Ask the advisor")}</Button>
       </div>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard icon={<Briefcase className="h-4 w-4" />} label={t("Revenue")} value={fmtCompact(a.totals.revenue)} hint={ds.currency} />
@@ -259,7 +259,7 @@ function Overview({ id }: { id: string }) {
         {a.forecast.status === "ok" ? (
           <p className="text-sm">
             {t("Forecast for the next 3 months")}: <b>{money(a.forecast.totalNext3)}</b> (<Pct v={a.forecast.changePct} /> {t("vs the last 3 months")}) ·{" "}
-            <span className="muted">{t("Back-test error {pct}%", { pct: fmtNumber(a.forecast.smapePct, 1) })} · {t(a.forecast.confidence === "high" ? "High confidence" : a.forecast.confidence === "medium" ? "Medium confidence" : "Low confidence")}</span>
+            <span className="muted">{t("Forecast accuracy")}: {Math.max(0, Math.min(100, Math.round(100 - a.forecast.smapePct)))}%</span>
           </p>
         ) : <p className="text-sm muted">{msg(a.forecast.reason)}</p>}
       </Card>
@@ -285,7 +285,7 @@ function Overview({ id }: { id: string }) {
                 {a.products.map((p) => (
                   <tr key={p.name} className="border-t border-slate-100 dark:border-slate-800">
                     <td className="py-2 font-medium">{p.name}</td><td>{money(p.revenue)}</td><td>{fmtNumber(p.sharePct, 1)}%</td>
-                    {a.hasUnits && <td>{p.units !== null ? fmtNumber(p.units) : "—"}</td>}
+                    {a.hasUnits && <td>{p.units !== null ? qty(p.units) : "—"}</td>}
                     {a.hasCost && <td>{p.grossMarginPct !== null ? `${fmtNumber(p.grossMarginPct, 1)}%` : "—"}</td>}
                     <td><Pct v={p.last3VsPrev3Pct} /></td>
                   </tr>

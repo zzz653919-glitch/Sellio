@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { defaultTimezone, isValidTimezone } from "../../services/quota.js";
 import { z } from "zod";
 import { all, get, run } from "../../db/index.js";
 import { badRequest, notFound } from "../../lib/errors.js";
@@ -119,7 +120,7 @@ userRouter.delete("/sessions/:id", async (req, res) => {
 
 type SettingsRow = {
   theme: string; language: string; notify_inapp: number; notify_email: number;
-  notify_generation: number; notify_forecast: number; notify_price: number; notify_account: number;
+  notify_generation: number; notify_forecast: number; notify_price: number; notify_account: number; timezone: string | null;
 };
 
 async function settingsOf(userId: string) {
@@ -127,6 +128,8 @@ async function settingsOf(userId: string) {
   return {
     theme: s.theme,
     language: s.language,
+    timezone: isValidTimezone(s.timezone) ? s.timezone : null,
+    effectiveTimezone: isValidTimezone(s.timezone) ? s.timezone : defaultTimezone(),
     notifications: {
       inApp: s.notify_inapp === 1,
       email: s.notify_email === 1,
@@ -144,6 +147,8 @@ userRouter.get("/settings", async (req, res) => {
 const settingsSchema = z.object({
   theme: z.enum(["light", "dark", "system"]).optional(),
   language: z.enum(["en", "uz", "ru"]).optional(),
+  /** IANA time zone for daily / monthly limit resets; null = platform default. */
+  timezone: z.string().trim().max(64).refine(isValidTimezone, "Unknown time zone").nullable().optional(),
   notifications: z
     .object({
       inApp: z.boolean(),
@@ -165,9 +170,10 @@ userRouter.patch("/settings", async (req, res) => {
   const user = currentUser(req);
   const input = parseBody(req, settingsSchema);
   const sets: string[] = [];
-  const values: (string | number)[] = [];
+  const values: (string | number | null)[] = [];
   if (input.theme) { sets.push("theme = ?"); values.push(input.theme); }
   if (input.language) { sets.push("language = ?"); values.push(input.language); }
+  if (input.timezone !== undefined) { sets.push("timezone = ?"); values.push(input.timezone); }
   for (const [key, value] of Object.entries(input.notifications ?? {})) {
     if (typeof value === "boolean") { sets.push(`${NOTIFY_COLUMNS[key]} = ?`); values.push(value ? 1 : 0); }
   }

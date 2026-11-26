@@ -92,8 +92,8 @@ function ForecastAdmin({ range }: { range: { from: string; to: string } }) {
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ["admin-forecast", range], queryFn: () => get<Forecast>(`/admin/forecast?from=${range.from}&to=${range.to}`), placeholderData: (p) => p });
   const refresh = useMutation({
-    mutationFn: () => post<{ items: number }>("/admin/forecast/refresh-radar", {}),
-    onSuccess: (d) => { toast("success", t("Market Radar refreshed: {n} products with data.", { n: d.items })); void qc.invalidateQueries({ queryKey: ["admin-forecast"] }); },
+    mutationFn: () => post<{ items: number; cleared: number }>("/admin/forecast/refresh-all", {}),
+    onSuccess: (d) => { toast("success", t("All market data refreshed: {n} products with data. Users' own analyses update when they press \"Update\".", { n: d.items })); void qc.invalidateQueries({ queryKey: ["admin-forecast"] }); },
   });
   if (q.isLoading) return <PageLoader />;
   if (q.error) return <ErrorAlert error={q.error} />;
@@ -115,7 +115,7 @@ function ForecastAdmin({ range }: { range: { from: string; to: string } }) {
             {d.sources.map((s) => <tr key={s.key}><td>{s.name}</td><td>{t(s.kind === "measured" ? "Measured" : "Official statistics")}</td><td><Badge tone={!s.configured ? "slate" : s.lastFailure && (!s.lastSuccess || s.lastFailure > s.lastSuccess) ? "amber" : "green"}>{s.configured ? t("Connected") : t("Not connected")}</Badge></td><td>{s.calls}{s.failed ? <span className="text-rose-600"> ({s.failed} {t("failed")})</span> : null}</td><td>{s.lastSuccess ? timeAgo(s.lastSuccess) : "—"}</td></tr>)}
           </Table>
         </Section>
-        <Section title={t("Data updates")} actions={can("forecast.manage") ? <Button size="sm" variant="secondary" icon={<RefreshCw className="h-4 w-4" />} loading={refresh.isPending} onClick={() => refresh.mutate()}>{t("Refresh Market Radar")}</Button> : undefined}>
+        <Section title={t("Data updates")} actions={can("forecast.manage") ? <Button size="sm" variant="secondary" icon={<RefreshCw className="h-4 w-4" />} loading={refresh.isPending} onClick={() => refresh.mutate()}>{t("Refresh all market data")}</Button> : undefined}>
           {refresh.error && <ErrorAlert error={refresh.error} />}
           <Table head={[t("Data"), t("Cached entries"), t("Newest")]}>
             {Object.entries(d.dataUpdates).map(([k, v]) => <tr key={k}><td>{t(label[k] ?? k)}</td><td>{v.entries}</td><td>{v.newest ? fmtDateTime(v.newest) : "—"}</td></tr>)}
@@ -150,7 +150,7 @@ export default function Services({ which }: { which: "studio" | "forecast" }) {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <h1 className="text-2xl font-bold">{t(which === "studio" ? "AI Product Studio" : "Demand Forecast")}</h1>
+        <h1 className="text-[26px] font-extrabold tracking-[-0.03em]">{t(which === "studio" ? "AI Product Studio" : "Demand Forecast")}</h1>
         <DateRange from={range.from} to={range.to} onChange={setRange} />
       </div>
       {which === "studio" ? <StudioAdmin range={range} /> : <ForecastAdmin range={range} />}

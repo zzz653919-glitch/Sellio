@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
-  ArrowLeft, BarChart3, Bell, CreditCard, FileClock, FolderKanban, LayoutDashboard, LifeBuoy, LineChart, Menu, Settings, ShieldCheck, Sparkles, Users, Wallet, X,
+  ArrowLeft, BarChart3, Bell, CreditCard, FileClock, FolderKanban, LayoutDashboard, LifeBuoy, LineChart, Menu, Moon, Receipt, Settings, ShieldCheck, Sparkles, Sun, Users, Wallet, X,
 } from "lucide-react";
 import { lazy, Suspense, useState, type ReactNode } from "react";
 import { Link, NavLink, Navigate, Route, Routes, useLocation } from "react-router-dom";
@@ -11,6 +11,7 @@ import { ErrorAlert } from "../components/shared";
 import { Alert, Badge, Button, Card, Field, Input, PageLoader, cx } from "../components/ui";
 import { ApiError, post } from "../lib/api";
 import { useAuth } from "../lib/auth";
+import { useTheme } from "../lib/theme";
 import { useI18n } from "../lib/i18n";
 import { ROLE_LABEL, useAdminMe, type AdminMe } from "./ui";
 
@@ -25,6 +26,7 @@ const Support = lazy(() => import("./pages/Support"));
 const Analytics = lazy(() => import("./pages/Analytics"));
 const Security = lazy(() => import("./pages/Security"));
 const SettingsPage = lazy(() => import("./pages/Settings"));
+const PaymentRequests = lazy(() => import("./pages/PaymentRequests"));
 
 const MENU: { to: string; label: string; icon: typeof Users; perm: string; end?: boolean }[] = [
   { to: "/admin", label: "Dashboard", icon: LayoutDashboard, perm: "dashboard.view", end: true },
@@ -33,6 +35,7 @@ const MENU: { to: string; label: string; icon: typeof Users; perm: string; end?:
   { to: "/admin/studio", label: "AI Product Studio", icon: Sparkles, perm: "studio.view" },
   { to: "/admin/forecast", label: "Demand Forecast", icon: LineChart, perm: "forecast.view" },
   { to: "/admin/subscriptions", label: "Subscriptions", icon: CreditCard, perm: "subscriptions.view" },
+  { to: "/admin/payment-requests", label: "Payment requests", icon: Receipt, perm: "payments.review" },
   { to: "/admin/payments", label: "Payments", icon: Wallet, perm: "payments.view" },
   { to: "/admin/notifications", label: "Notifications", icon: Bell, perm: "notifications.manage" },
   { to: "/admin/support", label: "Support", icon: LifeBuoy, perm: "support.manage" },
@@ -74,18 +77,29 @@ function TwoFactorGate({ me, children }: { me: AdminMe; children: ReactNode }) {
 function Sidebar({ me, onNavigate }: { me: AdminMe; onNavigate?: () => void }) {
   const { t } = useI18n();
   return (
-    <div className="flex h-full flex-col gap-4 p-4">
-      <div className="flex items-center gap-2 px-2"><Logo /><Badge tone="red">{t("Admin")}</Badge></div>
-      <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto" aria-label={t("Admin menu")}>
+    <div className="flex h-full flex-col gap-2 px-3 pb-3 pt-4">
+      <div className="flex items-center gap-2 px-2 pb-2"><Logo /><Badge tone="violet">{t("Admin")}</Badge></div>
+      <nav className="-mx-1 flex flex-1 flex-col gap-0.5 overflow-y-auto px-1" aria-label={t("Admin menu")}>
+        <p className="nav-cap">{t("Admin panel")}</p>
         {MENU.filter((m) => me.permissions.includes(m.perm)).map(({ to, label, icon: Icon, end }) => (
           <NavLink key={to} to={to} end={end} onClick={onNavigate}
-            className={({ isActive }) => cx("flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition", isActive ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900" : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800")}>
-            <Icon className="h-4 w-4" /><span>{t(label)}</span>
+            className={({ isActive }) => cx("nav-item", isActive && "is-active")}>
+            <Icon className="h-[19px] w-[19px] flex-none" /><span className="truncate">{t(label)}</span>
           </NavLink>
         ))}
       </nav>
-      <Link to="/" className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"><ArrowLeft className="h-4 w-4" />{t("Back to Vendora")}</Link>
+      <Link to="/" className="nav-item border border-[var(--v-line-soft)] bg-[var(--v-glass-2)]"><ArrowLeft className="h-[19px] w-[19px]" />{t("Back to Vendora")}</Link>
     </div>
+  );
+}
+
+function ThemeButton() {
+  const { t } = useI18n();
+  const { resolved, setTheme } = useTheme();
+  return (
+    <button onClick={() => setTheme(resolved === "dark" ? "light" : "dark")} className="grid h-10 w-10 place-items-center rounded-xl text-[var(--v-muted)] hover:bg-[var(--v-glass-2)] hover:text-[var(--v-text)]" aria-label={t("Toggle theme")} title={t("Toggle theme")}>
+      {resolved === "dark" ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+    </button>
   );
 }
 
@@ -107,26 +121,27 @@ export default function AdminApp() {
   }
   const m = me.data!;
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 lg:block"><Sidebar me={m} /></aside>
+    <div className="min-h-screen lg:grid lg:grid-cols-[248px_minmax(0,1fr)] lg:gap-4 lg:p-4">
+      <aside className="glass sticky top-4 z-30 hidden h-[calc(100vh-32px)] rounded-[22px] lg:block"><Sidebar me={m} /></aside>
       {open && (
-        <div className="fixed inset-0 z-40 bg-slate-950/50 lg:hidden" onClick={() => setOpen(false)}>
-          <aside className="relative h-full w-72 bg-white dark:bg-slate-900" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-40 bg-[#030612]/55 backdrop-blur-sm lg:hidden" onClick={() => setOpen(false)}>
+          <aside className="absolute inset-y-3 left-3 w-[280px] rounded-[22px] border border-[var(--v-line)] bg-[var(--v-pop)] shadow-[var(--v-drop)] backdrop-blur-2xl" onClick={(e) => e.stopPropagation()}>
             <button className="absolute right-3 top-3 rounded-lg p-2" onClick={() => setOpen(false)} aria-label={t("Close menu")}><X className="h-5 w-5" /></button>
             <Sidebar me={m} onNavigate={() => setOpen(false)} />
           </aside>
         </div>
       )}
-      <div className="lg:pl-64">
-        <header className="sticky top-0 z-20 flex h-14 items-center gap-2 border-b border-slate-200 bg-white/85 px-3 backdrop-blur dark:border-slate-800 dark:bg-slate-950/85 sm:px-6">
-          <button className="rounded-lg p-2 lg:hidden" onClick={() => setOpen(true)} aria-label={t("Open menu")}><Menu className="h-5 w-5" /></button>
-          <p className="font-semibold">{t("Admin panel")}</p>
+      <div className="flex min-w-0 flex-col gap-4 px-3 pb-6 pt-3 lg:p-0">
+        <header className="glass sticky top-3 z-20 flex min-h-[58px] items-center gap-2 rounded-[20px] py-2 pl-3 pr-3 lg:top-4 lg:min-h-16 lg:rounded-[22px] lg:pl-5">
+          <button className="grid h-10 w-10 place-items-center rounded-xl hover:bg-[var(--v-glass-2)] lg:hidden" onClick={() => setOpen(true)} aria-label={t("Open menu")}><Menu className="h-5 w-5" /></button>
+          <p className="truncate whitespace-nowrap text-[15px] font-bold">{t("Admin panel")}</p>
           <div className="flex-1" />
-          <LanguageSwitch />
+          <LanguageSwitch className="shrink-0" />
+          <ThemeButton />
           <span className="hidden text-sm sm:inline">{user?.firstName}</span>
-          <Badge tone="violet">{t(ROLE_LABEL[m.role])}</Badge>
+          <span className="hidden sm:block"><Badge tone="violet">{t(ROLE_LABEL[m.role])}</Badge></span>
         </header>
-        <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
+        <main className="mx-auto w-full max-w-[1400px]">
           <TwoFactorGate me={m}>
             <ErrorBoundary resetKey={location.pathname}>
               <Suspense fallback={<PageLoader />}>
@@ -138,6 +153,7 @@ export default function AdminApp() {
                   <Route path="studio" element={<Guard me={m} perm="studio.view"><Services which="studio" /></Guard>} />
                   <Route path="forecast" element={<Guard me={m} perm="forecast.view"><Services which="forecast" /></Guard>} />
                   <Route path="subscriptions" element={<Guard me={m} perm="subscriptions.view"><Billing which="subscriptions" /></Guard>} />
+                  <Route path="payment-requests" element={<Guard me={m} perm="payments.review"><PaymentRequests /></Guard>} />
                   <Route path="payments" element={<Guard me={m} perm="payments.view"><Billing which="payments" /></Guard>} />
                   <Route path="notifications" element={<Guard me={m} perm="notifications.manage"><Notifications /></Guard>} />
                   <Route path="support" element={<Guard me={m} perm="support.manage"><Support /></Guard>} />

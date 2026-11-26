@@ -2,11 +2,13 @@ import { useQuery } from "@tanstack/react-query";
 import { BadgeCheck, CalendarDays, CreditCard, Mail, MailWarning, Pencil, User as UserIcon } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Avatar } from "../components/Layout";
-import { Badge, Button, Card, PageHeader, PageLoader, Progress } from "../components/ui";
+import { UsageMeter } from "../components/shared";
+import { Badge, Button, Card, PageHeader, PageLoader } from "../components/ui";
 import { get } from "../lib/api";
 import { fmtDate } from "../lib/format";
 import { useI18n } from "../lib/i18n";
 import type { Usage, User } from "../lib/types";
+import { PLAN_NAME, planTone } from "../lib/types";
 
 export default function Profile() {
   const { t } = useI18n();
@@ -25,7 +27,7 @@ export default function Profile() {
           <h2 className="mt-4 text-xl font-bold">{user.firstName} {user.lastName}</h2>
           <p className="text-sm muted">{user.email}</p>
           <div className="mt-3 flex justify-center gap-2">
-            <Badge tone={user.plan === "pro" ? "violet" : "slate"}>{user.plan === "pro" ? "Pro" : "Free"}</Badge>
+            <Badge tone={planTone(user.plan)}>{PLAN_NAME[user.plan]}</Badge>
             {user.emailVerified ? <Badge tone="green"><BadgeCheck className="h-3 w-3" />{t("Verified")}</Badge> : <Badge tone="amber"><MailWarning className="h-3 w-3" />{t("Not verified")}</Badge>}
           </div>
         </Card>
@@ -37,7 +39,7 @@ export default function Profile() {
               { icon: UserIcon, label: "Last name", value: user.lastName },
               { icon: Mail, label: "Email address", value: user.email },
               { icon: CalendarDays, label: "Account created", value: fmtDate(user.createdAt) },
-              { icon: CreditCard, label: "Subscription status", value: `${user.plan === "pro" ? "Pro" : "Free"} · ${t(subscription?.status ?? "active")}` },
+              { icon: CreditCard, label: "Subscription status", value: `${PLAN_NAME[user.plan]} · ${t(subscription?.status ?? "active")}` },
             ].map(({ icon: Icon, label, value }) => (
               <div key={label} className="rounded-xl bg-slate-50 p-3 dark:bg-slate-800/60">
                 <dt className="flex items-center gap-1.5 text-xs muted"><Icon className="h-3.5 w-3.5" />{t(label)}</dt>
@@ -45,15 +47,8 @@ export default function Profile() {
               </div>
             ))}
           </dl>
-          <h3 className="mb-3 mt-6 font-semibold">{t("Usage this month")}</h3>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {([["generations", "Ad generations"], ["forecasts", "Forecasts"], ["ai", "AI text requests"]] as const).map(([k, label]) => (
-              <div key={k}>
-                <div className="mb-1 flex justify-between text-sm"><span>{t(label)}</span><span className="muted">{usage.metrics[k].used} / {usage.metrics[k].limit}</span></div>
-                <Progress value={usage.metrics[k].used} max={usage.metrics[k].limit} />
-              </div>
-            ))}
-          </div>
+          <h3 className="mb-3 mt-6 font-semibold">{t("Your requests")}</h3>
+          <UsageMeter usage={usage} />
           <div className="mt-6 flex flex-wrap gap-2">
             <Link to="/subscription"><Button variant="secondary" icon={<CreditCard className="h-4 w-4" />}>{t("Manage subscription")}</Button></Link>
             <Link to="/settings?tab=security"><Button variant="secondary">{t("Account security")}</Button></Link>

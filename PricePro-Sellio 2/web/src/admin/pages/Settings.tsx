@@ -7,6 +7,7 @@ import { Alert, Badge, Button, Field, Input, PageLoader, Select, Toggle, useToas
 import { get, post, put } from "../../lib/api";
 import { timeAgo } from "../../lib/format";
 import { useI18n } from "../../lib/i18n";
+import { timezoneOptions } from "../../lib/timezones";
 import { ConfirmWithPassword, Section, useAdminMe, useCan } from "../ui";
 
 function Qr({ text }: { text: string }) {
@@ -73,7 +74,7 @@ function TwoFactor() {
   );
 }
 
-type S = { registrationOpen: boolean; maintenance: { enabled: boolean; message: string }; requireAdmin2fa: boolean; accountEmails: boolean; ai: { imageModel: string | null; textProvider: "gemini" | "openai" | null; openaiTextModel: string | null; geminiModel: string | null } };
+type S = { registrationOpen: boolean; maintenance: { enabled: boolean; message: string }; requireAdmin2fa: boolean; accountEmails: boolean; defaultTimezone: string; manualPayment: { enabled: boolean; cardNumber: string; cardholder: string; bank: string; cardType: string; uzsPerUsd: number }; ai: { imageModel: string | null; textProvider: "gemini" | "openai" | null; openaiTextModel: string | null; geminiModel: string | null } };
 type Sys = { platform: string; database: { ok: boolean; driver: string; error: string | null }; storage: { ok: boolean; driver: string }; email: { ok: boolean; settings: unknown }; integrations: { name: string; configured: boolean; envVar: string; lastSuccess: string | null; lastFailure: string | null }[] };
 
 function PlatformSettings() {
@@ -92,6 +93,7 @@ function PlatformSettings() {
   const s = draft ?? q.data!.settings;
   const edit = (patch: Partial<S>) => setDraft({ ...s, ...patch });
   const ai = (patch: Partial<S["ai"]>) => edit({ ai: { ...s.ai, ...patch } });
+  const mp = (patch: Partial<S["manualPayment"]>) => edit({ manualPayment: { ...s.manualPayment, ...patch } });
   return (
     <Section title={t("Platform settings")}>
       <div className="space-y-4">
@@ -100,6 +102,20 @@ function PlatformSettings() {
         {s.maintenance.enabled && <Field label={t("Message for users")}><Input value={s.maintenance.message} maxLength={300} onChange={(e) => edit({ maintenance: { ...s.maintenance, message: e.target.value } })} placeholder={t("We are improving Vendora. Please come back in a few minutes.")} /></Field>}
         <Toggle checked={s.requireAdmin2fa} onChange={(v) => edit({ requireAdmin2fa: v })} label={t("Require two-factor authentication for all administrators")} />
         <Toggle checked={s.accountEmails} onChange={(v) => edit({ accountEmails: v })} label={t("Send notification emails to users")} description={t("Verification and password emails are always sent.")} />
+        <Field label={t("Default time zone for limit resets")} hint={t("Used for users who have not chosen their own time zone. Each plan's reset schedule (daily or monthly) is set in Subscriptions → Plans.")}>
+          <Select value={s.defaultTimezone} onChange={(e) => edit({ defaultTimezone: e.target.value })} options={timezoneOptions(s.defaultTimezone).map((z) => ({ value: z, label: z.replace(/_/g, " ") }))} />
+        </Field>
+        <div className="space-y-3 rounded-xl border border-slate-200 p-4 dark:border-slate-800">
+          <p className="text-sm font-semibold">{t("Card payments")}</p>
+          <Toggle checked={s.manualPayment.enabled} onChange={(v) => mp({ enabled: v })} label={t("Users can pay by card and upload a receipt")} />
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Field label={t("Card number")}><Input value={s.manualPayment.cardNumber} inputMode="numeric" maxLength={16} onChange={(e) => mp({ cardNumber: e.target.value.replace(/\D/g, "") })} /></Field>
+            <Field label={t("Cardholder")}><Input value={s.manualPayment.cardholder} onChange={(e) => mp({ cardholder: e.target.value })} /></Field>
+            <Field label={t("Bank")}><Input value={s.manualPayment.bank} onChange={(e) => mp({ bank: e.target.value })} /></Field>
+            <Field label={t("Card type")}><Input value={s.manualPayment.cardType} onChange={(e) => mp({ cardType: e.target.value })} /></Field>
+            <Field label={t("so'm per 1 USD")} hint={t("Amounts in so'm = plan price in USD × this rate, rounded up to 1,000.")}><Input type="number" min={1000} value={s.manualPayment.uzsPerUsd} onChange={(e) => mp({ uzsPerUsd: Number(e.target.value) })} /></Field>
+          </div>
+        </div>
         <div className="space-y-3 rounded-xl border border-slate-200 p-4 dark:border-slate-800">
           <p className="text-sm font-semibold">{t("AI models")}</p>
           <p className="text-xs muted">{t("Leave empty to use the server default. API keys are only kept in Vercel environment variables and are never shown here.")}</p>
@@ -158,7 +174,7 @@ export default function SettingsPage({ onlyTwoFactor }: { onlyTwoFactor?: boolea
   if (onlyTwoFactor) return <TwoFactor />;
   return (
     <div className="space-y-5">
-      <div><h1 className="text-2xl font-bold">{t("Settings")}</h1><p className="text-sm muted">{t("Your admin security and platform settings. Every change is recorded in the audit log.")}</p></div>
+      <div><h1 className="text-[26px] font-extrabold tracking-[-0.03em]">{t("Settings")}</h1><p className="text-sm muted">{t("Your admin security and platform settings. Every change is recorded in the audit log.")}</p></div>
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
         <div className="space-y-5"><TwoFactor />{can("settings.manage") ? <PlatformSettings /> : <Alert tone="info">{t("Only a Super Admin can change platform settings.")}</Alert>}</div>
         {can("dashboard.view") && <SystemStatus />}

@@ -104,7 +104,7 @@ test("growth workflow: opportunity → AI directions → ads → campaign → re
   assert.equal(opp.mine.results.roas, 3);
   assert.equal((await other.client.get("/api/intel/opportunities")).data.items.find((o: { query: string }) => o.query === "вентилятор").mine, null);
 
-  // AI campaign plans and the advisor see the measured results.
+  // AI campaign plans see the measured results.
   ai(true);
   const prompts: string[] = [];
   setLlmFetchForTests((async (_u: string, init: RequestInit) => {
@@ -115,9 +115,6 @@ test("growth workflow: opportunity → AI directions → ads → campaign → re
   try {
     assert.equal((await client.post(`/api/campaigns/${campaign.id}/plan`, {})).status, 200);
     assert.match(prompts[0], /Past campaign results: .*instagram.*"roas":4/);
-    assert.equal((await client.post("/api/advisor/messages", { message: "What worked?" })).status, 201);
-    assert.match(prompts[1], /myCampaignResults/);
-    assert.match(prompts[1], /myGrowthPlans/);
   } finally { ai(false); }
   assert.equal((await client.del(`/api/growth/${id}`)).status, 200);
 });

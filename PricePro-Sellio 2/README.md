@@ -80,7 +80,7 @@ NODE_ENV=production APP_URL=https://your-domain npm start
 
 The server serves the built web app and the API on one port. Put it behind HTTPS (set `TRUST_PROXY=1` behind a proxy), keep `server/data/` on a persistent disk, and configure SMTP (required: sign-in codes are sent by email).
 
-Stripe: create a recurring Price for Pro and set `STRIPE_PRICE_PRO`. Add a webhook endpoint `https://your-domain/api/webhooks/stripe` for `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted` and `invoice.paid`, and set `STRIPE_WEBHOOK_SECRET`.
+Stripe: create recurring Prices and set `STRIPE_PRICE_PRO` (Pro, monthly), `STRIPE_PRICE_MAX_MONTHLY` (Max, $20 per month) and `STRIPE_PRICE_MAX_YEARLY` (Max, $200 per year). Add a webhook endpoint `https://your-domain/api/webhooks/stripe` for `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted` and `invoice.paid`, and set `STRIPE_WEBHOOK_SECRET`.
 
 ## Deploy to Vercel
 
