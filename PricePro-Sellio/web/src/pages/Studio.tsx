@@ -177,9 +177,10 @@ export default function Studio() {
   const currentId = params.get("generation");
   const tab = params.get("tab") === "cards" ? "cards" : "ads";
 
-  const options = useQuery({ queryKey: ["studio-options"], queryFn: () => get<StudioOptions>("/studio/options") });
-  const uploads = useQuery({ queryKey: ["uploads"], queryFn: () => get<{ uploads: Upload[] }>("/user/uploads").then((r) => r.uploads) });
-  const history = useQuery({ queryKey: ["generations"], queryFn: () => get<{ items: Generation[]; total: number }>("/studio/generations?limit=24") });
+  const onAds = tab === "ads";
+  const options = useQuery({ queryKey: ["studio-options"], queryFn: () => get<StudioOptions>("/studio/options"), enabled: onAds });
+  const uploads = useQuery({ queryKey: ["uploads"], queryFn: () => get<{ uploads: Upload[] }>("/user/uploads").then((r) => r.uploads), enabled: onAds });
+  const history = useQuery({ queryKey: ["generations"], queryFn: () => get<{ items: Generation[]; total: number }>("/studio/generations?limit=24"), enabled: onAds });
 
   const [selected, setSelected] = useState<Upload | null>(null);
   const [dragging, setDragging] = useState(false);

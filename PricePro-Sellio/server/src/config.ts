@@ -29,7 +29,9 @@ const EnvSchema = z.object({
   STORAGE_DIR: z.string().default(path.join(serverRoot, "data", "storage")),
   SESSION_TTL_DAYS: z.coerce.number().int().positive().default(30),
   // Vercel always sits behind its own proxy, which sets X-Forwarded-For.
-  TRUST_PROXY: z.coerce.number().int().min(0).default(process.env.VERCEL ? 1 : 0),
+  // On Vercel the app always sits behind Vercel's proxy: without this every visitor would look like one
+  // IP address (rate limits shared by everybody), so at least 1 is used there even if 0 was configured.
+  TRUST_PROXY: z.coerce.number().int().min(0).default(0).transform((v) => (process.env.VERCEL ? Math.max(1, v) : v)),
 
   // Email (SMTP). Without SMTP_HOST in development, emails are written to the server log.
   SMTP_HOST: optional,

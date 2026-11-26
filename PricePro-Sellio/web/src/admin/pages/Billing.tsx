@@ -78,7 +78,7 @@ function Subscriptions() {
             <Section key={p.key} title={`${p.name} · $${p.priceMonthlyUsd}/${t("month")}${p.priceYearlyUsd !== null ? ` · $${p.priceYearlyUsd}/${t("year")}` : ""}`} actions={can("plans.manage") ? <button type="button" className="inline-flex items-center gap-1 text-sm text-brand-600 hover:underline" onClick={() => setEditing(p)}><Pencil className="h-4 w-4" />{t("Edit")}</button> : undefined}>
               <p className="text-sm">{t("{n} users", { n: fmtNumber(p.users) })} · <Badge tone={p.enabled ? "green" : "slate"}>{p.enabled ? t("Available") : t("Disabled")}</Badge></p>
               <Table head={[t("AI ad images"), t("Demand forecasts"), t("Reset schedule"), t("AI text requests")]}><tr><td>{p.limits.requests}</td><td>{p.limits.forecasts ?? p.limits.requests}</td><td>{p.requestPeriod === "hours" ? t("Every {h} hours (rolling)", { h: p.periodHours ?? 1 }) : t(p.requestPeriod === "day" ? "Every day at 00:00" : "1st of every month at 00:00")}</td><td>{p.limits.ai} / {t("month")}</td></tr></Table>
-              <ul className="list-disc pl-5 text-sm muted">{p.benefits.map((b) => <li key={b}>{b}</li>)}</ul>
+              <ul className="list-disc pl-5 text-sm muted">{p.benefits.map((b) => <li key={b}>{t(b)}</li>)}</ul>
             </Section>
           ))}
         </div>

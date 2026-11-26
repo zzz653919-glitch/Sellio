@@ -231,7 +231,7 @@ function Stage({ doc, selected, onSelect, set, commit, tick, onEditText, onRepla
                   cursor: `${dir}-resize`,
                 }} />
             ))}
-            {sel.type === "image" && (
+            {sel.type === "image" && !parseIcon(sel.src) && (
               <button type="button" data-testid="replace-image" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onReplaceImage(sel.id); }}
                 className="absolute left-1/2 top-1/2 inline-flex -translate-x-1/2 -translate-y-1/2 items-center gap-1.5 whitespace-nowrap rounded-full bg-white/95 px-3 py-1.5 text-xs font-bold text-slate-900 shadow-lg ring-1 ring-black/10 hover:bg-white">
                 <Upload className="h-3.5 w-3.5" />{replaceLabel}
@@ -264,6 +264,16 @@ const SHAPES: { kind: ShapeKind; label: string }[] = [
   { kind: "diamond", label: "Diamond" }, { kind: "arch", label: "Arch" }, { kind: "blob", label: "Blob" }, { kind: "line", label: "Line" },
   { kind: "arrow", label: "Arrow" }, { kind: "plus", label: "Plus" }, { kind: "dots", label: "Dots" }, { kind: "stripes", label: "Stripes" }, { kind: "wave", label: "Wave" },
 ];
+const SHAPE_LABEL = Object.fromEntries(SHAPES.map((x) => [x.kind, x.label])) as Record<ShapeKind, string>;
+/** Name shown in the layer list: the element's own name, otherwise what it is (Rectangle, Circle…, a glow is "Glow"). */
+function layerName(e: El, t: (k: string) => string) {
+  if (e.type === "image") return parseIcon(e.src) ? `${t("Icon")}: ${parseIcon(e.src)!.name}` : t(e.name ?? "Picture");
+  if (e.type !== "shape") return t(e.name ?? "Shape");
+  if (e.name && e.name !== "Shape") return t(e.name);
+  if (e.shape === "circle" && typeof e.fill !== "string" && e.fill.type === "radial") return t("Glow");
+  if (e.shape === "halfcircle") return t("Half circle");
+  return t(SHAPE_LABEL[e.shape] ?? "Shape");
+}
 function newShape(kind: ShapeKind, color: string): ShapeEl {
   const keep = ["circle", "ring", "star", "burst", "heart", "sparkle", "plus"].includes(kind);
   const size = kind === "line" ? { w: 0.3, h: 0.008 } : kind === "arrow" ? { w: 0.22, h: 0.08 } : kind === "dots" || kind === "stripes" ? { w: 0.3, h: 0.3 } : kind === "wave" ? { w: 1, h: 0.2 } : { w: 0.2, h: 0.2 };
@@ -604,7 +614,7 @@ export default function Editor({ templateId = "", photo, onBack, favorite = fals
           <div className="card p-3 sm:p-5" style={{ background: "repeating-conic-gradient(rgba(148,163,184,.12) 0% 25%, transparent 0% 50%) 50% / 20px 20px" }}>
             <Stage doc={doc} selected={selected} onSelect={(id) => { setSelected(id); if (id) setTab("element"); }} set={set} commit={commit} tick={tick}
               onEditText={(id) => { setSelected(id); setTab("element"); setTimeout(() => textRef.current?.focus(), 50); }}
-              onReplaceImage={(id) => { setSelected(id); pickFile(id); }}
+              onReplaceImage={(id) => { setSelected(id); const el = doc.els.find((e) => e.id === id); if (el?.type === "image" && parseIcon(el.src)) setTab("element"); else pickFile(id); }}
               onDropFile={(f, id) => void onFile(f, id ?? productImage?.id ?? "new")} />
           </div>
           <div className="flex flex-wrap gap-2">
@@ -725,7 +735,7 @@ export default function Editor({ templateId = "", photo, onBack, favorite = fals
                 <li key={e.id} className={cx("flex items-center gap-2 rounded-xl border px-2 py-1.5 text-xs", e.id === selected ? "border-[var(--v-sky)] bg-[var(--v-sky-soft)]" : "border-[var(--v-line)]")}>
                   <button type="button" className="flex min-w-0 flex-1 items-center gap-2 text-left" onClick={() => { setSelected(e.id); setTab("element"); }}>
                     {e.type === "text" ? <Type className="h-3.5 w-3.5 shrink-0" /> : e.type === "image" && parseIcon(e.src) ? <Shapes className="h-3.5 w-3.5 shrink-0" /> : e.type === "image" ? <ImagePlus className="h-3.5 w-3.5 shrink-0" /> : <Layers className="h-3.5 w-3.5 shrink-0" />}
-                    <span className="truncate">{e.type === "text" ? e.text.replace(/\n/g, " ") || t("Text") : t(e.name ?? (e.type === "image" ? "Picture" : "Shape"))}</span>
+                    <span className="truncate">{e.type === "text" ? e.text.replace(/\n/g, " ") || t("Text") : layerName(e, t)}</span>
                   </button>
                   <button type="button" title={t("Bring forward")} onClick={() => move(e.id, 1)} className="p-1 muted hover:text-current"><ArrowUp className="h-3.5 w-3.5" /></button>
                   <button type="button" title={t("Send backward")} onClick={() => move(e.id, -1)} className="p-1 muted hover:text-current"><ArrowDown className="h-3.5 w-3.5" /></button>

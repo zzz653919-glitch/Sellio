@@ -2,7 +2,6 @@
  * Draws a design document on a canvas. The same function draws the editor preview, the gallery
  * thumbnails and the exported file, so what you see is exactly what you download.
  */
-import { artSvg } from "./art";
 import { iconSvg, parseIcon } from "./icons";
 import type { Doc, El, Fill, ImageEl, ShapeEl, TextEl } from "./types";
 
@@ -12,9 +11,16 @@ type Ctx = CanvasRenderingContext2D;
 const images = new Map<string, HTMLImageElement | "loading" | "error">();
 const waiters = new Map<string, Promise<void>>();
 
+/** The built-in illustrations (≈250 KB) are loaded only when a design uses one. */
+let artMod: typeof import("./art") | null = null;
+let artLoading: Promise<void> | null = null;
+const loadArt = () => (artLoading ??= import("./art").then((m) => { artMod = m; }));
+
 /** URL an image source loads from (built-in art becomes an SVG data URL). */
 export function sourceUrl(src: string): string | null {
   if (src.startsWith("art:")) {
+    if (!artMod) return null;
+    const { artSvg } = artMod;
     const [key, ...opts] = src.slice(4).split("|");
     const o: Record<string, string> = {};
     for (const p of opts) { const i = p.indexOf("="); if (i > 0) o[p.slice(0, i)] = p.slice(i + 1); }
@@ -34,6 +40,7 @@ export function loadSource(src: string): Promise<void> {
   if (have && have !== "loading") return Promise.resolve();
   const w = waiters.get(src);
   if (w) return w;
+  if (src.startsWith("art:") && !artMod) return loadArt().then(() => loadSource(src));
   const url = sourceUrl(src);
   if (!url) { images.set(src, "error"); return Promise.resolve(); }
   images.set(src, "loading");

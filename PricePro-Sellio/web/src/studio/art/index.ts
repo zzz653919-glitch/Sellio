@@ -16,5 +16,4 @@ export function artSvg(key: string, opts: ArtOpts = {}): string | null {
   }
 }
 
-/** "art:key|opt=value" source string for templates. */
-export const art = (key: string, opts: ArtOpts = {}) => ["art:" + key, ...Object.entries(opts).map(([k, v]) => `${k}=${v}`)].join("|");
+export { art } from "./key";

@@ -28,52 +28,152 @@ function transparentShare(c: HTMLCanvasElement) {
 }
 
 /**
- * Remove a plain background (white, grey or any single colour around the product).
- * Works from the edges inwards, so the product itself keeps its colours even if they are similar.
- * Returns null when the background is not plain (a real scene): such photos are framed instead.
+ * Remove the background around a product: white, one colour, or a smooth gradient / vignette
+ * (light corners turning dark behind the product, studio "sweeps").
+ *
+ * How: on a small, slightly blurred copy the background grows inwards from the picture's edges, pixel by
+ * pixel, as long as each next pixel looks like its neighbour — so a gradient is followed all the way, and
+ * the growth stops at the product's outline (a sharp edge). Small leftovers (a caption printed on the
+ * background) are dropped, the mask is scaled up with soft edges and pulled in a little against halos.
+ * Returns null when this does not look like a product on a background (a real scene, or no clear outline):
+ * such photos are used as they are (framed), never cut badly.
  */
+export const bgDebug: Record<string, number> = {};
 export function removePlainBackground(src: HTMLCanvasElement, force = false): HTMLCanvasElement | null {
-  const w = src.width, h = src.height;
-  const ctx = src.getContext("2d", { willReadFrequently: true })!;
-  const img = ctx.getImageData(0, 0, w, h);
-  const d = img.data;
-  // Background colour = median of the border pixels.
+  const W = src.width, H = src.height;
+  const k = Math.min(1, 640 / Math.max(W, H));
+  const w = Math.max(8, Math.round(W * k)), h = Math.max(8, Math.round(H * k));
+  const N = w * h;
+  const small = canvasOf(w, h);
+  const sx = small.getContext("2d", { willReadFrequently: true })!;
+  sx.filter = "blur(1px)"; // smooths noise and JPEG blocks (ignored where unsupported)
+  sx.drawImage(src, 0, 0, w, h);
+  const d = sx.getImageData(0, 0, w, h).data;
+  const diff = (p: number, q: number) => Math.abs(d[p * 4] - d[q * 4]) + Math.abs(d[p * 4 + 1] - d[q * 4 + 1]) + Math.abs(d[p * 4 + 2] - d[q * 4 + 2]);
+
+  // background colour at the edges (median) — pixels close to it are background wherever they are
   const border: number[] = [];
-  const step = Math.max(1, Math.floor((w + h) / 400));
-  for (let x = 0; x < w; x += step) border.push(x, (h - 1) * w + x);
-  for (let y = 0; y < h; y += step) border.push(y * w, y * w + w - 1);
-  const ch = (k: number) => border.map((p) => d[p * 4 + k]).sort((a, b) => a - b)[Math.floor(border.length / 2)];
-  const bg = [ch(0), ch(1), ch(2)];
-  const dist = (p: number) => Math.abs(d[p * 4] - bg[0]) + Math.abs(d[p * 4 + 1] - bg[1]) + Math.abs(d[p * 4 + 2] - bg[2]);
-  const near = border.filter((p) => dist(p) < 60).length / border.length;
-  if (!force && near < 0.8) return null; // not a plain background
-  const tol = force ? 90 : 60;
-  // Flood fill from every border pixel that looks like the background.
-  const seen = new Uint8Array(w * h);
+  for (let x = 0; x < w; x++) border.push(x, (h - 1) * w + x);
+  for (let y = 1; y < h - 1; y++) border.push(y * w, y * w + w - 1);
+  // walking around the edge of a product photo the colour changes smoothly; a real scene has many jumps
+  const ring: number[] = [];
+  for (let x = 0; x < w; x++) ring.push(x);
+  for (let y = 1; y < h; y++) ring.push(y * w + w - 1);
+  for (let x = w - 2; x >= 0; x--) ring.push((h - 1) * w + x);
+  for (let y = h - 2; y > 0; y--) ring.push(y * w);
+  let jumps = 0;
+  for (let i = 0; i < ring.length; i++) if (diff(ring[i], ring[(i + 3) % ring.length]) > 70) { jumps++; i += 3; }
+  bgDebug.jumps = jumps;
+  if (!force && jumps > 12) return null;
+  const med = [0, 1, 2].map((c) => border.map((p) => d[p * 4 + c]).sort((a, b) => a - b)[border.length >> 1]);
+  const toMed = (p: number) => Math.abs(d[p * 4] - med[0]) + Math.abs(d[p * 4 + 1] - med[1]) + Math.abs(d[p * 4 + 2] - med[2]);
+
+  // One-colour background (the edge is nearly the same colour everywhere): a pixel is background when it is
+  // close to that colour — precise enough for a white product on light grey. Otherwise (gradient, vignette)
+  // the background is followed step by step.
+  const spread = border.map(toMed).sort((a, b) => a - b)[Math.floor(border.length * 0.95)];
+  const uniform = spread < 30;
+  const UNI = Math.max(force ? 40 : 20, Math.min(force ? 70 : 42, spread * 3));
+  bgDebug.spread = spread;
+  // grow the background from the edges
+  const STEP = force ? 24 : 16, NEAR = force ? 60 : 36, SEED = force ? 150 : 110;
+  const bg = new Uint8Array(N);
+  // each background pixel remembers the colour of the background it grew from (a slowly moving average), so
+  // a smooth gradient is followed but a soft, low-contrast product edge is not crossed
+  const ref = new Float32Array(N * 3);
+  const TRAIL = force ? 60 : 32;
   const stack: number[] = [];
-  for (const p of border) if (dist(p) < tol && !seen[p]) { seen[p] = 1; stack.push(p); }
+  for (const p of border) if (!bg[p] && (d[p * 4 + 3] < 128 || toMed(p) < SEED)) { bg[p] = 1; ref[p * 3] = d[p * 4]; ref[p * 3 + 1] = d[p * 4 + 1]; ref[p * 3 + 2] = d[p * 4 + 2]; stack.push(p); }
   while (stack.length) {
     const p = stack.pop()!;
-    const x = p % w, y = (p - x) / w;
-    const nb = [x > 0 ? p - 1 : -1, x < w - 1 ? p + 1 : -1, y > 0 ? p - w : -1, y < h - 1 ? p + w : -1];
-    for (const q of nb) if (q >= 0 && !seen[q] && dist(q) < tol) { seen[q] = 1; stack.push(q); }
-  }
-  let removed = 0;
-  for (let p = 0; p < w * h; p++) if (seen[p]) { d[p * 4 + 3] = 0; removed++; }
-  if (!force && (removed < w * h * 0.08 || removed > w * h * 0.97)) return null; // nothing sensible to cut
-  // Soft edge: pixels touching the removed background get partly transparent.
-  for (let p = 0; p < w * h; p++) {
-    if (seen[p]) continue;
     const x = p % w;
-    const touching = (x > 0 && seen[p - 1]) || (x < w - 1 && seen[p + 1]) || (p >= w && seen[p - w]) || (p < w * (h - 1) && seen[p + w]);
-    if (touching) d[p * 4 + 3] = Math.min(d[p * 4 + 3], 150);
+    if (x > 0) visit(p, p - 1);
+    if (x < w - 1) visit(p, p + 1);
+    if (p >= w) visit(p, p - w);
+    if (p < N - w) visit(p, p + w);
   }
-  // Crop to the product (with a little margin).
-  let x0 = w, y0 = h, x1 = -1, y1 = -1;
-  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (d[(y * w + x) * 4 + 3] > 20) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+  function visit(p: number, q: number) {
+    if (bg[q]) return;
+    const r0 = ref[p * 3], r1 = ref[p * 3 + 1], r2 = ref[p * 3 + 2];
+    const fromRef = Math.abs(d[q * 4] - r0) + Math.abs(d[q * 4 + 1] - r1) + Math.abs(d[q * 4 + 2] - r2);
+    if (d[q * 4 + 3] < 128 || (uniform ? toMed(q) < UNI : (diff(p, q) <= STEP && fromRef <= TRAIL) || toMed(q) < NEAR)) {
+      bg[q] = 1;
+      ref[q * 3] = r0 * 0.9 + d[q * 4] * 0.1; ref[q * 3 + 1] = r1 * 0.9 + d[q * 4 + 1] * 0.1; ref[q * 3 + 2] = r2 * 0.9 + d[q * 4 + 2] * 0.1;
+      stack.push(q);
+    }
+  }
+
+  // keep only the product: the biggest piece(s) of what is left
+  const label = new Int32Array(N).fill(-1);
+  const sizes: number[] = [];
+  for (let s0 = 0; s0 < N; s0++) {
+    if (bg[s0] || label[s0] >= 0) continue;
+    const id = sizes.length; let n = 0;
+    const st = [s0]; label[s0] = id;
+    while (st.length) {
+      const p = st.pop()!; n++;
+      const x = p % w;
+      const nb = [x > 0 ? p - 1 : -1, x < w - 1 ? p + 1 : -1, p >= w ? p - w : -1, p < N - w ? p + w : -1];
+      for (const q of nb) if (q >= 0 && !bg[q] && label[q] < 0) { label[q] = id; st.push(q); }
+    }
+    sizes.push(n);
+  }
+  if (!sizes.length) return null;
+  const biggest = Math.max(...sizes);
+  const keepId = sizes.map((n) => n >= biggest * 0.15 && n >= N * 0.002);
+  let kept = 0;
+  for (let p = 0; p < N; p++) { if (!bg[p] && !keepId[label[p]]) bg[p] = 1; if (!bg[p]) kept++; }
+  const removedShare = 1 - kept / N;
+
+  if (!force) {
+    // a real background was found around the product …
+    bgDebug.removedShare = removedShare;
+    if (removedShare < 0.06 || removedShare > 0.96) return null;
+    const borderBg = border.filter((p) => bg[p]).length / border.length;
+    bgDebug.borderBg = borderBg;
+    if (borderBg < 0.6) return null;
+    // … and the cut follows a real outline (not a soft spot inside a photo)
+    let sum = 0, cnt = 0;
+    for (let p = 0; p < N; p += 1) {
+      if (bg[p]) continue;
+      const x = p % w;
+      if (x > 1 && bg[p - 1]) { sum += diff(p, p - 2); cnt++; }
+      if (x < w - 2 && bg[p + 1]) { sum += diff(p, p + 2); cnt++; }
+      if (p >= 2 * w && bg[p - w]) { sum += diff(p, p - 2 * w); cnt++; }
+      if (p < N - 2 * w && bg[p + w]) { sum += diff(p, p + 2 * w); cnt++; }
+    }
+    bgDebug.edge = cnt ? sum / cnt : 0;
+    // a one-colour background is separated reliably by colour, so a softer outline is accepted there
+    if (!cnt || sum / cnt < (uniform ? Math.max(12, spread * 2) : 28)) return null;
+  } else if (!kept || removedShare < 0.01) return null;
+
+  // full-size mask with soft edges, pulled in slightly so no background colour shows around the product
+  const m = canvasOf(w, h);
+  const mc = m.getContext("2d")!;
+  const md = mc.createImageData(w, h);
+  for (let p = 0; p < N; p++) { md.data[p * 4 + 3] = bg[p] ? 0 : 255; }
+  mc.putImageData(md, 0, 0);
+  const big = canvasOf(W, H);
+  const bc = big.getContext("2d", { willReadFrequently: true })!;
+  bc.imageSmoothingEnabled = true; bc.imageSmoothingQuality = "high";
+  bc.drawImage(m, 0, 0, W, H);
+  const mask = bc.getImageData(0, 0, W, H).data;
+  const ctx = src.getContext("2d", { willReadFrequently: true })!;
+  const img = ctx.getImageData(0, 0, W, H);
+  const o = img.data;
+  let x0 = W, y0 = H, x1 = -1, y1 = -1;
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4;
+      const a = Math.max(0, Math.min(255, ((mask[i + 3] - 100) * 255) / 130));
+      o[i + 3] = Math.round((o[i + 3] * a) / 255);
+      if (o[i + 3] > 20) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+    }
+  }
   if (x1 < 0) return null;
-  const m = Math.round(Math.max(x1 - x0, y1 - y0) * 0.03);
-  x0 = Math.max(0, x0 - m); y0 = Math.max(0, y0 - m); x1 = Math.min(w - 1, x1 + m); y1 = Math.min(h - 1, y1 + m);
+  // crop to the product with a small margin
+  const mg = Math.round(Math.max(x1 - x0, y1 - y0) * 0.03);
+  x0 = Math.max(0, x0 - mg); y0 = Math.max(0, y0 - mg); x1 = Math.min(W - 1, x1 + mg); y1 = Math.min(H - 1, y1 + mg);
   ctx.putImageData(img, 0, 0);
   const out = canvasOf(x1 - x0 + 1, y1 - y0 + 1);
   out.getContext("2d")!.drawImage(src, x0, y0, out.width, out.height, 0, 0, out.width, out.height);

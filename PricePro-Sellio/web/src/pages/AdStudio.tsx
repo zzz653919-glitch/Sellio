@@ -591,8 +591,9 @@ function CompetitorAdsTab() {
   const { t, lang } = useI18n();
   const qc = useQueryClient();
   const options = useAdsOptions();
-  const competitors = useQuery({ queryKey: ["competitors"], queryFn: () => get<{ items: { id: string; name: string }[] }>("/intel/competitors").then((r) => r.items) });
   const list = useQuery({ queryKey: ["competitor-ads"], queryFn: () => get<{ items: CompetitorAd[] }>("/ads/competitor-ads").then((r) => r.items) });
+  // name suggestions: competitors analysed before
+  const names = [...new Set((list.data ?? []).map((a) => a.competitorName))];
   const [name, setName] = useState("");
   const [text, setText] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -610,7 +611,7 @@ function CompetitorAdsTab() {
         {options.data && !options.data.textAi && <IntegrationNotice service="textAi" />}
         <Field label={t("Competitor")}>
           <Input value={name} onChange={(e) => setName(e.target.value)} list="competitor-names" maxLength={100} />
-          <datalist id="competitor-names">{(competitors.data ?? []).map((c) => <option key={c.id} value={c.name} />)}</datalist>
+          <datalist id="competitor-names">{names.map((n) => <option key={n} value={n} />)}</datalist>
         </Field>
         <Field label={t("Ad text")}><textarea className="input min-h-28" value={text} onChange={(e) => setText(e.target.value)} maxLength={3000} /></Field>
         <Field label={t("Screenshot (optional)")}><input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" onChange={(e) => setFile(e.target.files?.[0] ?? null)} className="block w-full text-sm" /></Field>

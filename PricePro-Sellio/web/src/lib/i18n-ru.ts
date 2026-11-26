@@ -2238,4 +2238,12 @@ export const RU: Record<string, string> = {
   "The AI service returned no usable text. Try again.": "Сервис ИИ не вернул подходящий текст. Попробуйте ещё раз.",
   "AI text generation is not configured on this server. An administrator must set GEMINI_API_KEY or OPENAI_API_KEY.": "На этом сервере не настроена генерация текстов ИИ. Администратор должен указать GEMINI_API_KEY или OPENAI_API_KEY.",
   "Invalid preview image": "Неверное изображение превью",
+  "Background not removed correctly?": "Фон удалился неправильно?",
+  "The original photo with its background is used.": "Используется исходное фото с фоном.",
+  "Use the original photo": "Использовать исходное фото",
+  "Remove the background again": "Удалить фон снова",
+  "Glow": "Свечение",
+  "Half circle": "Полукруг",
+  "Back-test on the last 12 months; the model with the lowest sMAPE error is used": "Проверка на последних 12 месяцах; используется модель с наименьшей ошибкой sMAPE",
+  "World Bank Open Data could not be reached.": "Не удалось подключиться к открытым данным Всемирного банка.",
 };

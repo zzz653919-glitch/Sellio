@@ -2,7 +2,7 @@
  * Small helpers that turn a short template spec into editable elements. Every template picks its own
  * text position, product placement, decorations, fonts and colours, so no two look the same.
  */
-import { art } from "../art";
+import { art } from "../art/key";
 import type { CategoryKey, El, Fill, ImageEl, ShapeEl, ShapeKind, TemplateDef, TextBg, TextEl } from "../types";
 
 type NoId<T> = T extends unknown ? Omit<T, "id"> : never;

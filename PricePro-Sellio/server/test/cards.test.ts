@@ -98,6 +98,11 @@ test("saved cards: created together, listed, renamed, autosaved, duplicated, del
   assert.equal(list.length, 3);
   assert.equal(list[0].w, 1080);
   assert.equal(list[0].doc, undefined, "the list is light");
+  assert.match(list[0].thumb, /^\/api\/cards\/[0-9a-f-]+\/thumb\?v=/, "previews are separate files");
+  const th = await client.req("GET", list[0].thumb, undefined, { raw: true });
+  assert.equal(th.status, 200);
+  assert.match(String(th.headers?.get?.("content-type") ?? th.headers?.["content-type"] ?? ""), /image\/jpeg/);
+  assert.equal((await (await newUser()).client.req("GET", list[0].thumb, undefined, { raw: true })).status, 404, "previews are private");
   const one = cards[0].id;
   // rename + autosave a changed design
   const changed = doc(src); changed.els[2].text = "Yangi sarlavha"; changed.w = 900; changed.h = 1200;

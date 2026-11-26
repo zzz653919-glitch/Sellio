@@ -2303,4 +2303,12 @@ export const UZ: Record<string, string> = {
   "The AI service returned no usable text. Try again.": "AI xizmati foydali matn qaytarmadi. Qayta urinib ko'ring.",
   "AI text generation is not configured on this server. An administrator must set GEMINI_API_KEY or OPENAI_API_KEY.": "Bu serverda AI matn yaratish sozlanmagan. Administrator GEMINI_API_KEY yoki OPENAI_API_KEY ni o'rnatishi kerak.",
   "Invalid preview image": "Noto'g'ri ko'rinish rasmi",
+  "Background not removed correctly?": "Fon to'g'ri olib tashlanmadimi?",
+  "The original photo with its background is used.": "Asl rasm o'z foni bilan ishlatiladi.",
+  "Use the original photo": "Asl rasmni ishlatish",
+  "Remove the background again": "Fonni qayta olib tashlash",
+  "Glow": "Nur",
+  "Half circle": "Yarim doira",
+  "Back-test on the last 12 months; the model with the lowest sMAPE error is used": "Oxirgi 12 oyda sinov o'tkaziladi; sMAPE xatosi eng past model ishlatiladi",
+  "World Bank Open Data could not be reached.": "Jahon banki ochiq ma'lumotlariga ulanib bo'lmadi.",
 };

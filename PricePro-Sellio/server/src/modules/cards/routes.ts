@@ -158,17 +158,20 @@ type CardRow = {
   input_json: string; copy_json: string; doc_json: string; thumb: string | null; created_at: string; updated_at: string;
 };
 
-const summary = (r: CardRow) => {
-  const d = safeJson<{ w?: number; h?: number }>(r.doc_json, {});
+/** Preview images are served as files (cached by the browser), not inside the JSON. */
+const thumbUrl = (id: string, updatedAt: string, has: boolean) => (has ? `/api/cards/${id}/thumb?v=${encodeURIComponent(updatedAt)}` : null);
+type ListRow = Pick<CardRow, "id" | "group_id" | "name" | "marketplace" | "layout" | "created_at" | "updated_at"> & { w: number | null; h: number | null; has_thumb: number };
+const summary = (r: ListRow) => ({
+  id: r.id, groupId: r.group_id, name: r.name, marketplace: r.marketplace, layout: r.layout,
+  w: r.w == null ? null : Number(r.w), h: r.h == null ? null : Number(r.h), thumb: thumbUrl(r.id, r.updated_at, Boolean(r.has_thumb)), createdAt: r.created_at, updatedAt: r.updated_at,
+});
+const full = (r: CardRow) => {
+  const doc = safeJson<{ w?: number; h?: number } | null>(r.doc_json, null);
   return {
-    id: r.id, groupId: r.group_id, name: r.name, marketplace: r.marketplace, layout: r.layout,
-    w: d.w ?? null, h: d.h ?? null, thumb: r.thumb, createdAt: r.created_at, updatedAt: r.updated_at,
+    ...summary({ ...r, w: doc?.w ?? null, h: doc?.h ?? null, has_thumb: r.thumb ? 1 : 0 }), photoUploadId: r.photo_upload_id,
+    input: safeJson(r.input_json, {}), copy: safeJson(r.copy_json, {}), doc,
   };
 };
-const full = (r: CardRow) => ({
-  ...summary(r), photoUploadId: r.photo_upload_id,
-  input: safeJson(r.input_json, {}), copy: safeJson(r.copy_json, {}), doc: safeJson(r.doc_json, null),
-});
 
 async function owned(userId: string, id: string) {
   const r = await get<CardRow>("SELECT * FROM product_cards WHERE id = ? AND user_id = ?", id, userId);
@@ -177,11 +180,25 @@ async function owned(userId: string, id: string) {
 }
 
 cardsRouter.get("/", async (req, res) => {
-  const rows = await all<CardRow>(
-    "SELECT id,user_id,group_id,name,marketplace,layout,photo_upload_id,'' AS input_json,'' AS copy_json,doc_json,thumb,created_at,updated_at FROM product_cards WHERE user_id = ? ORDER BY updated_at DESC LIMIT 300",
+  // only what the list shows: the design itself and the preview image are not sent
+  const rows = await all<ListRow>(
+    `SELECT id, group_id, name, marketplace, layout, created_at, updated_at,
+            json_extract(doc_json, '$.w') AS w, json_extract(doc_json, '$.h') AS h, (thumb IS NOT NULL) AS has_thumb
+       FROM product_cards WHERE user_id = ? ORDER BY updated_at DESC LIMIT 300`,
     currentUser(req).id,
   );
   res.json({ items: rows.map(summary) });
+});
+
+cardsRouter.get("/:id/thumb", async (req, res) => {
+  const r = await get<{ thumb: string | null }>("SELECT thumb FROM product_cards WHERE id = ? AND user_id = ?", param(req, "id"), currentUser(req).id);
+  const m = r?.thumb ? /^data:(image\/(?:jpeg|webp|png));base64,(.+)$/.exec(r.thumb) : null;
+  if (!m) throw notFound("Preview not found");
+  res.setHeader("Content-Type", m[1]);
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  // the URL carries the card's version (?v=updatedAt), so the browser may keep it
+  res.setHeader("Cache-Control", "private, max-age=31536000, immutable");
+  res.send(Buffer.from(m[2], "base64"));
 });
 
 cardsRouter.get("/:id", async (req, res) => {

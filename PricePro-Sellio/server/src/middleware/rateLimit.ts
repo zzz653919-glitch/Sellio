@@ -3,9 +3,14 @@ import { isTest } from "../config.js";
 
 const json = (message: string) => ({ error: { code: "RATE_LIMITED", message } });
 
+/**
+ * Whole-API flood protection per IP. Generous on purpose: mobile operators and offices put many people
+ * behind one IP address, and one active user (editor autosave, progress polling) makes many requests.
+ * Expensive actions have their own, stricter limiters and plan limits.
+ */
 export const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  limit: isTest ? 10_000 : 600,
+  limit: isTest ? 10_000 : 3000,
   standardHeaders: "draft-7",
   legacyHeaders: false,
   message: json("Too many requests. Please slow down."),

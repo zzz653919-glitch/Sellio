@@ -94,6 +94,13 @@ async function downloadZip(ids: string[], type: ExportType, onProgress?: (n: num
   saveBlob(await makeZip(files), `vendora-cards-${new Date().toISOString().slice(0, 10)}.zip`);
 }
 
+function useDebounced<T>(value: T, ms: number): T {
+  const [v, setV] = useState(value);
+  const key = JSON.stringify(value);
+  useEffect(() => { const h = setTimeout(() => setV(value), ms); return () => clearTimeout(h); }, [key, ms]); // eslint-disable-line react-hooks/exhaustive-deps
+  return v;
+}
+
 /** A design drawn live (previews before saving). */
 function DocPreview({ doc, className }: { doc: Doc; className?: string }) {
   const ref = useRef<HTMLCanvasElement>(null);
@@ -156,6 +163,19 @@ function CreateCard({ onDone, onCancel }: { onDone: (groupId: string) => void; o
   const fileRef = useRef<HTMLInputElement>(null);
   const [photo, setPhoto] = useState<PhotoState | null>(null);
   const [photoError, setPhotoError] = useState<unknown>(null);
+  const [cutTried, setCutTried] = useState(false);
+  /** The automatic cut-out did not look right: use the photo as it is (with its background). */
+  const useOriginal = async () => {
+    if (!photo) return;
+    const file = photo.file;
+    setPhoto({ ...photo, busy: true });
+    try {
+      const preview = URL.createObjectURL(file);
+      const fd = new FormData(); fd.append("file", file);
+      const r = await upload<{ upload: { id: string } }>("/studio/uploads", fd);
+      setPhoto({ file, preview, cutout: false, uploadId: r.upload.id, busy: false });
+    } catch (e) { setPhoto({ ...photo, busy: false }); setPhotoError(e); }
+  };
   const [dragging, setDragging] = useState(false);
   const [f, setF] = useState({ name: "", features: "", benefits: "", price: "", oldPrice: "", marketplace: "uzum" as MarketplaceKey, language: (["uz", "ru", "en"].includes(lang) ? lang : "uz") as CardInput["language"] });
   const sizes = opts.data?.marketplaces[f.marketplace]?.sizes ?? [{ w: 1080, h: 1440 }];
@@ -176,7 +196,8 @@ function CreateCard({ onDone, onCancel }: { onDone: (groupId: string) => void; o
     setError(null); setPhotoError(null);
     try {
       const read = await readPhoto(file);
-      const state: PhotoState = { file, preview: read.src, cutout: read.cutout, uploadId: null, busy: true };
+      // a short blob: link instead of a data: URL of several MB (cheap to pass around and redraw)
+      const state: PhotoState = { file, preview: URL.createObjectURL(dataUrlToBlob(read.src)), cutout: read.cutout, uploadId: null, busy: true };
       setPhoto(state);
       const fd = new FormData();
       // a cut-out product is stored as a transparent PNG; any other photo as it is
@@ -184,6 +205,7 @@ function CreateCard({ onDone, onCancel }: { onDone: (groupId: string) => void; o
       else fd.append("file", file);
       const r = await upload<{ upload: { id: string } }>("/studio/uploads", fd);
       setPhoto({ ...state, uploadId: r.upload.id, busy: false });
+      setCutTried(read.cutout);
       if (!f.name) setF((x) => ({ ...x, name: x.name || file.name.replace(/\.\w+$/, "").replace(/[-_]+/g, " ").slice(0, 120).replace(/^(img|dsc|photo|image)\s?\d+$/i, "") }));
     } catch (e) {
       setPhoto(null);
@@ -193,8 +215,10 @@ function CreateCard({ onDone, onCancel }: { onDone: (groupId: string) => void; o
 
   const previewPhoto: CardPhoto | null = photo ? { src: photo.preview, cutout: photo.cutout } : null;
   const [pw, ph] = sizeKey.split("x").map(Number);
-  const previewCopy: CardCopy = { ...SAMPLE_COPY, title: f.name.trim() || t(SAMPLE_COPY.title), subtitle: t(SAMPLE_COPY.subtitle), badge: "", benefits: SAMPLE_COPY.benefits.map((b) => ({ ...b, title: t(b.title), text: t(b.text) })), specs: SAMPLE_COPY.specs.map((s) => ({ label: t(s.label), value: t(s.value) })) };
-  const previews = layouts.map((l) => ({ l, doc: buildCard(l, { copy: previewCopy, input: { ...input, price: input.price ?? "199 000", oldPrice: input.oldPrice }, photo: previewPhoto }, { w: pw, h: ph }) }));
+  // the previews are redrawn a moment after typing stops, not on every key press
+  const live = useDebounced({ name: f.name.trim(), price: input.price, oldPrice: input.oldPrice }, 300);
+  const previewCopy: CardCopy = { ...SAMPLE_COPY, title: live.name || t(SAMPLE_COPY.title), subtitle: t(SAMPLE_COPY.subtitle), badge: "", benefits: SAMPLE_COPY.benefits.map((b) => ({ ...b, title: t(b.title), text: t(b.text) })), specs: SAMPLE_COPY.specs.map((s) => ({ label: t(s.label), value: t(s.value) })) };
+  const previews = layouts.map((l) => ({ l, doc: buildCard(l, { copy: previewCopy, input: { ...input, price: live.price ?? "199 000", oldPrice: live.oldPrice }, photo: previewPhoto }, { w: pw, h: ph }) }));
 
   const ready = Boolean(photo?.uploadId && input.name.length >= 2 && chosen.size > 0 && user?.emailVerified);
   const create = async (withAi: boolean) => {
@@ -256,6 +280,14 @@ function CreateCard({ onDone, onCancel }: { onDone: (groupId: string) => void; o
                 </>
               )}
             </div>
+            {photo && !photo.busy && cutTried && (
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-50 p-2.5 text-xs dark:bg-slate-800/60">
+                <span className="muted">{photo.cutout ? t("Background not removed correctly?") : t("The original photo with its background is used.")}</span>
+                {photo.cutout
+                  ? <Button size="sm" variant="secondary" onClick={() => void useOriginal()} data-testid="use-original">{t("Use the original photo")}</Button>
+                  : <Button size="sm" variant="ghost" onClick={() => void pick(photo.file)}>{t("Remove the background again")}</Button>}
+              </div>
+            )}
             {photoError != null && <div className="mt-3"><ErrorAlert error={photoError} /></div>}
           </Card>
 
@@ -401,7 +433,7 @@ function CardTile({ c, selected, onSelect, onOpen, onRename, onDelete, actions, 
     <div className={cx("card group overflow-hidden transition hover:-translate-y-0.5 hover:shadow-lg", selected && "ring-2 ring-brand-500")} data-card={c.id}>
       <div className="relative">
         <button type="button" className="block w-full bg-slate-100 dark:bg-slate-800" onClick={onOpen} aria-label={`${t("Edit")}: ${c.name}`}>
-          {c.thumb ? <img src={c.thumb} alt={c.name} className="aspect-[3/4] w-full object-contain" loading="lazy" /> : <div className="grid aspect-[3/4] place-items-center"><LayoutGrid className="h-6 w-6 muted" /></div>}
+          {c.thumb ? <img src={c.thumb} alt={c.name} className="aspect-[3/4] w-full object-contain" loading="lazy" decoding="async" /> : <div className="grid aspect-[3/4] place-items-center"><LayoutGrid className="h-6 w-6 muted" /></div>}
         </button>
         {onSelect && (
           <button type="button" onClick={onSelect} aria-pressed={selected} aria-label={t("Select")} className={cx("absolute left-2 top-2 grid h-7 w-7 place-items-center rounded-lg shadow", selected ? "bg-brand-600 text-white" : "bg-white/90 text-slate-700")}>
