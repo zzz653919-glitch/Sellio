@@ -37,6 +37,12 @@ const SERVER_PATTERNS: [RegExp, string, string[]][] = [
   [/^Your payment for (.+) was not confirmed\. Reason: (.+)\. You can upload a new receipt and send it again\.$/s, "Your payment for {x} was not confirmed. Reason: {y}. You can upload a new receipt and send it again.", ["x", "y"]],
   [/^Payment started: (.+)$/s, "Payment started: {x}", ["x"]],
   [/^Payment receipt sent for review: (.+)$/s, "Payment receipt sent for review: {x}", ["x"]],
+  [/^You have used all (\d+) AI advertisement images of the (.+) plan for the last (\d+) hours\. The next one is available at (.+)\.$/s, "You have used all {n} AI advertisement images of the {x} plan for the last {h} hours. The next one is available at {y}.", ["n", "x", "h", "y"]],
+  [/^You have used all (\d+) demand forecasts of the (.+) plan for the last (\d+) hours\. The next one is available at (.+)\.$/s, "You have used all {n} demand forecasts of the {x} plan for the last {h} hours. The next one is available at {y}.", ["n", "x", "h", "y"]],
+  [/^You have used all (\d+) AI advertisement images of the (.+) plan today\. They renew on (.+)\.$/s, "You have used all {n} AI advertisement images of the {x} plan today. They renew on {y}.", ["n", "x", "y"]],
+  [/^You have used all (\d+) demand forecasts of the (.+) plan today\. They renew on (.+)\.$/s, "You have used all {n} demand forecasts of the {x} plan today. They renew on {y}.", ["n", "x", "y"]],
+  [/^You have used all (\d+) AI advertisement images of the (.+) plan this month\. They renew on (.+)\.$/s, "You have used all {n} AI advertisement images of the {x} plan this month. They renew on {y}.", ["n", "x", "y"]],
+  [/^You have used all (\d+) demand forecasts of the (.+) plan this month\. They renew on (.+)\.$/s, "You have used all {n} demand forecasts of the {x} plan this month. They renew on {y}.", ["n", "x", "y"]],
 ];
 
 export function read(): Lang {

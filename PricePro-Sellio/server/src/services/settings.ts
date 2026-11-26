@@ -6,10 +6,11 @@
 import { all, run } from "../db/index.js";
 import { nowIso } from "../lib/util.js";
 
-/** requests = AI advertisements + demand forecasts (shared); ai = AI text requests (monthly). */
-export type Metric = "requests" | "ai";
-export type RequestPeriod = "day" | "month";
-export type PlanOverride = { name?: string; priceMonthlyUsd?: number; priceYearlyUsd?: number | null; limits?: Partial<Record<Metric | "generations" | "forecasts", number>>; requestPeriod?: RequestPeriod; dailyImageLimit?: number | null; benefits?: string[]; enabled?: boolean };
+/** requests = AI advertisement images; forecasts = demand forecasts (each has its own allowance); ai = AI text requests (monthly). */
+export type Metric = "requests" | "forecasts" | "ai";
+/** "hours" = a rolling window of `periodHours` hours (each use frees up again after that many hours). */
+export type RequestPeriod = "hours" | "day" | "month";
+export type PlanOverride = { name?: string; priceMonthlyUsd?: number; priceYearlyUsd?: number | null; limits?: Partial<Record<Metric | "generations" | "forecasts", number>>; requestPeriod?: RequestPeriod; periodHours?: number; dailyImageLimit?: number | null; benefits?: string[]; enabled?: boolean };
 /** Manual card payments: what users pay to and the exchange rate used for so'm amounts. */
 export type ManualPayment = { enabled: boolean; cardNumber: string; cardholder: string; bank: string; cardType: string; uzsPerUsd: number };
 export type Settings = {

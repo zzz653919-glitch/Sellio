@@ -71,7 +71,7 @@ test("user flow: request, receipt checks, submit — the plan never changes befo
   assert.equal(sent.data.payment.submitted, true);
   assert.equal((await u.client.post(`/api/payments/${id}/submit`, {})).status, 200, "double click is harmless");
   assert.equal(await plan(u), "free", "NOT activated by the user's confirmation");
-  assert.equal((await u.client.get("/api/subscription")).data.usage.metrics.requests.limit, 2);
+  assert.equal((await u.client.get("/api/subscription")).data.usage.metrics.requests.limit, 5);
   assert.equal((await uploadReceipt(u, id)).status, 400, "locked while being checked");
   assert.equal((await u.client.del(`/api/payments/${id}`)).status, 400);
   assert.equal((await u.client.post("/api/payments", { plan: "pro" })).status, 409, "one payment at a time");
@@ -110,7 +110,7 @@ test("only authorised admins review; no self-approval; approval activates the pl
   assert.equal(await plan(u), "pro");
   const sub = (await u.client.get("/api/subscription")).data;
   assert.equal(sub.usage.metrics.requests.limit, 10);
-  assert.equal(sub.usage.metrics.requests.period, "day");
+  assert.equal(sub.usage.metrics.requests.period, "hours");
   assert.equal(sub.subscription.provider, "manual");
   const days = (Date.parse(sub.subscription.currentPeriodEnd) - Date.now()) / 86_400_000;
   assert.ok(days > 27 && days < 32, `about one month (${days})`);
@@ -158,14 +158,14 @@ test("a card-paid plan ends at its period end and the user returns to Free", asy
   assert.equal(await plan(u), "pro");
   await run("UPDATE subscriptions SET current_period_end = ? WHERE user_id = ?", new Date(Date.now() - 60_000).toISOString(), u.user.id);
   assert.equal(await plan(u), "free");
-  assert.equal((await u.client.get("/api/subscription")).data.usage.metrics.requests.limit, 2);
+  assert.equal((await u.client.get("/api/subscription")).data.usage.metrics.requests.limit, 5);
 });
 
-test("FREE: at most 2 AI advertisement images per day, renewed every day", async () => {
+test("FREE: at most 5 AI advertisement images per 5 hours; forecasts have their own 5", async () => {
   const u = await newUser();
-  await reserveRequest(u.user.id, "generation", `img-${u.user.id}-1`);
-  await reserveRequest(u.user.id, "generation", `img-${u.user.id}-2`);
-  await assert.rejects(reserveRequest(u.user.id, "generation", `img-${u.user.id}-3`), (e: { code?: string }) => e.code === "LIMIT_REACHED");
-  const s = (await u.client.get("/api/dashboard")).data.usage.metrics.requests;
-  assert.deepEqual([s.period, s.used, s.limit, s.imagesToday.used, s.imagesToday.limit, s.imagesToday.remaining], ["day", 2, 2, 2, 2, 0]);
+  for (let i = 1; i <= 5; i++) await reserveRequest(u.user.id, "generation", `img-${u.user.id}-${i}`);
+  await assert.rejects(reserveRequest(u.user.id, "generation", `img-${u.user.id}-6`), (e: { code?: string }) => e.code === "LIMIT_REACHED");
+  await reserveRequest(u.user.id, "forecast", `fc-${u.user.id}-1`);
+  const m = (await u.client.get("/api/dashboard")).data.usage.metrics;
+  assert.deepEqual([m.requests.period, m.requests.used, m.requests.limit, m.forecasts.used, m.forecasts.limit], ["hours", 5, 5, 1, 5]);
 });

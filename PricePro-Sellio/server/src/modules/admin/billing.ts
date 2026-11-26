@@ -29,8 +29,9 @@ const planSchema = z.object({
   name: z.string().trim().min(1).max(40),
   priceMonthlyUsd: z.number().min(0).max(10_000),
   priceYearlyUsd: z.number().min(0).max(100_000).nullable().default(null),
-  limits: z.object({ requests: z.number().int().min(0).max(1_000_000), ai: z.number().int().min(0).max(1_000_000) }),
-  requestPeriod: z.enum(["day", "month"]),
+  limits: z.object({ requests: z.number().int().min(0).max(1_000_000), forecasts: z.number().int().min(0).max(1_000_000).optional(), ai: z.number().int().min(0).max(1_000_000) }),
+  requestPeriod: z.enum(["hours", "day", "month"]),
+  periodHours: z.number().int().min(1).max(168).optional(),
   dailyImageLimit: z.number().int().min(0).max(100_000).nullable().default(null),
   benefits: z.array(z.string().trim().min(1).max(160)).max(12),
   enabled: z.boolean().default(true),
@@ -45,7 +46,7 @@ billingAdminRouter.put("/plans/:plan", requirePermission("plans.manage"), async 
   await confirmPassword(req, b.password);
   if (plan === "free" && !b.enabled) throw badRequest("The Free plan cannot be disabled.");
   const before = getPlans()[plan as Plan];
-  const next = { ...settings().plans, [plan]: { name: b.name, priceMonthlyUsd: b.priceMonthlyUsd, priceYearlyUsd: plan === "free" ? null : b.priceYearlyUsd, limits: b.limits, requestPeriod: b.requestPeriod, dailyImageLimit: b.dailyImageLimit, benefits: b.benefits, enabled: plan === "free" ? true : b.enabled } };
+  const next = { ...settings().plans, [plan]: { name: b.name, priceMonthlyUsd: b.priceMonthlyUsd, priceYearlyUsd: plan === "free" ? null : b.priceYearlyUsd, limits: { ...b.limits, forecasts: b.limits.forecasts ?? getPlans()[plan as Plan].limits.forecasts }, requestPeriod: b.requestPeriod, periodHours: b.periodHours ?? getPlans()[plan as Plan].periodHours, dailyImageLimit: b.dailyImageLimit, benefits: b.benefits, enabled: plan === "free" ? true : b.enabled } };
   await saveSetting("plans", next, currentUser(req).id);
   await logAudit(req, "plan.updated", { type: "plan", id: plan }, `Updated the ${plan} plan`, { before, after: { ...b, password: undefined } });
   res.json({ plan: getPlans()[plan as Plan] });

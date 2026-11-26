@@ -105,11 +105,11 @@ test("a provider returning a non-image is treated as a failure", async () => {
   assert.equal(g.resultUrl, null);
 });
 
-test("free plan: 2 AI advertisement images per day", async () => {
+test("free plan: 5 AI advertisement images per day", async () => {
   setImageProviderForTests({ name: "test", model: "m", edit: async () => makePng(300, 300) });
   const { client } = await newUser();
   const id = await upload(client);
-  for (let i = 0; i < 2; i++) {
+  for (let i = 0; i < 5; i++) {
     const r = await client.post("/api/studio/generations", body(id));
     assert.equal(r.status, 202);
     await waitFor(client, r.data.generation.id);

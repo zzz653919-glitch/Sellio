@@ -13,7 +13,7 @@ type Interval = "month" | "year";
 type Price = { usd: number; uzs: number } | null;
 type Config = {
   enabled: boolean; card: { number: string; holder: string; bank: string; type: string }; uzsPerUsd: number;
-  plans: { key: "pro" | "max"; name: string; enabled: boolean; month: Price; year: Price; requests: number; requestPeriod: "day" | "month"; ai: number }[];
+  plans: { key: "pro" | "max"; name: string; enabled: boolean; month: Price; year: Price; requests: number; forecasts?: number; requestPeriod: "hours" | "day" | "month"; periodHours?: number; ai: number }[];
 };
 export type PaymentItem = {
   id: string; plan: "pro" | "max"; interval: Interval; amountUsd: number; amountUzs: number; card: { number: string; holder: string; bank: string; type: string };
@@ -141,6 +141,9 @@ export default function Payment() {
   const cancel = useMutation({ mutationFn: () => del(`/payments/${open!.id}`), onSuccess: () => { setPreview(null); refreshAll(); } });
 
   const c = cfg.data;
+  const limitText = (p: Config["plans"][number]) => p.requestPeriod === "hours"
+    ? t("{n} AI ad images + {m} forecasts every {h} hours", { n: p.requests, m: p.forecasts ?? p.requests, h: p.periodHours ?? 1 })
+    : t(p.requestPeriod === "day" ? "{n} AI ad images + {m} forecasts per day" : "{n} AI ad images + {m} forecasts per month", { n: p.requests, m: p.forecasts ?? p.requests });
   const selected = useMemo(() => c?.plans.find((p) => p.key === (open?.plan ?? plan)), [c, open, plan]);
   if (cfg.isLoading || list.isLoading) return <PageLoader />;
   if (cfg.error) return <ErrorAlert error={cfg.error} />;
@@ -193,7 +196,7 @@ export default function Payment() {
                     <button key={p.key} type="button" disabled={!pr} onClick={() => choose(p.key, interval)} data-plan={p.key}
                       className={cx("rounded-[16px] border p-4 text-left transition disabled:cursor-not-allowed disabled:opacity-50", plan === p.key ? "border-[var(--v-sky)] bg-[var(--v-sky-soft)] shadow-[0_0_0_1px_var(--v-sky)]" : "border-[var(--v-line)] bg-[var(--v-glass-2)] hover:bg-[var(--v-glass-3)]")}>
                       <span className="flex items-center justify-between"><b className="text-lg">{p.name}</b>{plan === p.key && <Check className="h-5 w-5 text-[var(--v-sky)]" />}</span>
-                      <span className="mt-1 block text-sm muted">{t(p.requestPeriod === "day" ? "{n} requests per day" : "{n} requests per month", { n: p.requests })}</span>
+                      <span className="mt-1 block text-sm muted">{limitText(p)}</span>
                       <span className="mt-2 block font-bold">{pr ? som(pr.uzs) : t("Monthly only")} {pr && <span className="text-xs font-normal muted">/ {t(interval === "year" ? "year" : "month")}</span>}</span>
                       {save > 0 && <span className="mt-1 block text-xs font-semibold text-[var(--v-ok)]">{t("You save ${n}", { n: save })}</span>}
                     </button>
@@ -217,7 +220,7 @@ export default function Payment() {
               <div className="flex justify-between muted"><span>{t("Exchange rate")}</span><span>1 $ = {fmtNumber(c.uzsPerUsd)} so'm</span></div>
               <div className="flex justify-between text-base font-extrabold"><span>{t("To pay")}</span><span>{summary ? som(summary.amountUzs) : price ? som(price.uzs) : "—"}</span></div>
             </div>
-            {selected && <p className="mt-3 text-xs muted">{t("After confirmation")}: {t(selected.requestPeriod === "day" ? "{n} requests per day" : "{n} requests per month", { n: selected.requests })} · {t("{n} AI text requests per month", { n: selected.ai })}</p>}
+            {selected && <p className="mt-3 text-xs muted">{t("After confirmation")}: {limitText(selected)} · {t("{n} AI text requests per month", { n: selected.ai })}</p>}
           </Card>
         </div>
         <div className="flex flex-col gap-6 [&>*:first-child]:flex-1">

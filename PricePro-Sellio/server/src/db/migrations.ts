@@ -718,4 +718,29 @@ DROP TABLE IF EXISTS initiatives;
 DELETE FROM activity WHERE service = 'growth';
 `,
   },
+  {
+    // Limits can renew in a rolling window of a few hours ("hours"), not only per day or month.
+    version: 17,
+    sql: `
+CREATE TABLE usage_events_v17 (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  service TEXT NOT NULL CHECK (service IN ('generation','forecast')),
+  ref_id TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('reserved','consumed')),
+  plan TEXT NOT NULL,
+  period TEXT NOT NULL CHECK (period IN ('hours','day','month')),
+  period_start TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+INSERT INTO usage_events_v17 (id, user_id, service, ref_id, status, plan, period, period_start, created_at, updated_at)
+  SELECT id, user_id, service, ref_id, status, plan, period, period_start, created_at, updated_at FROM usage_events;
+DROP TABLE usage_events;
+ALTER TABLE usage_events_v17 RENAME TO usage_events;
+CREATE UNIQUE INDEX ux_usage_ref ON usage_events(service, ref_id);
+CREATE INDEX idx_usage_user ON usage_events(user_id, created_at);
+CREATE INDEX idx_usage_created ON usage_events(created_at);
+`,
+  },
 ];

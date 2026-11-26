@@ -12,18 +12,18 @@ import { useI18n } from "../../lib/i18n";
 import { ConfirmWithPassword, DateRange, defaultRange, downloadUrl, Pager, Section, Stat, Table, useCan, useList } from "../ui";
 import { money } from "./Dashboard";
 
-type UMetric = { used: number; limit: number; remaining: number; period: "day" | "month"; resetsAt: string };
+type UMetric = { used: number; limit: number; remaining: number; period: "hours" | "day" | "month"; windowHours?: number | null; resetsAt: string };
 type UsageSummary = { timezone: string; today: { byService: { service: string; n: number }[] }; month: { byService: { service: string; n: number }[]; byPlan: { plan: string; n: number }[] }; inProgress: number; daily: { date: string; generation: number; forecast: number }[] };
-type Plan = { key: "free" | "pro" | "max"; name: string; priceMonthlyUsd: number; priceYearlyUsd: number | null; limits: { requests: number; ai: number }; requestPeriod: "day" | "month"; dailyImageLimit: number | null; benefits: string[]; enabled: boolean; users: number };
+type Plan = { key: "free" | "pro" | "max"; name: string; priceMonthlyUsd: number; priceYearlyUsd: number | null; limits: { requests: number; forecasts?: number; ai: number }; requestPeriod: "hours" | "day" | "month"; periodHours?: number; dailyImageLimit: number | null; benefits: string[]; enabled: boolean; users: number };
 
 function PlanEditor({ plan, onClose }: { plan: Plan; onClose: () => void }) {
   const { t } = useI18n();
   const toast = useToast();
   const qc = useQueryClient();
-  const [f, setF] = useState({ name: plan.name, priceMonthlyUsd: String(plan.priceMonthlyUsd), priceYearlyUsd: plan.priceYearlyUsd === null ? "" : String(plan.priceYearlyUsd), requests: String(plan.limits.requests), requestPeriod: plan.requestPeriod, dailyImageLimit: plan.dailyImageLimit === null ? "" : String(plan.dailyImageLimit), ai: String(plan.limits.ai), benefits: plan.benefits.join("\n"), enabled: plan.enabled });
+  const [f, setF] = useState({ name: plan.name, priceMonthlyUsd: String(plan.priceMonthlyUsd), priceYearlyUsd: plan.priceYearlyUsd === null ? "" : String(plan.priceYearlyUsd), requests: String(plan.limits.requests), forecasts: String(plan.limits.forecasts ?? plan.limits.requests), requestPeriod: plan.requestPeriod, periodHours: String(plan.periodHours ?? 5), dailyImageLimit: plan.dailyImageLimit === null ? "" : String(plan.dailyImageLimit), ai: String(plan.limits.ai), benefits: plan.benefits.join("\n"), enabled: plan.enabled });
   const save = useMutation({
     mutationFn: (password: string) => put(`/admin/plans/${plan.key}`, {
-      name: f.name, priceMonthlyUsd: Number(f.priceMonthlyUsd), priceYearlyUsd: f.priceYearlyUsd === "" ? null : Number(f.priceYearlyUsd), limits: { requests: Number(f.requests), ai: Number(f.ai) }, requestPeriod: f.requestPeriod, dailyImageLimit: f.dailyImageLimit === "" ? null : Number(f.dailyImageLimit),
+      name: f.name, priceMonthlyUsd: Number(f.priceMonthlyUsd), priceYearlyUsd: f.priceYearlyUsd === "" ? null : Number(f.priceYearlyUsd), limits: { requests: Number(f.requests), forecasts: Number(f.forecasts), ai: Number(f.ai) }, requestPeriod: f.requestPeriod, periodHours: Math.max(1, Math.min(168, Number(f.periodHours) || 1)), dailyImageLimit: f.dailyImageLimit === "" ? null : Number(f.dailyImageLimit),
       benefits: f.benefits.split("\n").map((b) => b.trim()).filter(Boolean), enabled: f.enabled, password,
     }),
     onSuccess: () => { toast("success", t("Saved")); void qc.invalidateQueries({ queryKey: ["admin-plans"] }); onClose(); },
@@ -36,12 +36,14 @@ function PlanEditor({ plan, onClose }: { plan: Plan; onClose: () => void }) {
         <Field label={t("Name")}><Input value={f.name} onChange={set("name")} maxLength={40} /></Field>
         <Field label={t("Price per month (USD)")}><Input type="number" min={0} value={f.priceMonthlyUsd} onChange={set("priceMonthlyUsd")} /></Field>
         {plan.key !== "free" && <Field label={t("Price per year (USD)")} hint={t("Empty = no yearly payment")}><Input type="number" min={0} value={f.priceYearlyUsd} onChange={set("priceYearlyUsd")} /></Field>}
-        <Field label={t("Requests (AI ads + forecasts)")}><Input type="number" min={0} value={f.requests} onChange={set("requests")} /></Field>
+        <Field label={t("AI ad images")}><Input type="number" min={0} value={f.requests} onChange={set("requests")} /></Field>
+        <Field label={t("Demand forecasts")}><Input type="number" min={0} value={f.forecasts} onChange={set("forecasts")} /></Field>
         <Field label={t("Reset schedule")}>
-          <Select value={f.requestPeriod} onChange={(e) => setF((s) => ({ ...s, requestPeriod: e.target.value as "day" | "month" }))}
-            options={[{ value: "day", label: t("Every day at 00:00") }, { value: "month", label: t("1st of every month at 00:00") }]} />
+          <Select value={f.requestPeriod} onChange={(e) => setF((s) => ({ ...s, requestPeriod: e.target.value as "hours" | "day" | "month" }))}
+            options={[{ value: "hours", label: t("Every few hours (rolling)") }, { value: "day", label: t("Every day at 00:00") }, { value: "month", label: t("1st of every month at 00:00") }]} />
         </Field>
-        <Field label={t("AI ad images per day")} hint={t("Empty = no extra daily limit")}><Input type="number" min={0} value={f.dailyImageLimit} onChange={set("dailyImageLimit")} /></Field>
+        {f.requestPeriod === "hours" && <Field label={t("Hours")} hint={t("Each request is free again this many hours after it was used.")}><Input type="number" min={1} max={168} value={f.periodHours} onChange={set("periodHours")} /></Field>}
+        <Field label={t("Extra daily cap on AI images")} hint={t("Empty = no extra daily limit")}><Input type="number" min={0} value={f.dailyImageLimit} onChange={set("dailyImageLimit")} /></Field>
         <Field label={t("AI text requests / month")}><Input type="number" min={0} value={f.ai} onChange={set("ai")} /></Field>
       </div>
       <Field label={t("Benefits (one per line)")}><textarea className="input min-h-24" value={f.benefits} onChange={set("benefits")} /></Field>
@@ -75,7 +77,7 @@ function Subscriptions() {
           {plans.data!.plans.map((p) => (
             <Section key={p.key} title={`${p.name} · $${p.priceMonthlyUsd}/${t("month")}${p.priceYearlyUsd !== null ? ` · $${p.priceYearlyUsd}/${t("year")}` : ""}`} actions={can("plans.manage") ? <button type="button" className="inline-flex items-center gap-1 text-sm text-brand-600 hover:underline" onClick={() => setEditing(p)}><Pencil className="h-4 w-4" />{t("Edit")}</button> : undefined}>
               <p className="text-sm">{t("{n} users", { n: fmtNumber(p.users) })} · <Badge tone={p.enabled ? "green" : "slate"}>{p.enabled ? t("Available") : t("Disabled")}</Badge></p>
-              <Table head={[t("Requests"), t("Reset schedule"), t("AI ad images per day"), t("AI text requests")]}><tr><td>{p.limits.requests}</td><td>{t(p.requestPeriod === "day" ? "Every day at 00:00" : "1st of every month at 00:00")}</td><td>{p.dailyImageLimit ?? "—"}</td><td>{p.limits.ai} / {t("month")}</td></tr></Table>
+              <Table head={[t("AI ad images"), t("Demand forecasts"), t("Reset schedule"), t("AI text requests")]}><tr><td>{p.limits.requests}</td><td>{p.limits.forecasts ?? p.limits.requests}</td><td>{p.requestPeriod === "hours" ? t("Every {h} hours (rolling)", { h: p.periodHours ?? 1 }) : t(p.requestPeriod === "day" ? "Every day at 00:00" : "1st of every month at 00:00")}</td><td>{p.limits.ai} / {t("month")}</td></tr></Table>
               <ul className="list-disc pl-5 text-sm muted">{p.benefits.map((b) => <li key={b}>{b}</li>)}</ul>
             </Section>
           ))}
@@ -133,7 +135,7 @@ function Subscriptions() {
                 <tr key={u.userId}>
                   <td><Link to={`/admin/users/${u.userId}`} className="hover:underline">{u.email}</Link></td>
                   <td>{u.plan}</td>
-                  <td>{u.requests.used}/{u.requests.limit} <span className="text-xs muted">({t(u.requests.period === "day" ? "per day" : "per month")})</span></td>
+                  <td>{u.requests.used}/{u.requests.limit} <span className="text-xs muted">({u.requests.period === "hours" ? t("per {h} hours", { h: u.requests.windowHours ?? 1 }) : t(u.requests.period === "day" ? "per day" : "per month")})</span></td>
                   <td className="text-xs">{fmtInZone(u.requests.resetsAt, u.timezone)} <span className="muted">{u.timezone}</span></td>
                   <td>{u.ai.used}/{u.ai.limit}</td>
                   <td><Badge tone={u.maxPct >= 100 ? "red" : u.maxPct >= 80 ? "amber" : "slate"}>{u.maxPct}%</Badge></td>

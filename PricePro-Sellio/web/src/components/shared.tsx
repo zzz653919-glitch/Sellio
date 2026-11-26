@@ -152,25 +152,39 @@ export function UsageMeter({ usage, compact }: { usage: Usage; compact?: boolean
   const { t } = useI18n();
   const qty = useQty();
   const r = usage.metrics.requests;
+  const fc = usage.metrics.forecasts;
   const ai = usage.metrics.ai;
   const reset = (iso: string) => fmtInZone(iso, usage.timezone);
+  const block = (label: string, m: { used: number; limit: number; remaining: number }) => (
+    <div>
+      <div className="mb-1 flex flex-wrap items-baseline justify-between gap-x-3 text-sm">
+        <span className="font-semibold">{label}</span>
+        <span className="muted">{t("{used}/{limit} used, {left} remaining", { used: m.used, limit: m.limit, left: qty(m.remaining) })}</span>
+      </div>
+      <Progress value={m.used} max={m.limit} />
+    </div>
+  );
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
         <Badge tone={planTone(usage.plan)}>{PLAN_NAME[usage.plan]}</Badge>
-        <span className="text-sm muted">{t(r.period === "day" ? "Daily limit" : "Monthly limit")}: <b className="text-[var(--v-text)]">{qty(r.limit)}</b></span>
+        <span className="text-sm muted">{r.period === "hours" ? t("Limits for every {h} hours", { h: r.windowHours ?? 1 }) : t(r.period === "day" ? "Daily limits" : "Monthly limits")}</span>
       </div>
-      <div>
-        <p className="text-[15px] font-bold">
-          {t("{used}/{limit} used, {left} remaining", { used: r.used, limit: r.limit, left: qty(r.remaining) })}
+      {block(t("AI advertisement images"), r)}
+      {r.imagesToday && (
+        <p className="text-sm">{t("AI images today")}: <b>{r.imagesToday.used}/{r.imagesToday.limit}</b> <span className="text-xs muted">({t("{n} remaining", { n: qty(r.imagesToday.remaining) })})</span></p>
+      )}
+      {fc && block(t("Demand forecasts"), fc)}
+      <p className="text-xs muted">{t("AI ads and demand forecasts have separate limits. Failed operations are not counted.")}</p>
+      {r.period === "hours" ? (
+        <p className="text-xs muted">
+          {t("Each request is available again {h} hours after it was used.", { h: r.windowHours ?? 1 })}
+          {r.used > 0 && <> {t("Next free AI image")}: <b className="text-[var(--v-text)]">{reset(r.resetsAt)}</b>.</>}
+          {fc && fc.used > 0 && <> {t("Next free forecast")}: <b className="text-[var(--v-text)]">{reset(fc.resetsAt)}</b>.</>}
         </p>
-        <div className="mt-2"><Progress value={r.used} max={r.limit} /></div>
-        {r.imagesToday && (
-          <p className="mt-2 text-sm">{t("AI images today")}: <b>{r.imagesToday.used}/{r.imagesToday.limit}</b> <span className="text-xs muted">({t("{n} remaining", { n: qty(r.imagesToday.remaining) })})</span></p>
-        )}
-        <p className="mt-1.5 text-xs muted">{t("AI ads and demand forecasts share these requests. Failed operations are not counted.")}</p>
-        <p className="mt-0.5 text-xs muted">{t("Next reset")}: <b className="text-[var(--v-text)]">{reset(r.resetsAt)}</b> ({usage.timezone})</p>
-      </div>
+      ) : (
+        <p className="text-xs muted">{t("Next reset")}: <b className="text-[var(--v-text)]">{reset(r.resetsAt)}</b> ({usage.timezone})</p>
+      )}
       {!compact && (
         <div>
           <div className="mb-1 flex justify-between text-sm"><span>{t("AI text requests")}</span><span className="muted">{ai.used} / {qty(ai.limit)}</span></div>

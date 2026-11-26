@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MutationCache, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
@@ -10,7 +10,12 @@ import { I18nProvider, loadDict, read } from "./lib/i18n";
 import { ThemeProvider } from "./lib/theme";
 import "./index.css";
 
-const queryClient = new QueryClient({
+/** Limits shown on the page refresh by themselves after anything is created (no page reload needed). */
+const refreshLimits = () => {
+  for (const key of ["subscription", "dashboard", "profile"]) void queryClient.invalidateQueries({ queryKey: [key] });
+};
+const queryClient: QueryClient = new QueryClient({
+  mutationCache: new MutationCache({ onSettled: refreshLimits }),
   defaultOptions: {
     queries: {
       staleTime: 60_000,

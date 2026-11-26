@@ -36,60 +36,74 @@ test("periods start at 00:00 in the user's time zone", () => {
   assert.equal(new Date(periodBounds("month", "UTC", Date.parse("2026-12-15T12:00:00Z")).end).toISOString(), "2027-01-01T00:00:00.000Z");
 });
 
-test("FREE: 2 requests per day shared by AI ads and forecasts; renews every day at 00:00; no carry-over", async () => {
+test("FREE: 5 AI ad images and, separately, 5 forecasts in any 5 hours; each use frees up 5 hours later", async () => {
   const { user } = await newUser();
   await setTz(user.id, "Asia/Tashkent");
-  setClockForTests(() => Date.parse("2026-04-10T10:00:00Z"));
+  const t0 = Date.parse("2026-04-10T10:00:00Z");
+  setClockForTests(() => t0);
   await use(user.id, "generation");
   let s = await requestStatus(user.id);
-  assert.deepEqual([s.plan, s.period, s.limit, s.used, s.remaining], ["free", "day", 2, 1, 1]);
-  assert.equal(s.resetsAt, "2026-04-10T19:00:00.000Z", "00:00 on 11 April in Tashkent");
-  await use(user.id, "forecast");
+  assert.deepEqual([s.plan, s.period, s.windowHours, s.limit, s.used, s.remaining], ["free", "hours", 5, 5, 1, 4]);
+  assert.equal(s.resetsAt, "2026-04-10T15:00:00.000Z", "the first image is free again 5 hours later");
+  assert.deepEqual([s.forecasts.limit, s.forecasts.used], [5, 0], "forecasts are not taken from the image allowance");
+  // One more image an hour later, then three more.
+  setClockForTests(() => t0 + 3_600_000);
+  for (let i = 0; i < 4; i++) await use(user.id, "generation");
   await limited(reserveRequest(user.id, "generation", "op-x"));
+  for (let i = 0; i < 5; i++) await use(user.id, "forecast");
   await limited(reserveRequest(user.id, "forecast", "op-y"));
-  // The next day starts at 00:00 local time with a fresh allowance of 2 (nothing carried over).
-  setClockForTests(() => Date.parse("2026-04-10T18:59:00Z"));
-  await limited(reserveRequest(user.id, "forecast", "op-z"));
-  setClockForTests(() => Date.parse("2026-04-10T19:00:00Z"));
+  // 4 h 59 min after the first image: still full. At 5 h the first one frees up (only one).
+  setClockForTests(() => t0 + 5 * 3_600_000 - 60_000);
+  await limited(reserveRequest(user.id, "generation", "op-z"));
+  setClockForTests(() => t0 + 5 * 3_600_000 + 1000);
   s = await requestStatus(user.id);
-  assert.deepEqual([s.used, s.remaining, s.limit], [0, 2, 2]);
+  assert.deepEqual([s.used, s.remaining], [4, 1]);
   await use(user.id, "generation");
-  await use(user.id, "generation");
-  await limited(reserveRequest(user.id, "generation", "op-3rd-image"));
-  assert.equal((await usage(user.id)).metrics.requests.used, 2);
+  await limited(reserveRequest(user.id, "generation", "op-w"));
+  // 6 hours after the burst everything is free again.
+  setClockForTests(() => t0 + 6 * 3_600_000 + 1000);
+  s = await requestStatus(user.id);
+  assert.deepEqual([s.used, s.forecasts.used], [1, 0]);
+  assert.equal((await usage(user.id)).metrics.forecasts.windowHours, 5);
 });
 
-test("PRO: 10 requests per day, reset at 00:00", async () => {
+test("PRO: 10 images and 10 forecasts in any 3 hours", async () => {
   const { user } = await newUser();
   await setPlan(user.id, "pro");
-  await setTz(user.id, "Asia/Tashkent");
-  setClockForTests(() => Date.parse("2026-05-05T12:00:00Z"));
-  for (let i = 0; i < 10; i++) await use(user.id, i % 2 ? "generation" : "forecast");
-  await limited(reserveRequest(user.id, "forecast", "pro-11"));
+  const t0 = Date.parse("2026-05-05T12:00:00Z");
+  setClockForTests(() => t0);
+  for (let i = 0; i < 10; i++) await use(user.id, "generation");
+  await limited(reserveRequest(user.id, "generation", "pro-11"));
+  for (let i = 0; i < 10; i++) await use(user.id, "forecast");
+  await limited(reserveRequest(user.id, "forecast", "pro-fc-11"));
   const s = await requestStatus(user.id);
-  assert.deepEqual([s.period, s.limit, s.used, s.remaining, s.resetsAt], ["day", 10, 10, 0, "2026-05-05T19:00:00.000Z"]);
-  setClockForTests(() => Date.parse("2026-05-05T19:00:01Z"));
+  assert.deepEqual([s.period, s.windowHours, s.limit, s.used, s.remaining, s.resetsAt, s.forecasts.used], ["hours", 3, 10, 10, 0, "2026-05-05T15:00:00.000Z", 10]);
+  setClockForTests(() => t0 + 3 * 3_600_000 + 1000);
   assert.equal((await requestStatus(user.id)).used, 0);
-  await use(user.id);
+  await use(user.id, "generation");
 });
 
-test("MAX: 20 requests per day", async () => {
+test("MAX: 20 images and 20 forecasts in any hour", async () => {
   const { user } = await newUser();
   await setPlan(user.id, "max");
-  setClockForTests(() => Date.parse("2026-05-06T09:00:00Z"));
-  for (let i = 0; i < 20; i++) await use(user.id);
+  const t0 = Date.parse("2026-05-06T09:00:00Z");
+  setClockForTests(() => t0);
+  for (let i = 0; i < 20; i++) await use(user.id, "generation");
   await limited(reserveRequest(user.id, "generation", "max-21"));
-  assert.deepEqual(Object.values(await requestStatus(user.id)).slice(2, 6), ["day", 20, 20, 0]);
-  setClockForTests(() => Date.parse("2026-05-07T09:00:00Z"));
-  await use(user.id);
+  for (let i = 0; i < 20; i++) await use(user.id, "forecast");
+  await limited(reserveRequest(user.id, "forecast", "max-fc-21"));
+  const s = await requestStatus(user.id);
+  assert.deepEqual([s.period, s.windowHours, s.limit, s.used, s.remaining, s.forecasts.used], ["hours", 1, 20, 20, 0, 20]);
+  setClockForTests(() => t0 + 3_600_000 + 1000);
+  await use(user.id, "generation");
 });
 
 test("concurrent requests never go over the limit", async () => {
   const { user } = await newUser();
   const results = await Promise.allSettled(Array.from({ length: 12 }, (_, i) => reserveRequest(user.id, "forecast", `race-${i}`)));
-  assert.equal(results.filter((r) => r.status === "fulfilled").length, 2);
-  assert.equal(results.filter((r) => r.status === "rejected").length, 10);
-  assert.equal((await requestStatus(user.id)).used, 2);
+  assert.equal(results.filter((r) => r.status === "fulfilled").length, 5);
+  assert.equal(results.filter((r) => r.status === "rejected").length, 7);
+  assert.equal((await requestStatus(user.id)).forecasts.used, 5);
 });
 
 test("the same operation is never counted twice; failed and abandoned operations give the request back", async () => {
@@ -102,19 +116,19 @@ test("the same operation is never counted twice; failed and abandoned operations
   assert.equal((await requestStatus(user.id)).used, 1);
 
   await reserveRequest(user.id, "forecast", "fail-1");
-  assert.equal((await requestStatus(user.id)).used, 2, "a running operation holds its request");
+  assert.equal((await requestStatus(user.id)).forecasts.used, 1, "a running operation holds its request");
   await releaseRequest("forecast", "fail-1");
-  assert.equal((await requestStatus(user.id)).used, 1, "failure gives it back");
+  assert.equal((await requestStatus(user.id)).forecasts.used, 0, "failure gives it back");
   // Releasing after success changes nothing.
   await releaseRequest("generation", "dup-1");
   assert.equal((await requestStatus(user.id)).used, 1);
 
   // A reservation that was never finished (crashed job) stops counting after the TTL.
   await reserveRequest(user.id, "forecast", "crash-1");
-  assert.equal((await requestStatus(user.id)).used, 2);
+  assert.equal((await requestStatus(user.id)).forecasts.used, 1);
   const later = Date.now() + RESERVATION_TTL_MS + 60_000;
   setClockForTests(() => later);
-  assert.equal((await requestStatus(user.id)).used, 1);
+  assert.equal((await requestStatus(user.id)).forecasts.used, 0);
 });
 
 test("API: failed AI generation is not counted; time zone setting; dashboard shows used / remaining / reset", async () => {
@@ -130,8 +144,8 @@ test("API: failed AI generation is not counted; time zone setting; dashboard sho
   }
   let dash = (await client.get("/api/dashboard")).data.usage;
   assert.equal(dash.metrics.requests.used, 0, "failed generation not counted");
-  assert.equal(dash.metrics.requests.remaining, 2);
-  assert.equal(dash.metrics.requests.limit, 2);
+  assert.equal(dash.metrics.requests.remaining, 5);
+  assert.equal(dash.metrics.requests.limit, 5);
   assert.ok(dash.metrics.requests.resetsAt);
 
   assert.equal((await client.patch("/api/user/settings", { timezone: "Mars/Olympus" })).status, 400);

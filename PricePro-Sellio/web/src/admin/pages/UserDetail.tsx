@@ -111,7 +111,7 @@ export default function UserDetail() {
                 <td>{fmtDateTime(e.createdAt)}</td>
                 <td>{t(e.service === "generation" ? "AI ad" : "Demand forecast")}</td>
                 <td><Badge tone={e.status === "consumed" ? "green" : "amber"}>{t(e.status === "consumed" ? "Counted" : "In progress")}</Badge></td>
-                <td>{e.plan} · {t(e.period === "day" ? "per day" : "per month")}</td>
+                <td>{e.plan} · {t(e.period === "hours" ? "rolling hours" : e.period === "day" ? "per day" : "per month")}</td>
               </tr>
             ))}
           </Table>

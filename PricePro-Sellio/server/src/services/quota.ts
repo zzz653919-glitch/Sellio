@@ -77,7 +77,14 @@ function localMidnight(y: number, m: number, d: number, tz: string) {
 }
 
 /** Start of the current period and the next reset, both at 00:00 in the zone. */
+/** The counting window of a plan: the last N hours (rolling), or the calendar day / month in the user's time zone. */
+export function windowOf(info: { requestPeriod: RequestPeriod; periodHours: number }, tz: string, at = nowMs()) {
+  if (info.requestPeriod === "hours") return { start: at - info.periodHours * 3_600_000, end: at + info.periodHours * 3_600_000, rolling: true as const };
+  return { ...periodBounds(info.requestPeriod, tz, at), rolling: false as const };
+}
+
 export function periodBounds(period: RequestPeriod, tz: string, at = nowMs()) {
+  if (period === "hours") return { start: at - 3_600_000, end: at + 3_600_000 };
   const p = partsIn(at, tz);
   if (period === "day") {
     const next = new Date(Date.UTC(p.y, p.m - 1, p.d + 1));
@@ -95,23 +102,34 @@ async function userPlanRow(userId: string): Promise<Plan> {
 }
 
 export type RequestStatus = {
-  plan: Plan; timezone: string; period: RequestPeriod; limit: number; used: number; remaining: number; periodStart: string; resetsAt: string;
-  /** Extra daily cap on AI advertisement images (Free: 2 per day); null when the plan has none. */
+  plan: Plan; timezone: string; period: RequestPeriod; windowHours: number | null; limit: number; used: number; remaining: number; periodStart: string;
+  /** Rolling window: when the next used request becomes free again. Calendar periods: the next reset. */
+  resetsAt: string;
+  /** Optional extra daily cap on AI advertisement images (set by an administrator); null when the plan has none. */
   imagesToday: { used: number; limit: number; remaining: number; resetsAt: string } | null;
+  /** Demand forecasts have their own allowance, in the same period. */
+  forecasts: { used: number; limit: number; remaining: number; period: RequestPeriod; windowHours: number | null; periodStart: string; resetsAt: string };
 };
 
 export async function requestStatus(userId: string, known?: { plan?: Plan; timezone?: string }): Promise<RequestStatus> {
   const [plan, timezone] = await Promise.all([known?.plan ?? userPlanRow(userId), known?.timezone ?? userTimezone(userId)]);
   const info = getPlans()[plan];
-  const { start, end } = periodBounds(info.requestPeriod, timezone);
+  const w = windowOf(info, timezone);
   const day = periodBounds("day", timezone);
   const expired = iso(nowMs() - RESERVATION_TTL_MS);
-  // One round trip for both counts.
-  const row = await get<{ n: number; img: number }>(
-    `SELECT (SELECT COUNT(*) FROM usage_events WHERE user_id = ?1 AND created_at >= ?2 AND ${COUNTED.replaceAll("?", "?3")}) AS n,
-            (SELECT COUNT(*) FROM usage_events WHERE user_id = ?1 AND service = 'generation' AND created_at >= ?4 AND ${COUNTED.replaceAll("?", "?3")}) AS img`,
-    userId, iso(start), expired, iso(day.start),
+  // One round trip for all counts. "requests" are AI advertisement images; forecasts are counted separately.
+  // For a rolling window, the oldest counted use tells when the next request becomes free again.
+  const C = COUNTED.replaceAll("?", "?3");
+  const row = await get<{ n: number; fc: number; img: number; n0: string | null; fc0: string | null }>(
+    `SELECT (SELECT COUNT(*) FROM usage_events WHERE user_id = ?1 AND service = 'generation' AND created_at >= ?2 AND ${C}) AS n,
+            (SELECT COUNT(*) FROM usage_events WHERE user_id = ?1 AND service = 'forecast' AND created_at >= ?2 AND ${C}) AS fc,
+            (SELECT COUNT(*) FROM usage_events WHERE user_id = ?1 AND service = 'generation' AND created_at >= ?4 AND ${C}) AS img,
+            (SELECT MIN(created_at) FROM usage_events WHERE user_id = ?1 AND service = 'generation' AND created_at >= ?2 AND ${C}) AS n0,
+            (SELECT MIN(created_at) FROM usage_events WHERE user_id = ?1 AND service = 'forecast' AND created_at >= ?2 AND ${C}) AS fc0`,
+    userId, iso(w.start), expired, iso(day.start),
   );
+  const hours = w.rolling ? info.periodHours : null;
+  const freeAt = (oldest: string | null) => (w.rolling ? (oldest ? Date.parse(oldest) + info.periodHours * 3_600_000 : nowMs()) : w.end);
   const used = row?.n ?? 0;
   const limit = info.limits.requests;
   let imagesToday: RequestStatus["imagesToday"] = null;
@@ -119,7 +137,9 @@ export async function requestStatus(userId: string, known?: { plan?: Plan; timez
     const n = row?.img ?? 0;
     imagesToday = { used: n, limit: info.dailyImageLimit, remaining: Math.max(0, info.dailyImageLimit - n), resetsAt: iso(day.end) };
   }
-  return { plan, timezone, period: info.requestPeriod, limit, used, remaining: Math.max(0, limit - used), periodStart: iso(start), resetsAt: iso(end), imagesToday };
+  const fcUsed = row?.fc ?? 0;
+  const forecasts = { used: fcUsed, limit: info.limits.forecasts, remaining: Math.max(0, info.limits.forecasts - fcUsed), period: info.requestPeriod, windowHours: hours, periodStart: iso(w.start), resetsAt: iso(freeAt(row?.fc0 ?? null)) };
+  return { plan, timezone, period: info.requestPeriod, windowHours: hours, limit, used, remaining: Math.max(0, limit - used), periodStart: iso(w.start), resetsAt: iso(freeAt(row?.n0 ?? null)), imagesToday, forecasts };
 }
 
 // ---------------------------------------------------------------- reserve / consume / release
@@ -133,9 +153,11 @@ export async function reserveRequest(userId: string, service: QuotaService, refI
   const plan = await userPlanRow(userId);
   const timezone = await userTimezone(userId);
   const info = getPlans()[plan];
-  const { start, end } = periodBounds(info.requestPeriod, timezone);
   const now = nowMs();
+  const { start } = windowOf(info, timezone, now);
   const id = newId();
+  // Images and forecasts each have their own allowance.
+  const serviceLimit = service === "generation" ? info.limits.requests : info.limits.forecasts;
   // AI images on plans with a daily image cap: the daily count is checked in the same atomic statement.
   const dailyCap = service === "generation" ? info.dailyImageLimit : null;
   const day = periodBounds("day", timezone);
@@ -148,9 +170,9 @@ export async function reserveRequest(userId: string, service: QuotaService, refI
     ({ changes } = await run(
       `INSERT INTO usage_events (id, user_id, service, ref_id, status, plan, period, period_start, created_at, updated_at)
        SELECT ?, ?, ?, ?, 'reserved', ?, ?, ?, ?, ?
-       WHERE (SELECT COUNT(*) FROM usage_events WHERE user_id = ? AND created_at >= ? AND ${COUNTED}) < ?${dailySql}`,
+       WHERE (SELECT COUNT(*) FROM usage_events WHERE user_id = ? AND service = ? AND created_at >= ? AND ${COUNTED}) < ?${dailySql}`,
       id, userId, service, refId, plan, info.requestPeriod, iso(start), iso(now), iso(now),
-      userId, iso(start), iso(now - RESERVATION_TTL_MS), info.limits.requests, ...dailyParams,
+      userId, service, iso(start), iso(now - RESERVATION_TTL_MS), serviceLimit, ...dailyParams,
     ));
   } catch (err) {
     // A parallel call for the same operation won the race: it is counted once.
@@ -160,22 +182,34 @@ export async function reserveRequest(userId: string, service: QuotaService, refI
   }
   if (changes === 0) {
     const status = await requestStatus(userId, { plan, timezone });
-    if (dailyCap !== null && status.remaining > 0 && status.imagesToday && status.imagesToday.remaining === 0) {
+    if (service === "generation" && dailyCap !== null && status.remaining > 0 && status.imagesToday && status.imagesToday.remaining === 0) {
       throw tooMany(
-        `The ${info.name} plan allows ${dailyCap} AI advertisement images per day. More will be available after 00:00 (${timezone}).` +
-          " Demand forecasts are still available. Upgrade to Pro or Max for more images.",
+        `The ${info.name} plan allows ${dailyCap} AI advertisement images per day. More will be available after 00:00 (${timezone}).`,
         { metric: "images_per_day", used: dailyCap, limit: dailyCap, plan, period: "day", resetsAt: iso(day.end) },
       );
     }
-    const limit = info.limits.requests;
+    const what = service === "generation" ? "AI advertisement images" : "demand forecasts";
+    const free = service === "generation" ? status.resetsAt : status.forecasts.resetsAt;
+    const metric = { metric: service === "generation" ? "requests" : "forecasts", used: serviceLimit, limit: serviceLimit, plan, period: info.requestPeriod, resetsAt: free };
+    if (info.requestPeriod === "hours") {
+      throw tooMany(`You have used all ${serviceLimit} ${what} of the ${info.name} plan for the last ${info.periodHours} hours. The next one is available at ${fmtTime(free, timezone)}.`, metric);
+    }
     const when = info.requestPeriod === "day" ? "today" : "this month";
-    throw tooMany(
-      `You have used all ${limit} requests of the ${info.name} plan ${when}. They renew on ${iso(end).slice(0, 10)}.` +
-        (plan === "free" ? " Upgrade to Pro or Max for more requests." : plan === "pro" ? " Upgrade to Max for more requests." : ""),
-      { metric: "requests", used: limit, limit, plan, period: info.requestPeriod, resetsAt: iso(end) },
-    );
+    throw tooMany(`You have used all ${serviceLimit} ${what} of the ${info.name} plan ${when}. They renew on ${fmtReset(free, timezone)}.`, metric);
   }
   return id;
+}
+
+/** "2026-04-11 14:30" in the user's time zone. */
+function fmtTime(isoStr: string, tz: string) {
+  const p = partsIn(Date.parse(isoStr), tz);
+  return `${p.y}-${String(p.m).padStart(2, "0")}-${String(p.d).padStart(2, "0")} ${String(p.H).padStart(2, "0")}:${String(p.M).padStart(2, "0")}`;
+}
+
+/** "2026-04-11 00:00" in the user's time zone. */
+function fmtReset(isoStr: string, tz: string) {
+  const p = partsIn(Date.parse(isoStr), tz);
+  return `${p.y}-${String(p.m).padStart(2, "0")}-${String(p.d).padStart(2, "0")} 00:00`;
 }
 
 /** The operation succeeded: count it (once). */

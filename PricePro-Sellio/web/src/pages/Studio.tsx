@@ -68,6 +68,9 @@ function ResultPanel({ id }: { id: string }) {
     if (g && prevStatus.current && prevStatus.current !== g.status && ["succeeded", "failed"].includes(g.status)) {
       qc.invalidateQueries({ queryKey: ["generations"] });
       qc.invalidateQueries({ queryKey: ["notifications"] });
+      // The image is counted (or given back) now: update the limit counters right away.
+      qc.invalidateQueries({ queryKey: ["subscription"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
       toast(g.status === "succeeded" ? "success" : "error", g.status === "succeeded" ? t("Advertisement ready") : t("Generation failed"));
     }
     prevStatus.current = g?.status ?? null;

@@ -69,14 +69,16 @@ export function Avatar({ url, name, size = 36 }: { url: string | null; name: str
   );
 }
 
-type SubSummary = { plan: "free" | "pro" | "max"; usage: { metrics: Record<string, { used: number; limit: number; period: "day" | "month" }> }; subscription: { currentPeriodEnd: string | null } | null };
+type SubSummary = { plan: "free" | "pro" | "max"; usage: { metrics: Record<string, { used: number; limit: number; period: "hours" | "day" | "month"; windowHours?: number | null }> }; subscription: { currentPeriodEnd: string | null } | null };
 
 function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const { t } = useI18n();
   const { user } = useAuth();
   const unread = useUnread();
-  const sub = useQuery({ queryKey: ["subscription"], queryFn: () => get<SubSummary>("/subscription"), enabled: Boolean(user), staleTime: 60_000 });
+  // Refreshed every 20 s while the tab is open (and after every action), so the counter is always current.
+  const sub = useQuery({ queryKey: ["subscription"], queryFn: () => get<SubSummary>("/subscription"), enabled: Boolean(user), staleTime: 10_000, refetchInterval: 20_000, refetchOnWindowFocus: true });
   const gen = sub.data?.usage.metrics.requests;
+  const fc = sub.data?.usage.metrics.forecasts;
   return (
     <div className="flex h-full flex-col px-3 pb-3 pt-4">
       <Logo className="px-2 pb-3.5" />
@@ -102,8 +104,13 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       </nav>
       {user && gen && (
         <Link to="/subscription" onClick={onNavigate} className="mb-2.5 mt-3 block rounded-[14px] border border-[var(--v-line-soft)] bg-[var(--v-glass-2)] p-3.5 shadow-[inset_0_1px_0_var(--v-hi)]">
-          <div className="mb-2 flex justify-between text-[12.5px] muted"><span>{t(gen.period === "day" ? "Requests today" : "Requests this month")}</span><b className="font-bold text-[var(--v-text)]">{gen.used} / {gen.limit}</b></div>
-          <div className="h-2 overflow-hidden rounded-full bg-[var(--v-track)]"><span className="block h-full rounded-full bg-[var(--v-sky)]" style={{ width: `${Math.min(100, (gen.used / Math.max(1, gen.limit)) * 100)}%` }} /></div>
+          {[{ m: gen, key: "img", label: gen.period === "hours" ? t("AI images ({h} h)", { h: gen.windowHours ?? 1 }) : t(gen.period === "day" ? "AI ad images today" : "AI ad images this month") },
+            ...(fc ? [{ m: fc, key: "fc", label: fc.period === "hours" ? t("Forecasts ({h} h)", { h: fc.windowHours ?? 1 }) : t(fc.period === "day" ? "Forecasts today" : "Forecasts this month") }] : [])].map(({ m, key, label }) => (
+            <div key={key} className="mb-2">
+              <div className="mb-1 flex justify-between text-[12.5px] muted"><span>{label}</span><b className="font-bold text-[var(--v-text)]">{m.used} / {m.limit}</b></div>
+              <div className="h-1.5 overflow-hidden rounded-full bg-[var(--v-track)]"><span className="block h-full rounded-full bg-[var(--v-sky)]" style={{ width: `${Math.min(100, (m.used / Math.max(1, m.limit)) * 100)}%` }} /></div>
+            </div>
+          ))}
           <div className="mt-2 flex justify-between text-[12.5px]"><span className="muted">{PLAN_NAME[user.plan]}</span><span className="font-semibold text-[var(--v-sky)]">{user.plan === "pro" ? t("Manage") : t("Upgrade")}</span></div>
         </Link>
       )}

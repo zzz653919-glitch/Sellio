@@ -13,9 +13,9 @@ export type User = {
   adminRole?: "super_admin" | "admin" | "moderator" | null;
 };
 
-/** requests = AI advertisements + demand forecasts (shared); ai = AI text requests. */
-export type Metric = "requests" | "ai";
-export type UsageMetric = { used: number; limit: number; remaining: number; period: "day" | "month"; periodStart: string; resetsAt: string; imagesToday?: { used: number; limit: number; remaining: number; resetsAt: string } | null };
+/** requests = AI advertisement images; forecasts = demand forecasts (separate allowance); ai = AI text requests. */
+export type Metric = "requests" | "forecasts" | "ai";
+export type UsageMetric = { used: number; limit: number; remaining: number; period: "hours" | "day" | "month"; windowHours?: number | null; periodStart: string; resetsAt: string; imagesToday?: { used: number; limit: number; remaining: number; resetsAt: string } | null };
 export type Usage = { plan: PlanKey; timezone: string; periodStart: string; resetsAt: string; metrics: Record<Metric, UsageMetric> };
 
 export type Meta = {

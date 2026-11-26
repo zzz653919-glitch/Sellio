@@ -54,7 +54,7 @@ export function paymentConfig() {
     return {
       key: p, name: info.name, enabled: info.enabled,
       month: priceOf(p, "month"), year: priceOf(p, "year"),
-      requests: info.limits.requests, requestPeriod: info.requestPeriod, ai: info.limits.ai,
+      requests: info.limits.requests, forecasts: info.limits.forecasts, requestPeriod: info.requestPeriod, periodHours: info.periodHours, ai: info.limits.ai,
     };
   });
   return { enabled: m.enabled, card: { number: m.cardNumber, holder: m.cardholder, bank: m.bank, type: m.cardType }, uzsPerUsd: m.uzsPerUsd, plans };

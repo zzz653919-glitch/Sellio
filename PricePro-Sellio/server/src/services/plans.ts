@@ -11,21 +11,22 @@ export const PAID_PLANS = ["pro", "max"] as const;
 export const isPaidPlan = (p: string): p is "pro" | "max" => p === "pro" || p === "max";
 export type { Metric };
 
-export type PlanInfo = { name: string; priceMonthlyUsd: number; priceYearlyUsd: number | null; limits: Record<Metric, number>; requestPeriod: RequestPeriod; dailyImageLimit: number | null; benefits: string[]; enabled: boolean };
+export type PlanInfo = { name: string; priceMonthlyUsd: number; priceYearlyUsd: number | null; limits: Record<Metric, number>; requestPeriod: RequestPeriod; periodHours: number; dailyImageLimit: number | null; benefits: string[]; enabled: boolean };
 
 /** Built-in plans; the admin panel can override names, prices shown, limits, benefits and availability. */
-export const PLANS: Record<Plan, { name: string; priceMonthlyUsd: number; priceYearlyUsd: number | null; limits: Record<Metric, number>; requestPeriod: RequestPeriod; dailyImageLimit: number | null; benefits: string[] }> = {
+export const PLANS: Record<Plan, { name: string; priceMonthlyUsd: number; priceYearlyUsd: number | null; limits: Record<Metric, number>; requestPeriod: RequestPeriod; periodHours: number; dailyImageLimit: number | null; benefits: string[] }> = {
   free: {
     name: "Free",
     priceMonthlyUsd: 0,
     priceYearlyUsd: null,
-    limits: { requests: 2, ai: 50 },
-    requestPeriod: "day",
-    dailyImageLimit: 2,
+    limits: { requests: 5, forecasts: 5, ai: 50 },
+    requestPeriod: "hours",
+    periodHours: 5,
+    dailyImageLimit: null,
     benefits: [
-      "2 requests per day for AI ads and demand forecasts (shared)",
-      "Up to 2 AI advertisement images per day",
-      "Renews every day at 00:00; unused requests do not carry over",
+      "5 AI advertisement images every 5 hours",
+      "5 demand forecasts every 5 hours (a separate limit)",
+      "Each request is available again 5 hours after it was used",
       "50 AI text requests per month (ad copy, reviews, plans, explanations)",
     ],
   },
@@ -33,12 +34,14 @@ export const PLANS: Record<Plan, { name: string; priceMonthlyUsd: number; priceY
     name: "Pro",
     priceMonthlyUsd: 19,
     priceYearlyUsd: 190,
-    limits: { requests: 10, ai: 1000 },
-    requestPeriod: "day",
+    limits: { requests: 10, forecasts: 10, ai: 1000 },
+    requestPeriod: "hours",
+    periodHours: 3,
     dailyImageLimit: null,
     benefits: [
-      "10 requests per day for AI ads and demand forecasts",
-      "Renews every day at 00:00",
+      "10 AI advertisement images every 3 hours",
+      "10 demand forecasts every 3 hours (a separate limit)",
+      "Each request is available again 3 hours after it was used",
       "1000 AI text requests per month",
       "Yearly payment: $190 instead of $228",
     ],
@@ -47,12 +50,14 @@ export const PLANS: Record<Plan, { name: string; priceMonthlyUsd: number; priceY
     name: "Max",
     priceMonthlyUsd: 20,
     priceYearlyUsd: 200,
-    limits: { requests: 20, ai: 3000 },
-    requestPeriod: "day",
+    limits: { requests: 20, forecasts: 20, ai: 3000 },
+    requestPeriod: "hours",
+    periodHours: 1,
     dailyImageLimit: null,
     benefits: [
-      "20 requests per day for AI ads and demand forecasts",
-      "Renews every day at 00:00",
+      "20 AI advertisement images every hour",
+      "20 demand forecasts every hour (a separate limit)",
+      "Each request is available again 1 hour after it was used",
       "3000 AI text requests per month",
       "Yearly payment: $200 instead of $240",
     ],
@@ -65,8 +70,9 @@ export function getPlans(): Record<Plan, PlanInfo> {
     name: o[p]?.name || PLANS[p].name,
     priceMonthlyUsd: o[p]?.priceMonthlyUsd ?? PLANS[p].priceMonthlyUsd,
     priceYearlyUsd: o[p]?.priceYearlyUsd !== undefined ? o[p]!.priceYearlyUsd! : PLANS[p].priceYearlyUsd,
-    limits: { requests: o[p]?.limits?.requests ?? PLANS[p].limits.requests, ai: o[p]?.limits?.ai ?? PLANS[p].limits.ai },
-    requestPeriod: o[p]?.requestPeriod === "day" || o[p]?.requestPeriod === "month" ? o[p]!.requestPeriod! : PLANS[p].requestPeriod,
+    limits: { requests: o[p]?.limits?.requests ?? PLANS[p].limits.requests, forecasts: o[p]?.limits?.forecasts ?? PLANS[p].limits.forecasts, ai: o[p]?.limits?.ai ?? PLANS[p].limits.ai },
+    requestPeriod: o[p]?.requestPeriod === "hours" || o[p]?.requestPeriod === "day" || o[p]?.requestPeriod === "month" ? o[p]!.requestPeriod! : PLANS[p].requestPeriod,
+    periodHours: Math.min(168, Math.max(1, Math.round(o[p]?.periodHours ?? PLANS[p].periodHours))),
     dailyImageLimit: o[p]?.dailyImageLimit !== undefined ? (o[p]!.dailyImageLimit ?? null) : PLANS[p].dailyImageLimit,
     benefits: o[p]?.benefits?.length ? o[p]!.benefits! : PLANS[p].benefits,
     enabled: p === "free" ? true : o[p]?.enabled ?? true,
@@ -90,8 +96,8 @@ async function aiStatus(userId: string, plan: Plan, timezone: string) {
 export async function usage(userId: string) {
   const [plan, timezone] = await Promise.all([userPlan(userId), userTimezone(userId)]);
   const [r, ai] = await Promise.all([requestStatus(userId, { plan, timezone }), aiStatus(userId, plan, timezone)]);
-  const { plan: _p, timezone: _t, ...requests } = r;
-  return { plan, timezone, periodStart: r.periodStart, resetsAt: r.resetsAt, metrics: { requests, ai } };
+  const { plan: _p, timezone: _t, forecasts, ...requests } = r;
+  return { plan, timezone, periodStart: r.periodStart, resetsAt: r.resetsAt, metrics: { requests, forecasts, ai } };
 }
 
 /** Text-AI limit (monthly). Core services use reserveRequest() in quota.ts instead. */
