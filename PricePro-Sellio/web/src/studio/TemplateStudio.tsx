@@ -13,6 +13,7 @@ export default function TemplateStudio() {
   const qc = useQueryClient();
   const [params, setParams] = useSearchParams();
   const open = params.get("tpl");
+  const photo = params.get("photo") ?? undefined;
   const favs = useQuery({ queryKey: ["template-favorites"], queryFn: () => get<{ ids: string[] }>("/ads/template-favorites").then((r) => r.ids), staleTime: 300_000 });
   const favorites = new Set(favs.data ?? []);
   const toggle = useMutation({
@@ -25,10 +26,10 @@ export default function TemplateStudio() {
   const onToggle = (id: string) => toggle.mutate({ id, on: !favorites.has(id) });
   const go = (id: string | null) => {
     const next = new URLSearchParams(params);
-    if (id) next.set("tpl", id); else next.delete("tpl");
+    if (id) next.set("tpl", id); else { next.delete("tpl"); next.delete("photo"); }
     setParams(next);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
-  if (open) return <Editor key={open} templateId={open} onBack={() => go(null)} favorite={favorites.has(open)} onToggleFavorite={() => onToggle(open)} />;
+  if (open) return <Editor key={`${open}:${photo ?? ""}`} templateId={open} photo={photo} onBack={() => go(null)} favorite={favorites.has(open)} onToggleFavorite={() => onToggle(open)} />;
   return <Gallery favorites={favorites} onToggleFavorite={onToggle} onOpen={go} />;
 }

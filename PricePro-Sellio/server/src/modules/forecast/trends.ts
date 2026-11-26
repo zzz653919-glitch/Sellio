@@ -15,6 +15,8 @@ export interface TrendsProvider {
   name: string;
   /** Interest over time for one area; geo "" = worldwide. */
   interestOverTime(query: string, geo: string, range: TrendsRange): Promise<Point[]>;
+  /** Up to 5 queries in one request: their values share one scale, so they can be compared with each other. */
+  interestOverTimeMulti?(queries: string[], geo: string, range: TrendsRange): Promise<Record<string, Point[]>>;
   /** Interest by country, worldwide (comparable between countries). */
   interestByCountry(query: string, range: TrendsRange): Promise<CountryInterest[]>;
   /** Interest by region inside one country (e.g. the regions of Uzbekistan). */
@@ -51,6 +53,27 @@ export function parseTimeline(body: unknown): Point[] {
     out.set(new Date(ts * 1000).toISOString().slice(0, 10), value);
   }
   return [...out.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([date, units]) => ({ date, units }));
+}
+
+/** Parse a multi-query timeline: one series per query, all on the same 0–100 scale. */
+export function parseTimelineMulti(body: unknown, queries: string[]): Record<string, Point[]> {
+  const items = (body as { interest_over_time?: { timeline_data?: unknown[] } } | null)?.interest_over_time?.timeline_data;
+  const out: Record<string, Map<string, number>> = Object.fromEntries(queries.map((q) => [q, new Map<string, number>()]));
+  if (Array.isArray(items)) {
+    for (const raw of items) {
+      const it = raw as { timestamp?: string | number; partial_data?: boolean; values?: { query?: string; value?: unknown; extracted_value?: unknown }[] };
+      if (it.partial_data) continue;
+      const ts = num(it.timestamp);
+      if (ts === null) continue;
+      const date = new Date(ts * 1000).toISOString().slice(0, 10);
+      (it.values ?? []).forEach((v, i) => {
+        const q = v.query && v.query in out ? v.query : queries[i];
+        const value = num(v.extracted_value) ?? num(v.value);
+        if (q && value !== null) out[q].set(date, value);
+      });
+    }
+  }
+  return Object.fromEntries(Object.entries(out).map(([q, m]) => [q, [...m.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([date, units]) => ({ date, units }))]));
 }
 
 /** Parse `interest_by_region` (GEO_MAP_0). */
@@ -93,6 +116,11 @@ export class SerpApiTrendsProvider implements TrendsProvider {
   async interestOverTime(query: string, geo: string, range: TrendsRange) {
     const body = await this.call({ q: query, date: range, data_type: "TIMESERIES", ...(geo ? { geo } : {}) });
     return body ? parseTimeline(body) : [];
+  }
+
+  async interestOverTimeMulti(queries: string[], geo: string, range: TrendsRange) {
+    const body = await this.call({ q: queries.join(","), date: range, data_type: "TIMESERIES", ...(geo ? { geo } : {}) });
+    return parseTimelineMulti(body, queries);
   }
 
   async interestByCountry(query: string, range: TrendsRange) {

@@ -112,11 +112,7 @@ test("API: Market Radar, opportunities and regions come only from measured searc
   assert.ok(radar.items.length >= 10);
   assert.ok(radar.declining.some((i: { query: string }) => i.query === "обогреватель"), "declining heaters");
   assert.ok(Array.isArray(radar.updates));
-  const opp = (await client.get("/api/intel/opportunities")).data;
-  assert.equal(opp.configured, true);
-  assert.equal(opp.items[0].query, "вентилятор");
-  assert.ok(opp.items[0].reasons.length > 0 && opp.items[0].evidence.yoyPct > 0);
-  assert.ok(!opp.items.some((o: { query: string }) => o.query === "обогреватель"));
+  assert.equal((await client.get("/api/intel/opportunities")).status, 404, "Opportunities were removed");
   const reg = await client.post("/api/intel/regions", { query: "куртка" });
   assert.equal(reg.status, 200);
   assert.equal(reg.data.regions[0].name, "Tashkent");
@@ -140,16 +136,48 @@ test("API: demand analysis returns 7 / 30 / 90 / 365-day horizons with back-test
   }
 });
 
-test("API: competitors are private notes with ownership checks", async () => {
-  const a = await newUser(), b = await newUser();
-  const bad = await a.client.post("/api/intel/competitors", { name: "Shop", website: "not a url" });
-  assert.equal(bad.status, 400);
-  assert.equal((await a.client.post("/api/intel/competitors", { name: "Shop", website: "javascript:alert(1)" })).status, 400);
-  const c = await a.client.post("/api/intel/competitors", { name: "TechnoMart", website: "https://example.uz", priceNote: "Phones from 2 mln" });
-  assert.equal(c.status, 201);
-  const id = c.data.competitor.id;
-  assert.equal((await b.client.get("/api/intel/competitors")).data.items.length, 0);
-  assert.equal((await b.client.del(`/api/intel/competitors/${id}`)).status, 404);
-  assert.equal((await a.client.patch(`/api/intel/competitors/${id}`, { name: "TechnoMart UZ", positioning: "Cheap" })).data.competitor.name, "TechnoMart UZ");
-  assert.equal((await a.client.del(`/api/intel/competitors/${id}`)).status, 200);
+test("API: top products for a period — one shared scale across requests via the anchor, change vs the period before", async () => {
+  const { client } = await newUser();
+  setTrendsProviderForTests(null);
+  assert.equal((await client.get("/api/intel/top?period=week")).data.configured, false);
+  const calls: string[][] = [];
+  const day = (n: number, f: (i: number) => number) => Array.from({ length: n }, (_, i) => ({ date: new Date(Date.UTC(2026, 0, 1) + i * 86_400_000).toISOString().slice(0, 10), units: f(i) }));
+  // True (absolute) interest per product; each request is normalized so its own maximum is 100, like Google does.
+  const truth = (q: string, i: number, last: number) =>
+    q === "телефон" ? 40
+    : q === "кондиционер" ? (i >= last - 7 ? 120 : 30) // jumps in the last week: most wanted and fastest growing this week
+    : q === "обогреватель" ? (i >= last - 7 ? 5 : 20) // falls in the last week
+    : 10;
+  const provider: TrendsProvider = {
+    name: "fake",
+    async interestOverTime() { return []; },
+    async interestByCountry() { return []; },
+    async interestOverTimeMulti(qs, _geo, range) {
+      calls.push(qs);
+      const n = range === "today 3-m" ? 90 : range === "today 12-m" ? 52 : 260;
+      const raw = Object.fromEntries(qs.map((q) => [q, day(n, (i) => truth(q, i, n))]));
+      const max = Math.max(...Object.values(raw).flat().map((p) => p.units));
+      return Object.fromEntries(Object.entries(raw).map(([q, s]) => [q, s.map((p) => ({ ...p, units: Math.round((p.units / max) * 100) }))]));
+    },
+  };
+  setTrendsProviderForTests(provider);
+  const w = (await client.get("/api/intel/top?period=week")).data;
+  assert.equal(w.configured, true);
+  assert.equal(w.comparable, true);
+  assert.ok(calls.every((c) => c[0] === "телефон" && c.length <= 5), "every request carries the anchor, at most 5 queries");
+  assert.equal(w.mostWanted[0].query, "кондиционер");
+  assert.equal(w.mostWanted[0].index, 100);
+  const phone = w.mostWanted.find((i: { query: string }) => i.query === "телефон");
+  assert.ok(Math.abs(phone.index - 33) <= 2, `phone ≈ 40/120 of the top (${phone.index})`);
+  assert.equal(w.fastestGrowing[0].query, "кондиционер");
+  assert.ok(w.fastestGrowing[0].changePct > 200);
+  assert.equal(w.declining[0].query, "обогреватель");
+  assert.equal(w.mostWanted[0].series.length, 7);
+  // A month compares the last 30 days with the 30 before; the same cached data is reused (no new requests).
+  const before = calls.length;
+  const m = (await client.get("/api/intel/top?period=month")).data;
+  assert.equal(calls.length, before, "week and month share one cached download");
+  assert.equal(m.mostWanted[0].series.length, 30);
+  assert.equal((await client.get("/api/intel/top?period=decade")).status, 400);
+  setTrendsProviderForTests(undefined);
 });

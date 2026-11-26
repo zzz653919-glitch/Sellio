@@ -743,4 +743,11 @@ CREATE INDEX idx_usage_user ON usage_events(user_id, created_at);
 CREATE INDEX idx_usage_created ON usage_events(created_at);
 `,
   },
+  {
+    // Market Intelligence: the Competitors notes were removed from the product.
+    version: 18,
+    sql: `
+DROP TABLE IF EXISTS competitors;
+`,
+  },
 ];

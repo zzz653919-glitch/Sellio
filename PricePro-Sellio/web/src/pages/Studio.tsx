@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
-import { Download, ImagePlus, Loader2, RefreshCw, Sparkles, Trash2, UploadCloud, Wand2, XCircle } from "lucide-react";
+import { ChevronDown, Download, ImagePlus, Loader2, PencilLine, RefreshCw, SlidersHorizontal, Sparkles, Trash2, UploadCloud, Wand2, XCircle } from "lucide-react";
 import { useEffect, useRef, useState, type DragEvent } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { ErrorAlert, FavoriteButton, IntegrationNotice, SaveProjectButton } from "../components/shared";
 import { Badge, Button, Card, ConfirmDialog, EmptyState, Field, Input, PageHeader, Select, cx, useToast } from "../components/ui";
 import { del, errorMessage, get, post, upload } from "../lib/api";
@@ -12,6 +12,7 @@ import { useI18n } from "../lib/i18n";
 import type { Generation, StudioOptions, Upload } from "../lib/types";
 
 const STYLE_SWATCH: Record<string, string> = {
+  auto: "from-violet-500 via-sky-400 to-emerald-300",
   premium_luxury: "from-amber-400 via-yellow-600 to-stone-900",
   minimal_studio: "from-slate-100 via-white to-slate-300",
   modern_commercial: "from-fuchsia-500 via-brand-500 to-cyan-400",
@@ -19,6 +20,9 @@ const STYLE_SWATCH: Record<string, string> = {
   lifestyle: "from-emerald-300 via-amber-200 to-orange-300",
   social_media: "from-pink-500 via-orange-400 to-yellow-300",
 };
+
+/** Ready-made change requests for a finished advertisement (the user can also type their own). */
+const EDIT_IDEAS = ["Make the background darker", "Put it on a wooden table", "Make the light warmer", "Add a little more space around the product", "Make it look more premium"];
 
 function statusTone(s: Generation["status"]) {
   return s === "succeeded" ? "green" : s === "failed" ? "red" : "brand";
@@ -57,6 +61,8 @@ function ResultPanel({ id }: { id: string }) {
   const toast = useToast();
   const qc = useQueryClient();
   const [, setParams] = useSearchParams();
+  const navigate = useNavigate();
+  const [change, setChange] = useState("");
   const q = useQuery({
     queryKey: ["generation", id],
     queryFn: () => get<{ generation: Generation }>(`/studio/generations/${id}`).then((r) => r.generation),
@@ -83,6 +89,15 @@ function ResultPanel({ id }: { id: string }) {
     },
   });
 
+  const edit = useMutation({
+    mutationFn: () => post<{ generation: Generation }>(`/studio/generations/${id}/edit`, { instructions: change.trim() }),
+    onSuccess: (d) => {
+      setChange("");
+      qc.invalidateQueries({ queryKey: ["generations"] });
+      setParams({ generation: d.generation.id });
+    },
+  });
+
   if (q.isLoading) return <Card className="flex h-80 items-center justify-center p-6"><Loader2 className="h-6 w-6 animate-spin text-brand-600" /></Card>;
   if (q.error || !g) return <ErrorAlert error={q.error} />;
   const running = g.status === "queued" || g.status === "processing";
@@ -92,7 +107,7 @@ function ResultPanel({ id }: { id: string }) {
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <div>
           <h2 className="font-semibold">{g.productName}</h2>
-          <p className="text-xs muted">{g.styleLabel} · {g.category} · {timeAgo(g.createdAt)}</p>
+          <p className="text-xs muted">{t(g.styleLabel)} · {t(g.category)} · {timeAgo(g.createdAt)}</p>
         </div>
         <Badge tone={statusTone(g.status)}>{t(g.status)}</Badge>
       </div>
@@ -132,7 +147,28 @@ function ResultPanel({ id }: { id: string }) {
             <a href={`${g.resultUrl}?download=1`}><Button size="sm" icon={<Download className="h-4 w-4" />}>{t("Download")}</Button></a>
             <SaveProjectButton type="advertisement" refId={g.id} projectId={g.projectId} invalidate={["generation", id]} />
             <FavoriteButton itemType="advertisement" refId={g.id} favoriteId={g.favoriteId} invalidate={["generation", id]} />
+            <Button size="sm" variant="secondary" icon={<PencilLine className="h-4 w-4" />} data-testid="open-in-editor"
+              onClick={() => navigate(`/ads?tab=templates&tpl=photo-ad&photo=${encodeURIComponent(g.resultUrl!)}`)}>{t("Open in editor")}</Button>
             <Button size="sm" variant="secondary" loading={retry.isPending} onClick={() => retry.mutate()} icon={<RefreshCw className="h-4 w-4" />}>{t("Generate Again")}</Button>
+          </div>
+          <div className="space-y-3 rounded-xl border border-slate-200 p-4 dark:border-slate-800" data-testid="ai-edit">
+            <div>
+              <p className="flex items-center gap-1.5 font-semibold"><Wand2 className="h-4 w-4 text-brand-600" />{t("Change with AI")}</p>
+              <p className="text-xs muted">{t("Write what to change in plain words. The AI keeps the product and changes only what you ask. Each change uses one AI image from your limit.")}</p>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {EDIT_IDEAS.map((idea) => (
+                <button key={idea} type="button" onClick={() => setChange(t(idea))}
+                  className="rounded-full border border-slate-200 px-2.5 py-1 text-xs hover:border-brand-400 hover:text-brand-600 dark:border-slate-700">{t(idea)}</button>
+              ))}
+            </div>
+            <textarea className="input min-h-20" maxLength={500} value={change} onChange={(e) => setChange(e.target.value)}
+              placeholder={t("e.g. make the background blue and add soft shadows")} data-testid="ai-edit-input" />
+            {edit.error && <ErrorAlert error={edit.error} />}
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-xs muted">{t("To add a price, headline or logo, open it in the editor.")}</span>
+              <Button size="sm" disabled={change.trim().length < 3} loading={edit.isPending} onClick={() => edit.mutate()} icon={<Sparkles className="h-4 w-4" />} data-testid="ai-edit-apply">{t("Apply changes")}</Button>
+            </div>
           </div>
         </div>
       )}
@@ -155,14 +191,13 @@ export default function Studio() {
   const [selected, setSelected] = useState<Upload | null>(null);
   const [dragging, setDragging] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
-  const [form, setForm] = useState({ productName: params.get("product")?.slice(0, 120) ?? "", category: "", style: "ecommerce_product", background: "studio_white", size: "square", quality: "medium", lighting: "soft", brandColor: "", useBrandColor: false, instructions: "" });
+  const [form, setForm] = useState({ productName: params.get("product")?.slice(0, 120) ?? "", category: "", style: "auto", background: "auto", size: "square", quality: "medium", lighting: "soft", brandColor: "", useBrandColor: false, instructions: "" });
   const [deleteGen, setDeleteGen] = useState<Generation | null>(null);
+  const [more, setMore] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const opts = options.data;
-
-  useEffect(() => {
-    if (opts && !form.category) setForm((f) => ({ ...f, category: opts.categories[0] }));
-  }, [opts, form.category]);
+  const configured = opts?.configured ?? true;
+  const ready = Boolean(opts && configured && user?.emailVerified);
 
   const up = useMutation({
     mutationFn: (file: File) => {
@@ -172,8 +207,9 @@ export default function Studio() {
     },
     onSuccess: (d) => {
       setSelected(d.upload);
-      if (!form.productName && d.upload.name) setForm((f) => ({ ...f, productName: d.upload.name!.replace(/\.[a-z0-9]+$/i, "").replace(/[-_]+/g, " ").slice(0, 120) }));
       qc.invalidateQueries({ queryKey: ["uploads"] });
+      // Nothing to fill in: the AI recognises the product and designs the advertisement right away.
+      if (ready) generate.mutate(d.upload.id);
     },
     onError: (e) => setLocalError(errorMessage(e)),
   });
@@ -203,11 +239,11 @@ export default function Studio() {
   };
 
   const generate = useMutation({
-    mutationFn: () =>
+    mutationFn: (uploadId: string) =>
       post<{ generation: Generation }>("/studio/generations", {
-        uploadId: selected!.id,
-        productName: form.productName,
-        category: form.category,
+        uploadId,
+        productName: form.productName.trim() || undefined,
+        category: form.category || undefined,
         style: form.style,
         background: form.background,
         settings: {
@@ -234,8 +270,7 @@ export default function Studio() {
     onError: (e) => toast("error", errorMessage(e)),
   });
 
-  const configured = opts?.configured ?? true;
-  const canGenerate = Boolean(selected && form.productName.trim() && configured && user?.emailVerified);
+  const canGenerate = Boolean(selected && ready);
 
   return (
     <div>
@@ -290,15 +325,24 @@ export default function Studio() {
             )}
           </Card>
 
-          <Card className="space-y-4 p-5">
-            <h2 className="font-semibold">2. {t("Product details")}</h2>
-            <Field label={t("Product name")}><Input value={form.productName} maxLength={120} onChange={(e) => setForm({ ...form, productName: e.target.value })} placeholder={t("e.g. Leather backpack")} /></Field>
-            <Field label={t("Category")}><Select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} options={(opts?.categories ?? []).map((c) => ({ value: c, label: t(c) }))} /></Field>
-          </Card>
-
-          <Card className="space-y-4 p-5">
-            <h2 className="font-semibold">3. {t("Advertising style")}</h2>
-            <div className="grid grid-cols-2 gap-2">
+          <Card className="space-y-3 p-5">
+            {generate.error && <ErrorAlert error={generate.error} />}
+            <Button size="lg" className="w-full" disabled={!canGenerate} loading={generate.isPending} onClick={() => selected && generate.mutate(selected.id)} icon={<Wand2 className="h-5 w-5" />} data-testid="create-ad">
+              {t("Create Advertisement")}
+            </Button>
+            <p className="text-center text-xs muted">{selected ? t("The AI recognises the product and chooses the style, background and light itself.") : t("Just upload a photo: the AI recognises the product and creates the advertisement by itself.")}</p>
+            <button type="button" onClick={() => setMore((v) => !v)} aria-expanded={more} data-testid="more-settings"
+              className="flex w-full items-center justify-between rounded-lg px-1 py-1.5 text-sm font-medium muted hover:text-current">
+              <span className="flex items-center gap-1.5"><SlidersHorizontal className="h-4 w-4" />{t("More settings (optional)")}</span>
+              <ChevronDown className={cx("h-4 w-4 transition", more && "rotate-180")} />
+            </button>
+            {more && (
+              <div className="space-y-4 border-t border-slate-200 pt-4 dark:border-slate-800">
+                <p className="text-xs muted">{t("Leave anything empty and the AI decides it.")}</p>
+                <Field label={t("Product name")}><Input value={form.productName} maxLength={120} onChange={(e) => setForm({ ...form, productName: e.target.value })} placeholder={t("e.g. Leather backpack")} /></Field>
+                <Field label={t("Category")}><Select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} options={[{ value: "", label: t("AI chooses") }, ...(opts?.categories ?? []).map((c) => ({ value: c, label: t(c) }))]} /></Field>
+                <p className="text-sm font-semibold">{t("Advertising style")}</p>
+                <div className="grid grid-cols-2 gap-2">
               {(opts?.styles ?? []).map((s) => (
                 <button key={s.value} onClick={() => setForm({ ...form, style: s.value })}
                   className={cx("overflow-hidden rounded-xl border-2 text-left transition", form.style === s.value ? "border-brand-500 ring-4 ring-brand-500/15" : "border-slate-200 hover:border-slate-300 dark:border-slate-800")}>
@@ -308,11 +352,7 @@ export default function Studio() {
               ))}
             </div>
             <Field label={t("Background")}><Select value={form.background} onChange={(e) => setForm({ ...form, background: e.target.value })} options={(opts?.backgrounds ?? []).map((b) => ({ value: b.value, label: t(b.label) }))} /></Field>
-          </Card>
-
-          <Card className="space-y-4 p-5">
-            <h2 className="font-semibold">4. {t("Generation settings")}</h2>
-            <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-3">
               <Field label={t("Format")}><Select value={form.size} onChange={(e) => setForm({ ...form, size: e.target.value })} options={(opts?.sizes ?? []).map((s) => ({ value: s.value, label: `${t(s.label)} (${s.pixels})` }))} /></Field>
               <Field label={t("Quality")}><Select value={form.quality} onChange={(e) => setForm({ ...form, quality: e.target.value })} options={(opts?.qualities ?? []).map((q) => ({ value: q, label: t(q) }))} /></Field>
               <Field label={t("Lighting")}><Select value={form.lighting} onChange={(e) => setForm({ ...form, lighting: e.target.value })} options={(opts?.lighting ?? []).map((l) => ({ value: l, label: t(l) }))} /></Field>
@@ -326,11 +366,8 @@ export default function Studio() {
             <Field label={t("Extra instructions (optional)")} hint={`${form.instructions.length}/300`}>
               <textarea className="input min-h-20" maxLength={300} value={form.instructions} onChange={(e) => setForm({ ...form, instructions: e.target.value })} placeholder={t("e.g. add soft reflections, place on a podium")} />
             </Field>
-            {generate.error && <ErrorAlert error={generate.error} />}
-            <Button size="lg" className="w-full" disabled={!canGenerate} loading={generate.isPending} onClick={() => generate.mutate()} icon={<Wand2 className="h-5 w-5" />}>
-              {t("Create Advertisement")}
-            </Button>
-            {!selected && <p className="text-center text-xs muted">{t("Upload or choose a product image to continue.")}</p>}
+              </div>
+            )}
           </Card>
         </div>
 

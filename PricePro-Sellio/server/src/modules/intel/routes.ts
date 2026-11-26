@@ -9,13 +9,14 @@ import { currentUser, requireAuth, requireVerified } from "../../middleware/auth
 import { serviceLimiter } from "../../middleware/rateLimit.js";
 import { metrics } from "../campaigns/metrics.js";
 import { COUNTRIES } from "../forecast/market.js";
-import { buildRadar, findOpportunities, topDemand } from "../forecast/topDemand.js";
+import { buildRadar, topDemand } from "../forecast/topDemand.js";
+import { topForPeriod, type Period } from "../forecast/topPeriods.js";
 import { TrendsError, trendsProvider } from "../forecast/trends.js";
 import { cached, DAY_MS } from "./cache.js";
 import { M49, tradeProfile } from "./comtrade.js";
 import { countryStats, INDICATORS, type IndicatorKey } from "./worldbank.js";
 
-/** Market Intelligence: radar, opportunities, economic and trade statistics, regions, competitors. */
+/** Market Intelligence: top products, radar, economic and trade statistics, regions, seasons. */
 export const intelRouter = Router();
 intelRouter.use(requireAuth);
 
@@ -35,17 +36,23 @@ intelRouter.get("/options", (_req, res) => {
   });
 });
 
+/** Top products for a period: most searched and fastest growing (last week / month / 3 months / year). */
+const topSchema = z.object({ period: z.enum(["week", "month", "quarter", "year"]).default("week") });
+intelRouter.get("/top", async (req, res) => {
+  const { period } = parseQuery(req, topSchema);
+  if (!trendsProvider()) { res.json({ configured: false }); return; }
+  try {
+    const data = await topForPeriod(period as Period, "UZ");
+    res.json(data ? { configured: true, ...data } : { configured: false });
+  } catch (err) {
+    if (err instanceof TrendsError) throw notConfigured("trends", err.message);
+    throw err;
+  }
+});
+
 intelRouter.get("/radar", async (_req, res) => {
   const data = await topDemand("UZ");
   res.json(data ? { configured: true, ...buildRadar(data) } : { configured: false });
-});
-
-/** Opportunities: growing products, ranked only by measured search interest. */
-intelRouter.get("/opportunities", async (_req, res) => {
-  const data = await topDemand("UZ");
-  if (!data) { res.json({ configured: false }); return; }
-  const items = findOpportunities(data);
-  res.json({ configured: true, computedAt: data.computedAt, checked: data.checked, items });
 });
 
 const statsQuery = z.object({
@@ -85,60 +92,4 @@ intelRouter.post("/regions", requireVerified, serviceLimiter, async (req, res) =
     if (err instanceof TrendsError) throw badRequest(err.message);
     throw err;
   }
-});
-
-// ---------- Competitors (the user's own notes; nothing is scraped) ----------
-
-const competitorSchema = z.object({
-  name: z.string().trim().min(1, "Enter a name").max(100),
-  website: z.string().trim().max(300).url("Enter a full address, e.g. https://example.uz")
-    .refine((u) => /^https?:\/\//i.test(u), "Enter a full address, e.g. https://example.uz").or(z.literal("")).optional(),
-  category: z.string().trim().max(100).optional(),
-  priceNote: z.string().trim().max(300).optional(),
-  positioning: z.string().trim().max(500).optional(),
-  notes: z.string().trim().max(2000).optional(),
-});
-
-type CompetitorRow = { id: string; name: string; website: string | null; category: string | null; price_note: string | null; positioning: string | null; notes: string | null; created_at: string; updated_at: string };
-const serializeCompetitor = (r: CompetitorRow) => ({
-  id: r.id, name: r.name, website: r.website, category: r.category, priceNote: r.price_note, positioning: r.positioning, notes: r.notes, createdAt: r.created_at, updatedAt: r.updated_at,
-});
-
-export async function listCompetitors(userId: string) {
-  return (await all<CompetitorRow>("SELECT * FROM competitors WHERE user_id = ? ORDER BY created_at DESC LIMIT 50", userId)).map(serializeCompetitor);
-}
-
-intelRouter.get("/competitors", async (req, res) => {
-  res.json({ items: await listCompetitors(currentUser(req).id) });
-});
-
-intelRouter.post("/competitors", async (req, res) => {
-  const user = currentUser(req);
-  const b = parseBody(req, competitorSchema);
-  const count = (await get<{ n: number }>("SELECT COUNT(*) AS n FROM competitors WHERE user_id = ?", user.id))?.n ?? 0;
-  if (count >= 50) throw badRequest("You can save up to 50 competitors.");
-  const id = newId(), now = nowIso();
-  await run(
-    "INSERT INTO competitors (id,user_id,name,website,category,price_note,positioning,notes,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
-    id, user.id, b.name, b.website || null, b.category || null, b.priceNote || null, b.positioning || null, b.notes || null, now, now,
-  );
-  res.status(201).json({ competitor: serializeCompetitor((await get<CompetitorRow>("SELECT * FROM competitors WHERE id = ?", id))!) });
-});
-
-intelRouter.patch("/competitors/:id", async (req, res) => {
-  const user = currentUser(req);
-  const id = param(req, "id");
-  const b = parseBody(req, competitorSchema);
-  const r = await run(
-    "UPDATE competitors SET name=?, website=?, category=?, price_note=?, positioning=?, notes=?, updated_at=? WHERE id = ? AND user_id = ?",
-    b.name, b.website || null, b.category || null, b.priceNote || null, b.positioning || null, b.notes || null, nowIso(), id, user.id,
-  );
-  if (!r.changes) throw notFound("Competitor not found");
-  res.json({ competitor: serializeCompetitor((await get<CompetitorRow>("SELECT * FROM competitors WHERE id = ?", id))!) });
-});
-
-intelRouter.delete("/competitors/:id", async (req, res) => {
-  const r = await run("DELETE FROM competitors WHERE id = ? AND user_id = ?", param(req, "id"), currentUser(req).id);
-  if (!r.changes) throw notFound("Competitor not found");
-  res.json({ ok: true });
 });

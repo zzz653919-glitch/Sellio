@@ -349,24 +349,27 @@ function ShapeProps({ e, upd }: { e: ShapeEl; upd: (p: Partial<ShapeEl>, merge?:
 type Tab = "content" | "element" | "add" | "layers";
 const FORMAT_KEYS = Object.keys(FORMATS) as Exclude<FormatKey, "custom">[];
 
-export default function Editor({ templateId, onBack, favorite, onToggleFavorite }: { templateId: string; onBack: () => void; favorite: boolean; onToggleFavorite: () => void }) {
+export default function Editor({ templateId, photo, onBack, favorite, onToggleFavorite }: { templateId: string; photo?: string; onBack: () => void; favorite: boolean; onToggleFavorite: () => void }) {
   const { t } = useI18n();
   const toast = useToast();
   const def = getTemplateDef(templateId);
+  // An AI Product Studio picture opened here gets its own draft.
+  const draftId = def ? (photo ? `${def.id}:${photo}` : def.id) : "";
   // Earlier edits of this template are kept in the browser; the user is told and can start over.
   const { initial, restored } = useMemo<{ initial: Doc; restored: boolean }>(() => {
     if (!def) return { initial: docFromTemplate(getTemplateDef("fashion-new-sneakers")!), restored: false };
-    const fresh = docFromTemplate(def);
+    let fresh = docFromTemplate(def);
+    if (photo) { const p = productOf(fresh); if (p) fresh = { ...fresh, els: fresh.els.map((e) => (e.id === p.id ? ({ ...e, src: photo } as ImageEl) : e)) }; }
     try {
-      const saved = localStorage.getItem(draftKey(def.id));
+      const saved = localStorage.getItem(draftKey(draftId));
       if (saved) {
         const d = JSON.parse(saved) as Doc;
         if (d?.v === 1 && Array.isArray(d.els) && JSON.stringify({ bg: d.bg, els: d.els }) !== JSON.stringify({ bg: fresh.bg, els: fresh.els })) return { initial: d, restored: true };
       }
     } catch { /* storage blocked */ }
     // A photo chosen in the gallery goes straight into the sample picture's place.
-    return { initial: withPhoto(fresh, galleryPhoto()), restored: false };
-  }, [def]);
+    return { initial: photo ? fresh : withPhoto(fresh, galleryPhoto()), restored: false };
+  }, [def, photo, draftId]);
   const [showRestored, setShowRestored] = useState(restored);
   const { doc, set, commit, undo, redo, reset, canUndo, canRedo } = useHistory(initial);
   const [selected, setSelected] = useState<string | null>(null);
@@ -388,9 +391,9 @@ export default function Editor({ templateId, onBack, favorite, onToggleFavorite 
   // keep a draft so work is not lost on reload
   useEffect(() => {
     if (!def) return;
-    const h = setTimeout(() => { try { localStorage.setItem(draftKey(def.id), JSON.stringify(doc)); } catch { /* too large or blocked */ } }, 700);
+    const h = setTimeout(() => { try { localStorage.setItem(draftKey(draftId), JSON.stringify(doc)); } catch { /* too large or blocked */ } }, 700);
     return () => clearTimeout(h);
-  }, [doc, def]);
+  }, [doc, def, draftId]);
 
   const upd = useCallback((id: string, p: Partial<El>, merge?: string) => set((d) => ({ ...d, els: d.els.map((e) => (e.id === id ? ({ ...e, ...p } as El) : e)) }), { merge }), [set]);
   const add = (el: El) => { set((d) => ({ ...d, els: [...d.els, el] })); setSelected(el.id); setTab("element"); };

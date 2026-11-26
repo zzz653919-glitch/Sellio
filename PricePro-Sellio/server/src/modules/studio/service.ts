@@ -8,7 +8,7 @@ import { logActivity } from "../../services/activity.js";
 import { notify } from "../../services/notifications.js";
 import { consumeRequest, releaseRequest, reserveRequest } from "../../services/quota.js";
 import { deleteUpload, getOwnedUpload, readUpload, saveImage } from "../../services/storage.js";
-import { buildPrompt, SIZES, STYLES, type BackgroundKey, type LightingKey, type SizeKey, type StyleKey } from "./options.js";
+import { buildEditPrompt, buildPrompt, SIZES, STYLES, type BackgroundKey, type LightingKey, type SizeKey, type StyleKey } from "./options.js";
 import { getImageProvider } from "./provider.js";
 
 export type GenerationInput = {
@@ -23,6 +23,10 @@ export type GenerationInput = {
     lighting: LightingKey;
     brandColor?: string;
     instructions?: string;
+    /** This generation changes a finished advertisement (the generated image is the input). */
+    edit?: boolean;
+    /** The name was only guessed from the file name: shown in the history, never given to the AI. */
+    nameFromFile?: boolean;
   };
 };
 
@@ -158,13 +162,19 @@ export async function uploadProductImage(userId: string, file: Buffer, originalN
 export async function createGeneration(userId: string, input: GenerationInput, retryOf?: string) {
   const provider = getImageProvider(); // throws SERVICE_NOT_CONFIGURED before anything is stored
   const upload = await getOwnedUpload(userId, input.uploadId);
-  if (upload.kind !== "product") throw badRequest("Choose an uploaded product image.");
+  const isEdit = Boolean(input.settings.edit);
+  if (upload.kind !== "product" && !(isEdit && upload.kind === "generated")) throw badRequest("Choose an uploaded product image.");
+  // Nothing asked from the user: the AI recognises the product itself. A file name ("IMG_2041") is a poor
+  // hint, so it only labels the history entry.
+  if (!input.productName.trim()) {
+    input = { ...input, productName: (upload.original_name ?? "").replace(/\.[a-z0-9]+$/i, "").replace(/[-_]+/g, " ").trim().slice(0, 120) || "Product", settings: { ...input.settings, nameFromFile: true } };
+  }
   const id = newId();
   // One request is reserved now; it is counted when the image is ready and given back if generation fails.
   await reserveRequest(userId, "generation", id);
   const now = nowIso();
-  const prompt = buildPrompt({
-    productName: input.productName,
+  const prompt = isEdit ? buildEditPrompt(input.settings.instructions ?? "") : buildPrompt({
+    productName: input.settings.nameFromFile ? "" : input.productName,
     category: input.category,
     style: input.style,
     background: input.background,
@@ -229,5 +239,19 @@ export async function deleteGeneration(userId: string, id: string) {
   await run("DELETE FROM generations WHERE id = ? AND user_id = ?", id, userId);
   await run("DELETE FROM projects WHERE user_id = ? AND type = 'advertisement' AND ref_id = ?", userId, id);
   await run("DELETE FROM favorites WHERE user_id = ? AND item_type = 'advertisement' AND ref_id = ?", userId, id);
-  if (g.result_upload_id) await deleteUpload(userId, g.result_upload_id);
+  // A result that a later "change with AI" started from stays, so that change still shows its original.
+  const usedLater = g.result_upload_id ? await get<{ id: string }>("SELECT id FROM generations WHERE upload_id = ? AND user_id = ? LIMIT 1", g.result_upload_id, userId) : undefined;
+  if (g.result_upload_id && !usedLater) await deleteUpload(userId, g.result_upload_id);
+}
+
+/** Change a finished advertisement with a request in plain words (counts as one AI image). */
+export async function editGeneration(userId: string, id: string, instructions: string) {
+  const g = await get<GenerationRow>("SELECT * FROM generations WHERE id = ? AND user_id = ?", id, userId);
+  if (!g) throw notFound("Generation not found");
+  if (g.status !== "succeeded" || !g.result_upload_id) throw badRequest("Only a finished advertisement can be changed.");
+  const s = safeJson<GenerationInput["settings"]>(g.settings_json, { size: "square", quality: "medium", lighting: "soft" });
+  return createGeneration(userId, {
+    uploadId: g.result_upload_id, productName: g.product_name, category: g.category, style: "auto", background: "auto",
+    settings: { size: s.size, quality: s.quality, lighting: s.lighting, instructions, edit: true },
+  }, g.id);
 }

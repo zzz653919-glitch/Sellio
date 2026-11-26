@@ -44,10 +44,11 @@ studioRouter.post("/uploads", requireVerified, imageUpload.single("file"), async
 
 const generationSchema = z.object({
   uploadId: z.uuid(),
-  productName: z.string().trim().min(1, "Product name is required").max(120),
-  category: z.enum(CATEGORIES),
-  style: z.enum(Object.keys(STYLES) as [keyof typeof STYLES, ...(keyof typeof STYLES)[]]),
-  background: z.enum(Object.keys(BACKGROUNDS) as [keyof typeof BACKGROUNDS, ...(keyof typeof BACKGROUNDS)[]]),
+  // Everything except the photo is optional: without them the AI decides the name, style and scene.
+  productName: z.string().trim().max(120).default(""),
+  category: z.enum(CATEGORIES).default("Other"),
+  style: z.enum(Object.keys(STYLES) as [keyof typeof STYLES, ...(keyof typeof STYLES)[]]).default("auto"),
+  background: z.enum(Object.keys(BACKGROUNDS) as [keyof typeof BACKGROUNDS, ...(keyof typeof BACKGROUNDS)[]]).default("auto"),
   settings: z.object({
     size: z.enum(Object.keys(SIZES) as [keyof typeof SIZES, ...(keyof typeof SIZES)[]]).default("square"),
     quality: z.enum(QUALITIES).default("medium"),
@@ -57,7 +58,7 @@ const generationSchema = z.object({
       .regex(/^#[0-9a-fA-F]{6}$/, "Brand colour must be a hex colour like #1F5BE0")
       .optional(),
     instructions: z.string().trim().max(300).optional(),
-  }),
+  }).default({ size: "square", quality: "medium", lighting: "soft" }),
 });
 
 studioRouter.post("/generations", requireVerified, serviceLimiter, async (req, res) => {
@@ -77,6 +78,13 @@ studioRouter.get("/generations/:id", async (req, res) => {
 
 studioRouter.post("/generations/:id/retry", requireVerified, serviceLimiter, async (req, res) => {
   res.status(202).json({ generation: await studio.retryGeneration(currentUser(req).id, param(req, "id")) });
+});
+
+/** Change a finished advertisement with a request in plain words ("make the background blue"). */
+const editSchema = z.object({ instructions: z.string().trim().min(3, "Write what to change").max(500) });
+studioRouter.post("/generations/:id/edit", requireVerified, serviceLimiter, async (req, res) => {
+  const { instructions } = parseBody(req, editSchema);
+  res.status(202).json({ generation: await studio.editGeneration(currentUser(req).id, param(req, "id"), instructions) });
 });
 
 studioRouter.delete("/generations/:id", async (req, res) => {

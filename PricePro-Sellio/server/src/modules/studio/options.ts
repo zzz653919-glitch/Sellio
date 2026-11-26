@@ -5,6 +5,10 @@ export const CATEGORIES = [
 ] as const;
 
 export const STYLES = {
+  auto: {
+    label: "AI chooses",
+    prompt: "the advertising style that sells this exact product best — decide it yourself, like a top art director would for an Instagram ad in Uzbekistan",
+  },
   premium_luxury: {
     label: "Premium Luxury",
     prompt: "premium luxury advertising: elegant, rich materials, refined reflections, sophisticated mood, high-end brand campaign look",
@@ -32,6 +36,7 @@ export const STYLES = {
 } as const;
 
 export const BACKGROUNDS = {
+  auto: { label: "AI chooses", prompt: "the scene, surface, props and colours that suit this product best — decide them yourself" },
   studio_white: { label: "Studio white", prompt: "seamless pure white studio background" },
   soft_gradient: { label: "Soft gradient", prompt: "smooth soft colour-gradient backdrop" },
   solid_color: { label: "Solid colour (brand colour)", prompt: "solid single-colour backdrop" },
@@ -69,8 +74,21 @@ export function buildPrompt(input: {
     input.background === "solid_color" && input.brandColor
       ? `solid ${input.brandColor} backdrop`
       : BACKGROUNDS[input.background].prompt;
+  if (input.style === "auto" && input.background === "auto") {
+    // Fully automatic: the model looks at the photo and makes every creative decision itself.
+    return [
+      input.productName
+        ? `Create a professional advertising image of the product shown in the input photo ("${input.productName}").`
+        : "Create a professional advertising image of the product shown in the input photo. First recognise what the product is.",
+      "Keep the product exactly as it is in the photo — same shape, proportions, colours, materials, logos and printed text. Do not add, remove or alter product details.",
+      "You are the art director: choose the advertising style, background scene, surface, props, colour palette, lighting and camera angle that make this particular product look most attractive and premium, ready for an Instagram / Telegram ad in Uzbekistan.",
+      "Composition: the product is the clear hero, sharp focus, photorealistic, high-end commercial quality, leave some calm space around it for a headline. No added text, captions, watermarks or logos other than those on the product.",
+      input.brandColor ? `Use ${input.brandColor} as an accent colour.` : "",
+      input.instructions ? `Additional instructions: ${input.instructions}` : "",
+    ].filter(Boolean).join("\n");
+  }
   return [
-    `Create a professional advertising image of the product shown in the input photo: "${input.productName}" (category: ${input.category}).`,
+    `Create a professional advertising image of the product shown in the input photo: "${input.productName || "the product"}" (category: ${input.category}).`,
     "Keep the product exactly as it is in the photo — same shape, proportions, colours, materials, logos and printed text. Do not add, remove or alter product details.",
     `Style: ${STYLES[input.style].prompt}.`,
     `Background: ${bg}.`,
@@ -81,4 +99,14 @@ export function buildPrompt(input: {
   ]
     .filter(Boolean)
     .join("\n");
+}
+
+/** Change a finished advertisement as the user asked (the generated image is the input). */
+export function buildEditPrompt(instructions: string) {
+  return [
+    "Edit this advertising image as requested below. Change only what is asked; keep everything else as it is.",
+    "Keep the product exactly as it is — same shape, proportions, colours, materials, logos and printed text.",
+    "Photorealistic, high-end commercial quality. No added text, captions or watermarks unless the request asks for them.",
+    `Request: ${instructions}`,
+  ].join("\n");
 }

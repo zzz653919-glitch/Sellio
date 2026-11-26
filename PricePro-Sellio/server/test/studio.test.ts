@@ -132,3 +132,32 @@ test("users cannot read each other's files or generations", async () => {
   assert.equal((await b.client.del(`/api/studio/generations/${r.data.generation.id}`)).status, 404);
   assert.equal((await b.client.post("/api/studio/generations", body(uploadId))).status, 404);
 });
+
+test("only the photo is needed: the AI decides; a finished ad can be changed with a request in plain words", async () => {
+  const prompts: string[] = [];
+  setImageProviderForTests({ name: "test", model: "m", edit: async (i: { prompt: string }) => { prompts.push(i.prompt); return makePng(300, 300); } } as ImageProvider);
+  const { client } = await newUser();
+  const id = await upload(client);
+  const r = await client.post("/api/studio/generations", { uploadId: id });
+  assert.equal(r.status, 202, JSON.stringify(r.data));
+  await waitFor(client, r.data.generation.id);
+  const g = (await client.get(`/api/studio/generations/${r.data.generation.id}`)).data.generation;
+  assert.equal(g.status, "succeeded");
+  assert.equal(g.productName, "shoe", "name taken from the file");
+  assert.match(prompts[0], /art director/i);
+  // change it with AI
+  assert.equal((await client.post(`/api/studio/generations/${g.id}/edit`, { instructions: "x" })).status, 400);
+  const e = await client.post(`/api/studio/generations/${g.id}/edit`, { instructions: "make the background light blue" });
+  assert.equal(e.status, 202, JSON.stringify(e.data));
+  await waitFor(client, e.data.generation.id);
+  const ge = (await client.get(`/api/studio/generations/${e.data.generation.id}`)).data.generation;
+  assert.equal(ge.status, "succeeded");
+  assert.equal(ge.uploadId, g.resultUploadId, "the finished ad is the input");
+  assert.match(prompts[1], /light blue/);
+  // deleting the first ad keeps the picture the change started from
+  assert.equal((await client.del(`/api/studio/generations/${g.id}`)).status, 200);
+  assert.equal((await client.req("GET", ge.originalUrl, undefined, { raw: true })).status, 200);
+  // a running or someone else's generation cannot be changed
+  const other = await newUser();
+  assert.equal((await other.client.post(`/api/studio/generations/${ge.id}/edit`, { instructions: "make it red" })).status, 404);
+});
