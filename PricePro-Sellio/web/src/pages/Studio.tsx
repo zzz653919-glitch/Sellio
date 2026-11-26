@@ -152,7 +152,7 @@ export default function Studio() {
   const [selected, setSelected] = useState<Upload | null>(null);
   const [dragging, setDragging] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
-  const [form, setForm] = useState({ productName: "", category: "", style: "ecommerce_product", background: "studio_white", size: "square", quality: "medium", lighting: "soft", brandColor: "", useBrandColor: false, instructions: "" });
+  const [form, setForm] = useState({ productName: params.get("product")?.slice(0, 120) ?? "", category: "", style: "ecommerce_product", background: "studio_white", size: "square", quality: "medium", lighting: "soft", brandColor: "", useBrandColor: false, instructions: "" });
   const [deleteGen, setDeleteGen] = useState<Generation | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const opts = options.data;

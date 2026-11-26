@@ -37,6 +37,7 @@ export async function api<T>(path: string, opts: Options = {}): Promise<T> {
 
 export const get = <T>(p: string, signal?: AbortSignal) => api<T>(p, { signal });
 export const post = <T>(p: string, body?: unknown) => api<T>(p, { method: "POST", body: body ?? {} });
+export const put = <T>(p: string, body: unknown) => api<T>(p, { method: "PUT", body });
 export const patch = <T>(p: string, body: unknown) => api<T>(p, { method: "PATCH", body });
 export const del = <T>(p: string, body?: unknown) => api<T>(p, { method: "DELETE", body });
 export const upload = <T>(p: string, form: FormData) => api<T>(p, { method: "POST", form });

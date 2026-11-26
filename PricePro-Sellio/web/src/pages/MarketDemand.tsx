@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Globe2, Info, Minus, Play, Search, Trash2, TrendingDown, TrendingUp } from "lucide-react";
+import { Check, Globe2, Info, Minus, Play, Rocket, Search, Trash2, TrendingDown, TrendingUp } from "lucide-react";
 import { useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { ErrorAlert, FavoriteButton, IntegrationNotice, SaveProjectButton } from "../components/shared";
 import { Alert, Badge, Button, Card, ConfirmDialog, EmptyState, Field, Input, Select, Tabs, cx, useToast } from "../components/ui";
@@ -20,6 +20,11 @@ type Area = {
   recentAvg: number | null; forecastAvg: number | null; changePct: number | null; periodChangePct?: number | null;
   trend: "growing" | "declining" | "stable" | null; confidence: "high" | "medium" | "low" | null; peak: Point | null;
   seasonality?: Seasonality | null;
+  horizons?: Horizon[];
+};
+type Horizon = {
+  days: 7 | 30 | 90 | 365; status: "ok" | "insufficient"; expected: number | null; lower: number | null; upper: number | null;
+  previous: number | null; changePct: number | null; model: string | null; smapePct: number | null; confidence: "high" | "medium" | "low" | null;
 };
 type SingleResult = { fetchedAt: string; horizonDays: number; areas: Area[]; byCountry: { code: string; name: string; value: number }[]; byCountryError?: string };
 type Analysis = {
@@ -120,6 +125,60 @@ function InterestChart({ areas }: { areas: Area[] }) {
   );
 }
 
+const HORIZON_LABEL = { 7: "7 days", 30: "30 days", 90: "90 days", 365: "365 days" } as const;
+const CONF_TONE = { high: "green", medium: "amber", low: "red" } as const;
+
+/** Expected search interest over 7 / 30 / 90 / 365 days, per area, with the model's back-test error. */
+function HorizonTable({ areas }: { areas: Area[] }) {
+  const { t } = useI18n();
+  const rows = areas.filter((a) => a.status === "ok" && a.horizons?.length);
+  if (!rows.length) return null;
+  return (
+    <div className="space-y-2">
+      <h3 className="font-semibold">{t("Forecast for 7, 30, 90 and 365 days")}</h3>
+      <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-800">
+        <table className="w-full min-w-[560px] text-sm">
+          <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500 dark:bg-slate-900">
+            <tr><th className="px-3 py-2">{t("Area")}</th>{([7, 30, 90, 365] as const).map((d) => <th key={d} className="px-3 py-2">{t(HORIZON_LABEL[d])}</th>)}</tr>
+          </thead>
+          <tbody>
+            {rows.map((a) => (
+              <tr key={a.geo} className="border-t border-slate-100 dark:border-slate-800">
+                <td className="px-3 py-2 font-medium">{a.geo === WORLD ? t("Worldwide") : t(a.name)}</td>
+                {a.horizons!.map((h) => (
+                  <td key={h.days} className="px-3 py-2 align-top">
+                    {h.status === "ok" && h.changePct !== null ? (
+                      <>
+                        <b className={h.changePct > 3 ? "text-emerald-600 dark:text-emerald-400" : h.changePct < -3 ? "text-rose-600 dark:text-rose-400" : ""}>{fmtPct(h.changePct)}</b>
+                        <span className="block text-xs muted">{fmtNumber(h.expected!, 1)} ({fmtNumber(h.lower!, 0)}–{fmtNumber(h.upper!, 0)})</span>
+                        {h.confidence && <Badge tone={CONF_TONE[h.confidence]} className="mt-1">{t(h.confidence === "high" ? "High confidence" : h.confidence === "medium" ? "Medium confidence" : "Low confidence")}</Badge>}
+                      </>
+                    ) : <span className="text-xs muted">{t("Not enough data")}</span>}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="text-xs muted">{t("Change of the average search interest over the period versus the same length just before. In brackets: expected index and its likely range. Confidence comes from testing the model on the last months of real data (back-test); seasonal patterns can break when something new happens (prices, laws, new products).")}</p>
+    </div>
+  );
+}
+
+/** Turn a demand analysis into a Growth Hub plan (ads → campaign → results). */
+function GrowthPlanButton({ analysisId, product }: { analysisId: string; product: string }) {
+  const { t } = useI18n();
+  const navigate = useNavigate();
+  const toast = useToast();
+  const m = useMutation({
+    mutationFn: () => post<{ initiative: { id: string } }>("/growth", { source: "forecast", product, analysisId }),
+    onSuccess: (d) => navigate(`/growth?id=${d.initiative.id}`),
+    onError: (e) => toast("error", errorMessage(e)),
+  });
+  return <Button size="sm" variant="secondary" icon={<Rocket className="h-4 w-4" />} loading={m.isPending} onClick={() => m.mutate()}>{t("Make a growth plan")}</Button>;
+}
+
 function AnalysisResult({ a, onDelete }: { a: Analysis; onDelete: () => void }) {
   const { t } = useI18n();
   const r = a.result;
@@ -161,6 +220,8 @@ function AnalysisResult({ a, onDelete }: { a: Analysis; onDelete: () => void }) 
         {r.areas.map((area, i) => <AreaCard key={area.geo} a={area} color={COLORS[i % COLORS.length]} />)}
       </div>
 
+      <HorizonTable areas={r.areas} />
+
       {shown?.seasonality && (
         <div className="space-y-2">
           {seasonAreas.length > 1 && (
@@ -198,6 +259,7 @@ function AnalysisResult({ a, onDelete }: { a: Analysis; onDelete: () => void }) 
 
       <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-4 dark:border-slate-800">
         <SaveProjectButton type="forecast" refId={a.id} projectId={a.projectId} invalidate={["market", a.id]} />
+        <GrowthPlanButton analysisId={a.id} product={a.query} />
         <FavoriteButton itemType="forecast" refId={a.id} favoriteId={a.favoriteId} invalidate={["market", a.id]} />
         <Button size="sm" variant="ghost" className="ml-auto" icon={<Trash2 className="h-4 w-4" />} onClick={onDelete}>{t("Delete")}</Button>
       </div>
@@ -222,7 +284,7 @@ export default function MarketDemand() {
   });
   const top = useQuery({ queryKey: ["market-top"], queryFn: () => get<TopDemandData>("/market/top"), staleTime: 3600_000, retry: false });
   const [mode, setMode] = useState<"single" | "compare">("single");
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(() => params.get("q") ?? "");
   const [range, setRange] = useState<Exclude<Range, "compare">>("today 12-m");
   const [geos, setGeos] = useState<string[]>([WORLD, "UZ"]);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);

@@ -9,14 +9,17 @@ export type User = {
   createdAt: string;
 };
 
-export type Metric = "generations" | "forecasts";
+export type Metric = "generations" | "forecasts" | "ai";
 export type Usage = { plan: "free" | "pro"; periodStart: string; metrics: Record<Metric, { used: number; limit: number }> };
 
 export type Meta = {
   integrations: {
     email: boolean;
     imageGeneration: boolean;
-    marketDataProviders: string[];
+    textAi?: boolean;
+    trends?: boolean;
+    worldBank?: boolean;
+    comtrade?: boolean;
     payments: boolean;
   };
 };

@@ -1,8 +1,11 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
-import { RU } from "./i18n-ru";
-import { UZ } from "./i18n-uz";
+/** Only the dictionary of the chosen language is downloaded (each is ~100 KB). English needs none. */
+const DICTS: Record<Lang, Record<string, string> | null> = { en: null, uz: null, ru: null };
 
-const DICTS: Record<Lang, Record<string, string> | null> = { en: null, uz: UZ, ru: RU };
+export async function loadDict(l: Lang) {
+  if (l === "en" || DICTS[l]) return;
+  DICTS[l] = l === "uz" ? (await import("./i18n-uz")).UZ : (await import("./i18n-ru")).RU;
+}
 
 export type Lang = "en" | "uz" | "ru";
 type Vars = Record<string, string | number>;
@@ -28,9 +31,11 @@ const SERVER_PATTERNS: [RegExp, string, string[]][] = [
   [/^Search-interest analysis for "(.+)" is ready\.$/s, "Search-interest analysis for \"{x}\" is ready.", ["x"]],
   [/^Demand — (.+)$/s, "Demand — {x}", ["x"]],
   [/^Ad — (.+)$/s, "Ad — {x}", ["x"]],
+  [/^Business data: (.+)$/s, "Business data: {x}", ["x"]],
+  [/^Advisor: (.+)$/s, "Advisor: {x}", ["x"]],
 ];
 
-function read(): Lang {
+export function read(): Lang {
   try {
     const saved = localStorage.getItem("pp_lang");
     if (saved === "uz" || saved === "ru" || saved === "en") return saved;
@@ -50,13 +55,16 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     return l;
   });
   const setLang = useCallback((l: Lang) => {
-    setLangState(l);
     try {
       localStorage.setItem("pp_lang", l);
     } catch {
       /* storage unavailable */
     }
-    document.documentElement.lang = l;
+    // Switch once the dictionary is there, so the page never shows a mix of languages.
+    void loadDict(l).catch(() => {}).then(() => {
+      setLangState(l);
+      document.documentElement.lang = l;
+    });
   }, []);
   const t = useCallback(
     (key: string, vars?: Vars) => {
@@ -68,8 +76,8 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   );
   const tr = useCallback(
     (text: string): string => {
-      if (lang === "en") return text;
-      const dict = DICTS[lang]!;
+      const dict = DICTS[lang];
+      if (lang === "en" || !dict) return text;
       if (dict[text]) return dict[text];
       for (const [re, key, names] of SERVER_PATTERNS) {
         const m = re.exec(text);

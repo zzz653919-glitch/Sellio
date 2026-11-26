@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
 import {
-  BarChart3, Bell, CreditCard, FolderKanban, Heart, LayoutDashboard, LineChart, LogOut, Menu, Moon, Settings,
+  BarChart3, Bell, Bot, Briefcase, CalendarRange, Compass, Megaphone, Radar, CreditCard, FolderKanban, Heart, LayoutDashboard, LineChart, LogOut, Menu, Moon, Settings,
   Sparkles, Sun, User as UserIcon, X,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -17,8 +17,14 @@ import { Badge, cx } from "./ui";
 
 export const NAV = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, end: true },
+  { to: "/growth", label: "Growth Hub", icon: Compass },
   { to: "/studio", label: "AI Product Studio", icon: Sparkles },
+  { to: "/ads", label: "Ad Studio", icon: Megaphone },
+  { to: "/campaigns", label: "Campaigns", icon: CalendarRange },
+  { to: "/intelligence", label: "Market Intelligence", icon: Radar },
   { to: "/forecast", label: "Demand Forecast", icon: LineChart },
+  { to: "/business", label: "My Business", icon: Briefcase },
+  { to: "/advisor", label: "AI Advisor", icon: Bot },
   { to: "/projects", label: "My Projects", icon: FolderKanban },
   { to: "/analytics", label: "Analytics", icon: BarChart3 },
   { to: "/favorites", label: "Favorites", icon: Heart },

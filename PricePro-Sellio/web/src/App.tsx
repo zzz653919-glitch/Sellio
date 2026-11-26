@@ -9,6 +9,12 @@ import { NotFoundPage } from "./pages/NotFound";
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Studio = lazy(() => import("./pages/Studio"));
 const Forecast = lazy(() => import("./pages/Forecast"));
+const Intelligence = lazy(() => import("./pages/Intelligence"));
+const Business = lazy(() => import("./pages/Business"));
+const Advisor = lazy(() => import("./pages/Advisor"));
+const AdStudio = lazy(() => import("./pages/AdStudio"));
+const Campaigns = lazy(() => import("./pages/Campaigns"));
+const Growth = lazy(() => import("./pages/Growth"));
 const Projects = lazy(() => import("./pages/Projects"));
 const Analytics = lazy(() => import("./pages/Analytics"));
 const Favorites = lazy(() => import("./pages/Favorites"));
@@ -42,8 +48,14 @@ export function App() {
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route element={<Protected><AppLayout /></Protected>}>
           <Route index element={<Dashboard />} />
+          <Route path="growth" element={<Growth />} />
           <Route path="studio" element={<Studio />} />
           <Route path="forecast" element={<Forecast />} />
+          <Route path="intelligence" element={<Intelligence />} />
+          <Route path="business" element={<Business />} />
+          <Route path="advisor" element={<Advisor />} />
+          <Route path="ads" element={<AdStudio />} />
+          <Route path="campaigns" element={<Campaigns />} />
           <Route path="projects" element={<Projects />} />
           <Route path="analytics" element={<Analytics />} />
           <Route path="favorites" element={<Favorites />} />

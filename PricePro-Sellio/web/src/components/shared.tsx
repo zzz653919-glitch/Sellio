@@ -12,6 +12,9 @@ import { Alert, Button, cx, useToast } from "./ui";
 const SERVICE_TEXT: Record<string, string> = {
   imageGeneration: "AI image generation is not connected on this server, so advertisements cannot be generated yet. An administrator must configure an AI image provider (OPENAI_API_KEY).",
   payments: "Online payments are not configured on this server yet, so upgrades are unavailable. No payment will be taken or simulated.",
+  textAi: "Text AI is not connected on this server. An administrator must add GEMINI_API_KEY (free tier at aistudio.google.com) or OPENAI_API_KEY.",
+  comtrade: "Import and export by product group needs UN Comtrade. An administrator must add COMTRADE_API_KEY (free key from comtradedeveloper.un.org).",
+  worldBank: "Economic statistics are turned off on this server (WORLD_BANK_ENABLED=false).",
   trends: "World demand data is not connected on this server. An administrator must configure SerpApi (SERPAPI_API_KEY), which provides Google Trends data.",
 };
 

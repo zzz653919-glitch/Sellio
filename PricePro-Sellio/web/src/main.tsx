@@ -6,7 +6,7 @@ import { App } from "./App";
 import { ToastProvider } from "./components/ui";
 import { ApiError } from "./lib/api";
 import { AuthProvider } from "./lib/auth";
-import { I18nProvider } from "./lib/i18n";
+import { I18nProvider, loadDict, read } from "./lib/i18n";
 import { ThemeProvider } from "./lib/theme";
 import "./index.css";
 
@@ -20,7 +20,8 @@ const queryClient = new QueryClient({
   },
 });
 
-createRoot(document.getElementById("root")!).render(
+// Load the dictionary of the saved language before the first render (falls back to English on error).
+void loadDict(read()).catch(() => {}).finally(() => createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
@@ -36,4 +37,4 @@ createRoot(document.getElementById("root")!).render(
       </BrowserRouter>
     </QueryClientProvider>
   </StrictMode>,
-);
+));

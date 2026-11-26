@@ -104,3 +104,19 @@ export function downloadCsv(filename: string, rows: (string | number | null)[][]
   a.click();
   URL.revokeObjectURL(url);
 }
+
+/** 1 234 567 → "1.2M" style compact numbers (amounts in statistics). */
+export function fmtCompact(n: number, digits = 1) {
+  const lang = document.documentElement.lang;
+  if (lang === "uz") {
+    const a = Math.abs(n);
+    const [v, u] = a >= 1e12 ? [n / 1e12, " trln"] : a >= 1e9 ? [n / 1e9, " mlrd"] : a >= 1e6 ? [n / 1e6, " mln"] : a >= 1e3 ? [n / 1e3, " ming"] : [n, ""];
+    return `${fmtNumber(v, digits)}${u}`;
+  }
+  return new Intl.NumberFormat(lang === "ru" ? "ru" : "en", { notation: "compact", maximumFractionDigits: digits }).format(n);
+}
+
+/** Amounts in the user's currency without decimals: "12 500 000 UZS". */
+export function fmtAmount(n: number, currency: string) {
+  return `${fmtNumber(Math.round(n))} ${currency}`;
+}
