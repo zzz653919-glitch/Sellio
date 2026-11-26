@@ -44,18 +44,22 @@ test("user flow: request, receipt checks, submit — the plan never changes befo
   assert.equal(cfgRes.data.card.number, "4466136951534453");
   assert.equal(cfgRes.data.card.bank, "TBC Bank");
   const pro = cfgRes.data.plans.find((p: { key: string }) => p.key === "pro");
-  assert.deepEqual(pro.month, { usd: 19, uzs: 240000 });
+  assert.deepEqual(pro.month, { usd: 10, uzs: 126000 });
 
   const r = await u.client.post("/api/payments", { plan: "pro", interval: "month" });
   assert.equal(r.status, 201);
   assert.equal(r.data.payment.status, "pending");
-  assert.equal(r.data.payment.amountUzs, 240000);
+  assert.equal(r.data.payment.amountUzs, 126000);
   const id = r.data.payment.id;
-  assert.equal((await u.client.post("/api/payments", { plan: "pro", interval: "year" })).status, 400, "Pro has no yearly price");
+  const proYear = await u.client.post("/api/payments", { plan: "pro", interval: "year" });
+  assert.equal(proYear.data.payment.amountUzs, 1260000, "Pro yearly: $100");
+  // A receipt uploaded for one amount is dropped when the plan or period changes.
+  assert.equal((await uploadReceipt(u, id)).status, 200);
   // Switching plan before sending keeps one open request.
   const sw = await u.client.post("/api/payments", { plan: "max", interval: "year" });
   assert.equal(sw.data.payment.id, id);
   assert.equal(sw.data.payment.amountUzs, 2520000);
+  assert.equal(sw.data.payment.receipt, null, "receipt for the old amount removed");
 
   assert.equal((await u.client.post(`/api/payments/${id}/submit`, {})).status, 400, "receipt required");
   assert.equal((await uploadReceipt(u, id, Buffer.from("this is not a receipt file at all!!"), "x.png")).status, 400);
@@ -91,7 +95,7 @@ test("only authorised admins review; no self-approval; approval activates the pl
   const list = await admin.client.get("/api/admin/payment-requests");
   const item = list.data.items.find((p: { id: string }) => p.id === id);
   assert.equal(item.user.email, u.email);
-  assert.equal(item.amountUzs, 240000);
+  assert.equal(item.amountUzs, 126000);
   assert.equal((await admin.client.req("GET", `/api/admin/payment-requests/${id}/receipt`, undefined, { raw: true })).status, 200);
   assert.equal((await admin.client.post(`/api/admin/payment-requests/${id}/approve`, { password: "wrong" })).status, 400);
   assert.equal(await plan(u), "free");
@@ -106,11 +110,11 @@ test("only authorised admins review; no self-approval; approval activates the pl
   assert.equal(await plan(u), "pro");
   const sub = (await u.client.get("/api/subscription")).data;
   assert.equal(sub.usage.metrics.requests.limit, 10);
-  assert.equal(sub.usage.metrics.requests.period, "day");
+  assert.equal(sub.usage.metrics.requests.period, "hours");
   assert.equal(sub.subscription.provider, "manual");
   const days = (Date.parse(sub.subscription.currentPeriodEnd) - Date.now()) / 86_400_000;
   assert.ok(days > 27 && days < 32, `about one month (${days})`);
-  assert.ok(sub.history.some((h: { type: string; amountCents: number; currency: string }) => h.type === "payment" && h.amountCents === 24000000 && h.currency === "uzs"));
+  assert.ok(sub.history.some((h: { type: string; amountCents: number; currency: string }) => h.type === "payment" && h.amountCents === 12600000 && h.currency === "uzs"));
   assert.equal((await admin.client.post(`/api/admin/payment-requests/${id}/reject`, { reason: "x" })).status, 409, "cannot reject an approved payment");
   const audit = await get<{ n: number }>("SELECT COUNT(*) AS n FROM audit_logs WHERE action = 'payment.approved' AND target_id = ?", id);
   assert.equal(audit!.n, 1);
@@ -157,12 +161,11 @@ test("a card-paid plan ends at its period end and the user returns to Free", asy
   assert.equal((await u.client.get("/api/subscription")).data.usage.metrics.requests.limit, 5);
 });
 
-test("FREE: at most 2 AI advertisement images per day (forecasts still allowed); configurable", async () => {
+test("FREE: at most 5 AI advertisement images per 5 hours; forecasts have their own 5", async () => {
   const u = await newUser();
-  await reserveRequest(u.user.id, "generation", `img-${u.user.id}-1`);
-  await reserveRequest(u.user.id, "generation", `img-${u.user.id}-2`);
-  await assert.rejects(reserveRequest(u.user.id, "generation", `img-${u.user.id}-3`), (e: { code?: string; details?: { metric: string } }) => e.code === "LIMIT_REACHED" && e.details?.metric === "images_per_day");
+  for (let i = 1; i <= 5; i++) await reserveRequest(u.user.id, "generation", `img-${u.user.id}-${i}`);
+  await assert.rejects(reserveRequest(u.user.id, "generation", `img-${u.user.id}-6`), (e: { code?: string }) => e.code === "LIMIT_REACHED");
   await reserveRequest(u.user.id, "forecast", `fc-${u.user.id}-1`);
-  const s = (await u.client.get("/api/dashboard")).data.usage.metrics.requests;
-  assert.deepEqual([s.used, s.imagesToday.used, s.imagesToday.limit, s.imagesToday.remaining], [3, 2, 2, 0]);
+  const m = (await u.client.get("/api/dashboard")).data.usage.metrics;
+  assert.deepEqual([m.requests.period, m.requests.used, m.requests.limit, m.forecasts.used, m.forecasts.limit], ["hours", 5, 5, 1, 5]);
 });
