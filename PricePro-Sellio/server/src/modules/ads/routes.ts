@@ -47,6 +47,28 @@ const brandSchema = z.object({
   styles: z.array(z.string().max(40)).max(6).optional(),
 });
 
+// ------------------------------------------------------------------ template favourites
+const templateId = (req: Parameters<typeof param>[0]) => {
+  const id = param(req, "id");
+  if (!/^[a-z0-9][a-z0-9-]{2,79}$/.test(id)) throw badRequest("Unknown template.");
+  return id;
+};
+adsRouter.get("/template-favorites", async (req, res) => {
+  const rows = await all<{ template_id: string }>("SELECT template_id FROM template_favorites WHERE user_id = ? ORDER BY created_at DESC LIMIT 500", currentUser(req).id);
+  res.json({ ids: rows.map((r) => r.template_id) });
+});
+adsRouter.put("/template-favorites/:id", async (req, res) => {
+  const user = currentUser(req);
+  const n = (await get<{ n: number }>("SELECT COUNT(*) AS n FROM template_favorites WHERE user_id = ?", user.id))?.n ?? 0;
+  if (n >= 500) throw badRequest("You can keep up to 500 favourite templates.");
+  await run("INSERT INTO template_favorites (user_id, template_id, created_at) VALUES (?,?,?) ON CONFLICT DO NOTHING", user.id, templateId(req), nowIso());
+  res.json({ ok: true });
+});
+adsRouter.delete("/template-favorites/:id", async (req, res) => {
+  await run("DELETE FROM template_favorites WHERE user_id = ? AND template_id = ?", currentUser(req).id, templateId(req));
+  res.json({ ok: true });
+});
+
 adsRouter.get("/brand", async (req, res) => {
   res.json({ brand: await getBrand(currentUser(req).id) });
 });

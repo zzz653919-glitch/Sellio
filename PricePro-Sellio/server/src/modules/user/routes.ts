@@ -28,7 +28,8 @@ async function subscriptionOf(userId: string) {
 
 userRouter.get("/profile", async (req, res) => {
   const user = currentUser(req);
-  res.json({ user: publicUser(user), subscription: await subscriptionOf(user.id), usage: await usage(user.id) });
+  const [subscription, usageNow] = await Promise.all([subscriptionOf(user.id), usage(user.id)]);
+  res.json({ user: publicUser(user), subscription, usage: usageNow });
 });
 
 const profileSchema = z.object({

@@ -88,7 +88,7 @@ export default function UserDetail() {
         <Stat label={t("Projects")} value={d.counts.projects} tone="slate" />
         <Stat label={t("Ads")} value={d.counts.generations} tone="slate" />
         <Stat label={t("Forecasts")} value={d.counts.analyses} tone="slate" />
-        <Stat label={t("Sales datasets")} value={d.counts.datasets} hint={t("contents are private")} tone="slate" />
+        <Stat label={t("Campaigns")} value={d.counts.campaigns} tone="slate" />
         <Stat label={t("Support requests")} value={d.counts.tickets} tone="slate" />
       </div>
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">

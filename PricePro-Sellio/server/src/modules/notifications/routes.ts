@@ -23,12 +23,16 @@ notificationsRouter.get("/", async (req, res) => {
   const q = parseQuery(req, listSchema);
   await deliverDueAnnouncements();
   const unreadOnly = q.filter === "unread" ? "AND read_at IS NULL" : "";
-  const rows = await all<Row>(
-    `SELECT * FROM notifications WHERE user_id = ? ${unreadOnly} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
-    user.id, q.limit, q.offset,
-  );
-  const unread = (await get<{ n: number }>("SELECT COUNT(*) AS n FROM notifications WHERE user_id = ? AND read_at IS NULL", user.id))?.n ?? 0;
-  const total = (await get<{ n: number }>(`SELECT COUNT(*) AS n FROM notifications WHERE user_id = ? ${unreadOnly}`, user.id))?.n ?? 0;
+  const [rows, counts] = await Promise.all([
+    all<Row>(`SELECT * FROM notifications WHERE user_id = ? ${unreadOnly} ORDER BY created_at DESC LIMIT ? OFFSET ?`, user.id, q.limit, q.offset),
+    get<{ unread: number; total: number }>(
+      `SELECT (SELECT COUNT(*) FROM notifications WHERE user_id = ?1 AND read_at IS NULL) AS unread,
+              (SELECT COUNT(*) FROM notifications WHERE user_id = ?1 ${unreadOnly}) AS total`,
+      user.id,
+    ),
+  ]);
+  const unread = counts?.unread ?? 0;
+  const total = counts?.total ?? 0;
   res.json({
     items: rows.map((n) => ({ id: n.id, type: n.type, title: n.title, body: n.body, link: n.link, read: Boolean(n.read_at), createdAt: n.created_at })),
     unread,

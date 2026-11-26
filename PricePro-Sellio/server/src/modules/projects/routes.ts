@@ -84,9 +84,12 @@ projectsRouter.get("/", async (req, res) => {
   if (q.type) { where.push("type = ?"); params.push(q.type); }
   if (q.q) { where.push("title LIKE ? ESCAPE '\\'"); params.push(likePattern(q.q)); }
   const order = q.sort === "oldest" ? "created_at ASC" : q.sort === "title" ? "title COLLATE NOCASE ASC" : "created_at DESC";
-  const rows = await all<ProjectRow>(`SELECT * FROM projects WHERE ${where.join(" AND ")} ORDER BY ${order} LIMIT ? OFFSET ?`, ...params, q.limit, q.offset);
-  const total = (await get<{ n: number }>(`SELECT COUNT(*) AS n FROM projects WHERE ${where.join(" AND ")}`, ...params))?.n ?? 0;
-  const counts = await all<{ type: string; n: number }>("SELECT type, COUNT(*) AS n FROM projects WHERE user_id = ? AND type IN ('advertisement','forecast') GROUP BY type", user.id);
+  const [rows, totalRow, counts] = await Promise.all([
+    all<ProjectRow>(`SELECT * FROM projects WHERE ${where.join(" AND ")} ORDER BY ${order} LIMIT ? OFFSET ?`, ...params, q.limit, q.offset),
+    get<{ n: number }>(`SELECT COUNT(*) AS n FROM projects WHERE ${where.join(" AND ")}`, ...params),
+    all<{ type: string; n: number }>("SELECT type, COUNT(*) AS n FROM projects WHERE user_id = ? AND type IN ('advertisement','forecast') GROUP BY type", user.id),
+  ]);
+  const total = totalRow?.n ?? 0;
   res.json({ items: (await Promise.all(rows.map((p) => serialize(user.id, p)))), total, counts: Object.fromEntries(counts.map((c) => [c.type, c.n])) });
 });
 

@@ -688,4 +688,25 @@ CREATE INDEX idx_payment_user ON payment_requests(user_id, created_at);
 CREATE INDEX idx_payment_status ON payment_requests(status, submitted_at);
 `,
   },
+  {
+    // Ad template studio: templates a user marked as favourite.
+    version: 14,
+    sql: `
+CREATE TABLE template_favorites (
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  template_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (user_id, template_id)
+);
+`,
+  },
+  {
+    // "My Business" (sales data uploads and weekly/monthly reports) was removed from the product.
+    version: 15,
+    sql: `
+DROP TABLE IF EXISTS business_reports;
+DROP TABLE IF EXISTS business_datasets;
+DELETE FROM activity WHERE service = 'business';
+`,
+  },
 ];

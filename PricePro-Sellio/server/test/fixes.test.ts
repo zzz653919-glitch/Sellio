@@ -2,30 +2,12 @@ import "./env.js";
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
 import { config, features } from "../src/config.js";
-import { analyseBusiness, normalizeDate } from "../src/modules/business/analysis.js";
 import { metrics } from "../src/modules/campaigns/metrics.js";
 import { setLlmFetchForTests } from "../src/services/llm.js";
 import { run } from "../src/db/index.js";
 import { closeServer, makePng, newUser } from "./helpers.js";
 
 after(() => { features.llm = false; (config as { GEMINI_API_KEY?: string }).GEMINI_API_KEY = undefined; setLlmFetchForTests(null); closeServer(); });
-
-test("impossible years are rejected and never hang the analysis", async () => {
-  assert.equal(normalizeDate("9999-12-31"), null);
-  assert.equal(normalizeDate("0001-01-01"), null);
-  assert.equal(normalizeDate("31.12.9999"), null);
-  const started = Date.now();
-  const a = analyseBusiness([{ date: "9999-12-31", revenue: 1 }, { date: "2025-01-01", revenue: 5 }, { date: "0050-03-01", revenue: 2 }]);
-  assert.ok(Date.now() - started < 1000);
-  assert.equal(a.rows, 1);
-  const { client, user } = await newUser();
-  assert.equal((await client.post("/api/business/datasets", { name: "x", source: "csv", rows: [{ date: "9999-12-31", revenue: 1 }] })).status, 400);
-  // A dataset saved earlier with a bad row still opens.
-  const ok = await client.post("/api/business/datasets", { name: "y", source: "csv", rows: [{ date: "2025-01-01", revenue: 1 }] });
-  await run("UPDATE business_datasets SET rows_json = ? WHERE id = ?", JSON.stringify([{ date: "9999-12-31", revenue: 1 }, { date: "2025-01-01", revenue: 1 }]), ok.data.dataset.id);
-  assert.equal((await client.get(`/api/business/datasets/${ok.data.dataset.id}`)).status, 200);
-  void user;
-});
 
 test("ROAS ignores spend of rows without revenue", () => {
   assert.equal(metrics([{ impressions: 0, clicks: 0, conversions: 0, spend: 100, revenue: 300 }, { impressions: 0, clicks: 0, conversions: 0, spend: 100, revenue: null }]).roas, 3);
@@ -48,18 +30,18 @@ test("template banners cannot be retried with AI; partial item update keeps stat
   assert.equal(p.data.campaign.items[0].title, "New title");
 });
 
-test("indicators are validated; reports count the AI summary against the plan", async () => {
+test("indicators are validated; AI text requests count against the plan", async () => {
   const { client } = await newUser();
   assert.equal((await client.get("/api/intel/stats?countries=UZ&indicators=constructor,__proto__")).status, 400);
-  await client.post("/api/business/datasets", { name: "s", source: "manual", rows: [{ date: "2025-01", revenue: 10 }, { date: "2025-02", revenue: 12 }] });
   (config as { GEMINI_API_KEY?: string }).GEMINI_API_KEY = "k"; features.llm = true;
   let body: { generationConfig: { thinkingConfig?: { thinkingBudget: number } } } | null = null;
   setLlmFetchForTests((async (_u: string, init: RequestInit) => {
     body = JSON.parse(String(init.body));
-    return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: "- ok" }] } }] }), { headers: { "content-type": "application/json" } });
+    const copy = { headlines: ["Tea"], descriptions: ["Fresh."], promos: ["New"], ctas: ["Buy"], instagram: { caption: "c", hashtags: ["t"] }, telegram: { post: "p" }, google: { headlines: ["Tea"], descriptions: ["Fresh"] } };
+    return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify(copy) }] } }] }), { headers: { "content-type": "application/json" } });
   }) as unknown as typeof fetch);
-  const r = await client.post("/api/business/reports", { period: "month" });
-  assert.equal(r.data.report.content.summary, "- ok");
+  const r = await client.post("/api/ads/copy", { product: "Tea", language: "en", platforms: ["instagram"] });
+  assert.equal(r.status, 201, JSON.stringify(r.data));
   assert.equal(body!.generationConfig.thinkingConfig, undefined); // default model: room for thinking instead
   assert.ok((body!.generationConfig as unknown as { maxOutputTokens: number }).maxOutputTokens > 6000);
   assert.equal((await client.get("/api/dashboard")).data.usage.metrics.ai.used, 1);

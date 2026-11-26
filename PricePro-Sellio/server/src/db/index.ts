@@ -81,6 +81,20 @@ async function libsqlDriver(url: string, authToken?: string): Promise<Driver> {
 
 let ready: Promise<Driver> | null = null;
 
+/** Local performance checks only: DB_SIMULATED_LATENCY_MS adds a delay to every round trip, like a remote database. */
+function withSimulatedLatency(d: Driver): Driver {
+  const ms = Number(process.env.DB_SIMULATED_LATENCY_MS ?? 0);
+  if (!ms || process.env.VERCEL) return d;
+  const wait = () => new Promise((r) => setTimeout(r, ms));
+  return {
+    ...d,
+    all: async (sql, params) => { await wait(); return d.all(sql, params); },
+    run: async (sql, params) => { await wait(); return d.run(sql, params); },
+    batch: async (stmts) => { await wait(); return d.batch(stmts); },
+    script: async (sql, extra) => { await wait(); return d.script(sql, extra); },
+  };
+}
+
 /** Open the database once per process (or serverless instance) and apply pending migrations. */
 export function getDb(): Promise<Driver> {
   ready ??= (async () => {
@@ -91,7 +105,7 @@ export function getDb(): Promise<Driver> {
       ? await libsqlDriver(config.TURSO_DATABASE_URL, config.TURSO_AUTH_TOKEN)
       : await nodeSqliteDriver(config.DATABASE_PATH);
     await migrate(driver);
-    return driver;
+    return withSimulatedLatency(driver);
   })().catch((err) => {
     ready = null; // allow a retry on the next request
     throw err;

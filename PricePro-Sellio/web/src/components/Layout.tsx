@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
 import {
-  BarChart3, Bell, Briefcase, ChevronDown, ChevronRight, Compass, Megaphone, Radar, CreditCard, FolderKanban, Heart, LayoutDashboard, LifeBuoy, LineChart, LogOut, Menu, Moon, Settings,
+  ArrowLeft, BarChart3, Bell, ChevronDown, ChevronRight, Compass, Megaphone, Radar, CreditCard, FolderKanban, Heart, LayoutDashboard, LifeBuoy, LineChart, LogOut, Menu, Moon, Settings,
   ShieldCheck, Sparkles, Sun, User as UserIcon, Wallet, X,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -27,7 +27,6 @@ export const NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
       { to: "/ads", label: "Ad Studio", icon: Megaphone },
       { to: "/intelligence", label: "Market Intelligence", icon: Radar },
       { to: "/forecast", label: "Demand Forecast", icon: LineChart },
-      { to: "/business", label: "My Business", icon: Briefcase },
     ],
   },
   {
@@ -186,9 +185,16 @@ export function AppLayout() {
   const { t } = useI18n();
   const unread = useUnread();
   const location = useLocation();
+  const navigate = useNavigate();
   useEffect(() => {
     setMobileOpen(false);
   }, [location.pathname]);
+  // Back: to the previous page of this site, or to the dashboard when the page was opened directly.
+  const canGoBack = location.pathname !== "/dashboard";
+  const goBack = () => {
+    const idx = (window.history.state as { idx?: number } | null)?.idx ?? 0;
+    if (idx > 0) navigate(-1); else navigate("/dashboard");
+  };
   const section = NAV_SECTIONS.find((s) => s.items.some((i) => (i.end ? location.pathname === i.to : location.pathname.startsWith(i.to))));
   const page = NAV.find((i) => (i.end ? location.pathname === i.to : location.pathname.startsWith(i.to)));
   const iconBtn = "relative grid h-10 w-10 place-items-center rounded-xl text-[var(--v-muted)] hover:bg-[var(--v-glass-2)] hover:text-[var(--v-text)]";
@@ -212,6 +218,12 @@ export function AppLayout() {
 
       <div className="flex min-w-0 flex-col gap-4 px-3 pb-[calc(7rem+env(safe-area-inset-bottom))] pt-3 lg:px-0 lg:pb-6 lg:pt-0">
         <header className="glass sticky top-3 z-20 flex min-h-[58px] items-center gap-1.5 rounded-[20px] py-2 pl-3 pr-2 sm:gap-2 lg:top-4 lg:min-h-16 lg:rounded-[22px] lg:pl-5">
+          {canGoBack && (
+            <button type="button" onClick={goBack} data-testid="back" aria-label={t("Back")} title={t("Back")}
+              className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-xl px-2.5 text-[13.5px] font-semibold text-[var(--v-muted)] hover:bg-[var(--v-glass-2)] hover:text-[var(--v-text)] lg:mr-2 lg:border lg:border-[var(--v-line)]">
+              <ArrowLeft className="h-5 w-5" /><span className="hidden sm:inline">{t("Back")}</span>
+            </button>
+          )}
           <div className="lg:hidden"><Logo className="[&>span]:hidden sm:[&>span]:inline" /></div>
           <div className="hidden min-w-0 flex-1 items-center gap-1.5 text-[13.5px] muted lg:flex">
             {section && <><span>{t(section.label)}</span><ChevronRight className="h-4 w-4" /></>}

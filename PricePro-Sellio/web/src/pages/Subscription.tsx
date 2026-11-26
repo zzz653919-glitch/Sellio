@@ -2,7 +2,6 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { Check, CreditCard, Crown, ExternalLink, Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { PaymentHistory, type PaymentItem } from "./Payment";
 import { ErrorAlert, IntegrationNotice, UsageMeter } from "../components/shared";
 import { Alert, Badge, Button, Card, PageHeader, PageLoader, Tabs, cx } from "../components/ui";
 import { get, post } from "../lib/api";
@@ -47,7 +46,6 @@ export default function Subscription() {
   const [interval, setBillingInterval] = useState<Interval>("month");
 
   const pay = useQuery({ queryKey: ["payment-config"], queryFn: () => get<{ enabled: boolean }>("/payments/config") });
-  const payments = useQuery({ queryKey: ["payments"], queryFn: () => get<{ items: PaymentItem[] }>("/payments") });
   const checkout = useMutation({
     mutationFn: (b: { plan: "pro" | "max"; interval: Interval }) => post<{ url: string }>("/subscription/checkout", b),
     onSuccess: (d) => { window.location.href = d.url; },
@@ -70,7 +68,7 @@ export default function Subscription() {
       )}
       {checkoutState === "success" && isPro && <div className="mb-6"><Alert tone="success" title={t("Payment confirmed")}>{t("{plan} limits are now active.", { plan: d.plans[d.plan].name })}</Alert></div>}
       {checkoutState === "cancelled" && <div className="mb-6"><Alert tone="warning">{t("Checkout was cancelled. No payment was taken.")}</Alert></div>}
-      {!d.paymentsConfigured && !isPro && <div className="mb-6"><IntegrationNotice service="payments" /></div>}
+      {!d.paymentsConfigured && !isPro && pay.data && !pay.data.enabled && <div className="mb-6"><IntegrationNotice service="payments" /></div>}
 
       <Card className="p-6">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -151,14 +149,6 @@ export default function Subscription() {
           );
         })}
       </div>
-
-      <Card className="mt-6 p-6">
-        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-          <h3 className="font-semibold">{t("Payment history")}</h3>
-          {pay.data?.enabled && <Link to="/payment" className="text-sm font-semibold text-[var(--v-sky)] hover:underline">{t("Payment page →")}</Link>}
-        </div>
-        <PaymentHistory items={payments.data?.items ?? []} />
-      </Card>
 
       <Card className="mt-6 p-6">
         <h3 className="mb-4 font-semibold">{t("Subscription history")}</h3>

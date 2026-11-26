@@ -21,18 +21,21 @@ type SubRow = {
 
 subscriptionRouter.get("/", async (req, res) => {
   const user = currentUser(req);
-  const sub = await get<SubRow>("SELECT * FROM subscriptions WHERE user_id = ?", user.id);
-  const history = await all<{ id: string; type: string; plan: string | null; amount_cents: number | null; currency: string | null; created_at: string }>(
-    "SELECT id, type, plan, amount_cents, currency, created_at FROM subscription_events WHERE user_id = ? ORDER BY created_at DESC LIMIT 50",
-    user.id,
-  );
+  const [sub, history, usageNow] = await Promise.all([
+    get<SubRow>("SELECT * FROM subscriptions WHERE user_id = ?", user.id),
+    all<{ id: string; type: string; plan: string | null; amount_cents: number | null; currency: string | null; created_at: string }>(
+      "SELECT id, type, plan, amount_cents, currency, created_at FROM subscription_events WHERE user_id = ? ORDER BY created_at DESC LIMIT 50",
+      user.id,
+    ),
+    usage(user.id),
+  ]);
   res.json({
     plan: user.plan,
     subscription: sub
       ? { plan: sub.plan, status: sub.status, provider: sub.provider, interval: sub.billing_interval, currentPeriodEnd: sub.current_period_end, cancelAtPeriodEnd: sub.cancel_at_period_end === 1, manageable: Boolean(sub.provider_customer_id) }
       : null,
     plans: getPlans(),
-    usage: await usage(user.id),
+    usage: usageNow,
     history: history.map((h) => ({ id: h.id, type: h.type, plan: h.plan, amountCents: h.amount_cents, currency: h.currency, createdAt: h.created_at })),
     paymentsConfigured: features.payments,
     // Which plan / interval combinations can be bought (a Stripe Price ID is set for them).

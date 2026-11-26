@@ -27,21 +27,34 @@ analyticsRouter.get("/summary", async (req, res) => {
   const { from, to } = range(parseQuery(req, rangeSchema));
   const u = user.id;
 
-  const totals = {
-    adsGenerated: await count("SELECT COUNT(*) AS n FROM generations WHERE user_id = ? AND status = 'succeeded' AND completed_at BETWEEN ? AND ?", u, from, to),
-    adsFailed: await count("SELECT COUNT(*) AS n FROM generations WHERE user_id = ? AND status = 'failed' AND completed_at BETWEEN ? AND ?", u, from, to),
-    forecastsCompleted: await count("SELECT COUNT(*) AS n FROM market_analyses WHERE user_id = ? AND status = 'completed' AND created_at BETWEEN ? AND ?", u, from, to),
-    productsAnalyzed: await count("SELECT COUNT(DISTINCT lower(query)) AS n FROM market_analyses WHERE user_id = ? AND status = 'completed' AND created_at BETWEEN ? AND ?", u, from, to),
-    projectsSaved: await count("SELECT COUNT(*) AS n FROM projects WHERE user_id = ? AND created_at BETWEEN ? AND ?", u, from, to),
-    favoritesAdded: await count("SELECT COUNT(*) AS n FROM favorites WHERE user_id = ? AND created_at BETWEEN ? AND ?", u, from, to),
-  };
-
-  const daily = await all<{ day: string; service: string; n: number }>(
+  const dailyP = all<{ day: string; service: string; n: number }>(
     `SELECT substr(created_at,1,10) AS day, service, COUNT(*) AS n FROM activity
      WHERE user_id = ? AND created_at BETWEEN ? AND ? AND type IN ('ad_created','ad_failed','market_analysis','project_saved')
      GROUP BY day, service ORDER BY day`,
     u, from, to,
   );
+  const performanceP = all<{ service: string; total: number; ok: number; avg_ms: number | null }>(
+    `SELECT service, COUNT(*) AS total, SUM(success) AS ok, AVG(duration_ms) AS avg_ms FROM activity
+     WHERE user_id = ? AND created_at BETWEEN ? AND ? AND type IN ('ad_created','ad_failed','market_analysis')
+     GROUP BY service`,
+    u, from, to,
+  );
+  const usageP = all<{ service: string; n: number }>(
+    "SELECT service, COUNT(*) AS n FROM activity WHERE user_id = ? AND created_at BETWEEN ? AND ? GROUP BY service ORDER BY n DESC",
+    u, from, to,
+  );
+  // All reads run together (Promise.all attaches to every promise at once).
+  const [daily, perfRows, usageByService, adsGenerated, adsFailed, forecastsCompleted, productsAnalyzed, projectsSaved, favoritesAdded] = await Promise.all([
+    dailyP, performanceP, usageP,
+    count("SELECT COUNT(*) AS n FROM generations WHERE user_id = ? AND status = 'succeeded' AND completed_at BETWEEN ? AND ?", u, from, to),
+    count("SELECT COUNT(*) AS n FROM generations WHERE user_id = ? AND status = 'failed' AND completed_at BETWEEN ? AND ?", u, from, to),
+    count("SELECT COUNT(*) AS n FROM market_analyses WHERE user_id = ? AND status = 'completed' AND created_at BETWEEN ? AND ?", u, from, to),
+    count("SELECT COUNT(DISTINCT lower(query)) AS n FROM market_analyses WHERE user_id = ? AND status = 'completed' AND created_at BETWEEN ? AND ?", u, from, to),
+    count("SELECT COUNT(*) AS n FROM projects WHERE user_id = ? AND created_at BETWEEN ? AND ?", u, from, to),
+    count("SELECT COUNT(*) AS n FROM favorites WHERE user_id = ? AND created_at BETWEEN ? AND ?", u, from, to),
+  ]);
+  const totals = { adsGenerated, adsFailed, forecastsCompleted, productsAnalyzed, projectsSaved, favoritesAdded };
+
   const days: Record<string, { date: string; studio: number; forecast: number; projects: number }> = {};
   for (let t = Date.parse(from.slice(0, 10)); t <= Date.parse(to.slice(0, 10)); t += 86_400_000) {
     const d = new Date(t).toISOString().slice(0, 10);
@@ -52,22 +65,12 @@ analyticsRouter.get("/summary", async (req, res) => {
     if (bucket && r.service in bucket) (bucket as unknown as Record<string, number>)[r.service] += r.n;
   }
 
-  const performance = (await all<{ service: string; total: number; ok: number; avg_ms: number | null }>(
-    `SELECT service, COUNT(*) AS total, SUM(success) AS ok, AVG(duration_ms) AS avg_ms FROM activity
-     WHERE user_id = ? AND created_at BETWEEN ? AND ? AND type IN ('ad_created','ad_failed','market_analysis')
-     GROUP BY service`,
-    u, from, to,
-  )).map((p) => ({
+  const performance = perfRows.map((p) => ({
     service: p.service,
     total: p.total,
     successRate: p.total ? Math.round((p.ok / p.total) * 1000) / 10 : null,
     avgDurationMs: p.avg_ms === null ? null : Math.round(p.avg_ms),
   }));
-
-  const usageByService = await all<{ service: string; n: number }>(
-    "SELECT service, COUNT(*) AS n FROM activity WHERE user_id = ? AND created_at BETWEEN ? AND ? GROUP BY service ORDER BY n DESC",
-    u, from, to,
-  );
 
   res.json({ range: { from, to }, totals, timeline: Object.values(days), performance, usageByService });
 });

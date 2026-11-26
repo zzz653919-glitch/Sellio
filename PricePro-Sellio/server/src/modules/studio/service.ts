@@ -213,12 +213,12 @@ export async function retryGeneration(userId: string, id: string) {
 }
 
 export async function listGenerations(userId: string, limit = 50, offset = 0) {
-  const rows = await all<GenerationRow>(
-    "SELECT * FROM generations WHERE user_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
-    userId, limit, offset,
-  );
-  const total = (await get<{ n: number }>("SELECT COUNT(*) AS n FROM generations WHERE user_id = ?", userId))?.n ?? 0;
-  const refs = await savedRefs(userId, "advertisement");
+  const [rows, totalRow, refs] = await Promise.all([
+    all<GenerationRow>("SELECT * FROM generations WHERE user_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?", userId, limit, offset),
+    get<{ n: number }>("SELECT COUNT(*) AS n FROM generations WHERE user_id = ?", userId),
+    savedRefs(userId, "advertisement"),
+  ]);
+  const total = totalRow?.n ?? 0;
   return { items: (await Promise.all(rows.map((g) => serializeGeneration(g, userId, refs)))), total };
 }
 

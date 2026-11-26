@@ -51,11 +51,15 @@ test("user flow: request, receipt checks, submit — the plan never changes befo
   assert.equal(r.data.payment.status, "pending");
   assert.equal(r.data.payment.amountUzs, 240000);
   const id = r.data.payment.id;
-  assert.equal((await u.client.post("/api/payments", { plan: "pro", interval: "year" })).status, 400, "Pro has no yearly price");
+  const proYear = await u.client.post("/api/payments", { plan: "pro", interval: "year" });
+  assert.equal(proYear.data.payment.amountUzs, 2394000, "Pro yearly: $190");
+  // A receipt uploaded for one amount is dropped when the plan or period changes.
+  assert.equal((await uploadReceipt(u, id)).status, 200);
   // Switching plan before sending keeps one open request.
   const sw = await u.client.post("/api/payments", { plan: "max", interval: "year" });
   assert.equal(sw.data.payment.id, id);
   assert.equal(sw.data.payment.amountUzs, 2520000);
+  assert.equal(sw.data.payment.receipt, null, "receipt for the old amount removed");
 
   assert.equal((await u.client.post(`/api/payments/${id}/submit`, {})).status, 400, "receipt required");
   assert.equal((await uploadReceipt(u, id, Buffer.from("this is not a receipt file at all!!"), "x.png")).status, 400);
@@ -67,7 +71,7 @@ test("user flow: request, receipt checks, submit — the plan never changes befo
   assert.equal(sent.data.payment.submitted, true);
   assert.equal((await u.client.post(`/api/payments/${id}/submit`, {})).status, 200, "double click is harmless");
   assert.equal(await plan(u), "free", "NOT activated by the user's confirmation");
-  assert.equal((await u.client.get("/api/subscription")).data.usage.metrics.requests.limit, 5);
+  assert.equal((await u.client.get("/api/subscription")).data.usage.metrics.requests.limit, 2);
   assert.equal((await uploadReceipt(u, id)).status, 400, "locked while being checked");
   assert.equal((await u.client.del(`/api/payments/${id}`)).status, 400);
   assert.equal((await u.client.post("/api/payments", { plan: "pro" })).status, 409, "one payment at a time");
@@ -154,15 +158,14 @@ test("a card-paid plan ends at its period end and the user returns to Free", asy
   assert.equal(await plan(u), "pro");
   await run("UPDATE subscriptions SET current_period_end = ? WHERE user_id = ?", new Date(Date.now() - 60_000).toISOString(), u.user.id);
   assert.equal(await plan(u), "free");
-  assert.equal((await u.client.get("/api/subscription")).data.usage.metrics.requests.limit, 5);
+  assert.equal((await u.client.get("/api/subscription")).data.usage.metrics.requests.limit, 2);
 });
 
-test("FREE: at most 2 AI advertisement images per day (forecasts still allowed); configurable", async () => {
+test("FREE: at most 2 AI advertisement images per day, renewed every day", async () => {
   const u = await newUser();
   await reserveRequest(u.user.id, "generation", `img-${u.user.id}-1`);
   await reserveRequest(u.user.id, "generation", `img-${u.user.id}-2`);
-  await assert.rejects(reserveRequest(u.user.id, "generation", `img-${u.user.id}-3`), (e: { code?: string; details?: { metric: string } }) => e.code === "LIMIT_REACHED" && e.details?.metric === "images_per_day");
-  await reserveRequest(u.user.id, "forecast", `fc-${u.user.id}-1`);
+  await assert.rejects(reserveRequest(u.user.id, "generation", `img-${u.user.id}-3`), (e: { code?: string }) => e.code === "LIMIT_REACHED");
   const s = (await u.client.get("/api/dashboard")).data.usage.metrics.requests;
-  assert.deepEqual([s.used, s.imagesToday.used, s.imagesToday.limit, s.imagesToday.remaining], [3, 2, 2, 0]);
+  assert.deepEqual([s.period, s.used, s.limit, s.imagesToday.used, s.imagesToday.limit, s.imagesToday.remaining], ["day", 2, 2, 2, 2, 0]);
 });

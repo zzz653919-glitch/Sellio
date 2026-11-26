@@ -6,7 +6,7 @@ import { cleanCopy } from "../src/modules/ads/routes.js";
 import { metrics } from "../src/modules/campaigns/routes.js";
 import { setTrendsProviderForTests } from "../src/modules/forecast/trends.js";
 import { setLlmFetchForTests } from "../src/services/llm.js";
-import { closeServer, makePng, newUser } from "./helpers.js";
+import { Client, closeServer, makePng, newUser } from "./helpers.js";
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 const gemini = (obj: unknown) => json({ candidates: [{ content: { parts: [{ text: JSON.stringify(obj) }] } }] });
@@ -181,4 +181,43 @@ test("campaigns: planner, AI plan within dates and channels, results with CPA / 
   assert.equal(A.roas, 4.5);
   assert.equal((await a.client.del(`/api/campaigns/${id}`)).status, 200);
   assert.equal((await a.client.get("/api/campaigns")).data.items.length, 0);
+});
+
+test("template favourites: add, list, remove, per user, validated ids", async () => {
+  const { client: c } = await newUser();
+  const { client: other } = await newUser();
+  assert.deepEqual((await c.get("/api/ads/template-favorites")).data.ids, []);
+  assert.equal((await c.put("/api/ads/template-favorites/fashion-new-sneakers")).status, 200);
+  assert.equal((await c.put("/api/ads/template-favorites/fashion-new-sneakers")).status, 200); // idempotent
+  assert.equal((await c.put("/api/ads/template-favorites/food-pizza-time")).status, 200);
+  assert.deepEqual([...(await c.get("/api/ads/template-favorites")).data.ids].sort(), ["fashion-new-sneakers", "food-pizza-time"]);
+  assert.deepEqual((await other.get("/api/ads/template-favorites")).data.ids, []);
+  assert.equal((await c.put("/api/ads/template-favorites/..%2Fbad")).status, 400);
+  assert.equal((await c.del("/api/ads/template-favorites/food-pizza-time")).status, 200);
+  assert.deepEqual((await c.get("/api/ads/template-favorites")).data.ids, ["fashion-new-sneakers"]);
+  assert.equal((await new Client().get("/api/ads/template-favorites")).status, 401);
+});
+
+test("text AI: a busy model is retried, then other Gemini models are tried", async () => {
+  const { client } = await newUser();
+  enableAi("gemini");
+  const seen: string[] = [];
+  setLlmFetchForTests((async (u: string) => {
+    seen.push(String(u).match(/models\/([^:]+)/)?.[1] ?? "");
+    if (seen.length <= 2) return json({ error: { code: 503, message: "This model is currently experiencing high demand." } }, 503);
+    return gemini({ headlines: ["Fresh"], descriptions: ["Tasty."], promos: ["New"], ctas: ["Buy"], instagram: { caption: "c", hashtags: ["x"] }, telegram: { post: "p" }, google: { headlines: ["Fresh"], descriptions: ["Tasty"] } });
+  }) as typeof fetch);
+  try {
+    const r = await client.post("/api/ads/copy", { product: "Apples", language: "en", platforms: ["instagram"] });
+    assert.equal(r.status, 201, JSON.stringify(r.data));
+    assert.equal(seen[0], seen[1]); // retried the same model once
+    assert.notEqual(seen[2], seen[0]); // then a different model answered
+  } finally { setLlmFetchForTests(null); }
+
+  setLlmFetchForTests((async () => json({ error: { code: 503, message: "This model is currently experiencing high demand." } }, 503)) as typeof fetch);
+  try {
+    const r = await client.post("/api/ads/copy", { product: "Apples", language: "en", platforms: ["instagram"] });
+    assert.equal(r.status, 503);
+    assert.equal(r.data.error.code, "AI_BUSY");
+  } finally { disableAi(); }
 });

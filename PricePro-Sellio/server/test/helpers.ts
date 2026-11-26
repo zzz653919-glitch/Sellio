@@ -37,6 +37,7 @@ export class Client {
   post = (u: string, b?: unknown) => this.req("POST", u, b ?? {});
   patch = (u: string, b: unknown) => this.req("PATCH", u, b);
   del = (u: string, b?: unknown) => this.req("DELETE", u, b);
+  put = (u: string, b?: unknown) => this.req("PUT", u, b ?? {});
 }
 
 let counter = 0;

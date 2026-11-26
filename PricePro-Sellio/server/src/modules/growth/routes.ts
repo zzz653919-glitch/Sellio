@@ -9,8 +9,6 @@ import { serviceLimiter } from "../../middleware/rateLimit.js";
 import { completeJson, LANGUAGE_NAME } from "../../services/llm.js";
 import { assertWithinLimit, recordAiRequest } from "../../services/plans.js";
 import { getBrand } from "../ads/brand.js";
-import { analyseBusiness } from "../business/analysis.js";
-import { latestDataset } from "../business/service.js";
 import { learnings } from "../campaigns/learnings.js";
 import { metrics } from "../campaigns/metrics.js";
 import { CHANNELS } from "../campaigns/routes.js";
@@ -183,8 +181,6 @@ growthRouter.post("/:id/explain", requireVerified, serviceLimiter, async (req, r
   await assertWithinLimit(user.id, "ai");
   const lang = (await get<{ language: string }>("SELECT language FROM user_settings WHERE user_id = ?", user.id))?.language ?? "en";
   const brand = await getBrand(user.id);
-  const ds = await latestDataset(user.id);
-  const biz = ds && ds.rows.length ? (() => { const a = analyseBusiness(ds.rows); return { totals: a.totals, growth: a.growth, topProducts: a.products.slice(0, 5).map((p) => ({ name: p.name, sharePct: p.sharePct, last3VsPrev3Pct: p.last3VsPrev3Pct })) }; })() : null;
   const learned = await learnings(user.id);
   const evidence = safeJson<Record<string, unknown> | null>(r.evidence_json, null);
   const raw = await completeJson<Record<string, unknown>>({
@@ -193,7 +189,7 @@ Use numbers only from DATA and name the source. Google Trends is relative search
 Return JSON: {"explanation": "4–6 sentences: what the opportunity is, why it matters now, how sure the data is", "fit": "how it fits this business (or what data is missing)",
 "risks": [2–4 risks], "directions": [exactly 3 marketing directions: {"title": "...", "audience": "...", "message": "main ad message", "channels": [from: ${CHANNELS.join(", ")}], "offer": "an offer idea the owner can decide on", "why": "..."}]}
 Prefer channels that worked in the user's past results if there are any.
-DATA: ${JSON.stringify({ product: r.product, searchTerm: r.query, evidence: evidence && { ...evidence, reasons: Array.isArray(evidence.reasons) ? (evidence.reasons as Msg[]).map(fill) : undefined }, myBusiness: biz ?? "no sales data uploaded", brand: brand && { name: brand.businessName, tone: brand.tone }, pastCampaignResults: learned.overall ? { currency: learned.currency, byChannel: learned.byChannel, insights: learned.insights.map(fill) } : "none yet" }).slice(0, 12000)}`,
+DATA: ${JSON.stringify({ product: r.product, searchTerm: r.query, evidence: evidence && { ...evidence, reasons: Array.isArray(evidence.reasons) ? (evidence.reasons as Msg[]).map(fill) : undefined }, brand: brand && { name: brand.businessName, tone: brand.tone }, pastCampaignResults: learned.overall ? { currency: learned.currency, byChannel: learned.byChannel, insights: learned.insights.map(fill) } : "none yet" }).slice(0, 12000)}`,
     messages: [{ role: "user", content: `Explain this opportunity for my business and suggest 3 marketing directions: ${r.product}` }],
     maxTokens: 3000,
   });

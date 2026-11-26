@@ -19,20 +19,20 @@ export const PLANS: Record<Plan, { name: string; priceMonthlyUsd: number; priceY
     name: "Free",
     priceMonthlyUsd: 0,
     priceYearlyUsd: null,
-    limits: { requests: 5, ai: 50 },
-    requestPeriod: "month",
+    limits: { requests: 2, ai: 50 },
+    requestPeriod: "day",
     dailyImageLimit: 2,
     benefits: [
-      "5 requests per month for AI ads and demand forecasts (shared)",
+      "2 requests per day for AI ads and demand forecasts (shared)",
       "Up to 2 AI advertisement images per day",
-      "Renews on the 1st of every month; unused requests do not carry over",
+      "Renews every day at 00:00; unused requests do not carry over",
       "50 AI text requests per month (ad copy, reviews, plans, explanations)",
     ],
   },
   pro: {
     name: "Pro",
     priceMonthlyUsd: 19,
-    priceYearlyUsd: null,
+    priceYearlyUsd: 190,
     limits: { requests: 10, ai: 1000 },
     requestPeriod: "day",
     dailyImageLimit: null,
@@ -40,6 +40,7 @@ export const PLANS: Record<Plan, { name: string; priceMonthlyUsd: number; priceY
       "10 requests per day for AI ads and demand forecasts",
       "Renews every day at 00:00",
       "1000 AI text requests per month",
+      "Yearly payment: $190 instead of $228",
     ],
   },
   max: {
@@ -87,17 +88,15 @@ async function aiStatus(userId: string, plan: Plan, timezone: string) {
 
 /** Everything the user sees about limits: requests (AI ads + forecasts) and AI text requests. */
 export async function usage(userId: string) {
-  const plan = await userPlan(userId);
-  const timezone = await userTimezone(userId);
-  const r = await requestStatus(userId, { plan, timezone });
+  const [plan, timezone] = await Promise.all([userPlan(userId), userTimezone(userId)]);
+  const [r, ai] = await Promise.all([requestStatus(userId, { plan, timezone }), aiStatus(userId, plan, timezone)]);
   const { plan: _p, timezone: _t, ...requests } = r;
-  return { plan, timezone, periodStart: r.periodStart, resetsAt: r.resetsAt, metrics: { requests, ai: await aiStatus(userId, plan, timezone) } };
+  return { plan, timezone, periodStart: r.periodStart, resetsAt: r.resetsAt, metrics: { requests, ai } };
 }
 
 /** Text-AI limit (monthly). Core services use reserveRequest() in quota.ts instead. */
 export async function assertWithinLimit(userId: string, metric: "ai") {
-  const plan = await userPlan(userId);
-  const timezone = await userTimezone(userId);
+  const [plan, timezone] = await Promise.all([userPlan(userId), userTimezone(userId)]);
   const s = await aiStatus(userId, plan, timezone);
   const plans = getPlans();
   if (s.used >= s.limit) {

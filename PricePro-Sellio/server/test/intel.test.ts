@@ -2,7 +2,6 @@ import "./env.js";
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
 import { config, features } from "../src/config.js";
-import { analyseBusiness, normalizeDate } from "../src/modules/business/analysis.js";
 import { parseComtrade, setComtradeFetchForTests } from "../src/modules/intel/comtrade.js";
 import { parseWorldBank, setWorldBankFetchForTests } from "../src/modules/intel/worldbank.js";
 import { setTrendsProviderForTests, type TrendsProvider } from "../src/modules/forecast/trends.js";
@@ -153,71 +152,4 @@ test("API: competitors are private notes with ownership checks", async () => {
   assert.equal((await b.client.del(`/api/intel/competitors/${id}`)).status, 404);
   assert.equal((await a.client.patch(`/api/intel/competitors/${id}`, { name: "TechnoMart UZ", positioning: "Cheap" })).data.competitor.name, "TechnoMart UZ");
   assert.equal((await a.client.del(`/api/intel/competitors/${id}`)).status, 200);
-});
-
-test("business analysis: margins, growth, product risks and a back-tested forecast", () => {
-  assert.equal(normalizeDate("2025-03"), "2025-03-01");
-  assert.equal(normalizeDate("05.11.2025"), "2025-11-05");
-  assert.equal(normalizeDate("2025-02-30"), null);
-  const rows = [];
-  for (let m = 0; m < 18; m++) {
-    const month = new Date(Date.UTC(2024, m, 1)).toISOString().slice(0, 10);
-    rows.push({ date: month, product: "Tea", revenue: 1000 + m * 50, cost: 600 + m * 30, expenses: 100, units: 10 });
-    rows.push({ date: month, product: "Coffee", revenue: m < 15 ? 500 : 200, cost: 200, expenses: 50, units: 5 });
-  }
-  const a = analyseBusiness(rows);
-  assert.equal(a.monthly.length, 18);
-  assert.equal(a.totals.revenue, rows.reduce((s, r) => s + r.revenue, 0));
-  assert.ok(a.totals.netMarginPct! > 0);
-  assert.equal(a.products[0].name, "Tea");
-  assert.ok(a.risks.some((r) => r.key.startsWith("Sales of {name} fell")), JSON.stringify(a.risks));
-  assert.equal(a.forecast.status, "ok");
-  if (a.forecast.status === "ok") assert.equal(a.forecast.months.length, 3);
-  const short = analyseBusiness(rows.slice(0, 6));
-  assert.equal(short.forecast.status, "insufficient");
-});
-
-test("API: business datasets are private; reports work without AI; AI summary only when connected", async () => {
-  const { client } = await newUser();
-  const other = await newUser();
-  const rows = Array.from({ length: 400 }, (_, i) => {
-    const d = new Date(Date.UTC(2025, 0, 1) + i * 86_400_000).toISOString().slice(0, 10);
-    return { date: d, product: i % 3 ? "Shoes" : "Bags", revenue: 100 + (i % 7) * 10, cost: 60, expenses: 5 };
-  });
-  assert.equal((await client.post("/api/business/datasets", { name: "x", source: "csv", rows: [{ date: "31/31/2025", revenue: 1 }] })).status, 400);
-  const created = await client.post("/api/business/datasets", { name: "Shop 2025", source: "csv", currency: "uzs", rows });
-  assert.equal(created.status, 201, JSON.stringify(created.data));
-  const id = created.data.dataset.id;
-  assert.equal(created.data.dataset.currency, "UZS");
-  assert.equal(created.data.analysis.rows, 400);
-  assert.equal((await other.client.get(`/api/business/datasets/${id}`)).status, 404);
-  const full = await client.get(`/api/business/datasets/${id}`);
-  assert.equal(full.data.dataset.rows.length, 400);
-
-  setTrendsProviderForTests(null);
-  const rep = await client.post("/api/business/reports", { period: "week" });
-  assert.equal(rep.status, 201, JSON.stringify(rep.data));
-  const content = rep.data.report.content;
-  assert.equal(content.business.current.from, "2026-01-29");
-  assert.equal(content.business.current.to, "2026-02-04");
-  assert.equal(content.summary, null);
-  assert.equal(content.market, null);
-  assert.equal((await client.get("/api/business/reports")).data.items.length, 1);
-
-  // The AI Advisor was removed from the product.
-  assert.equal((await client.post("/api/advisor/messages", { message: "How is my business?" })).status, 404);
-
-  // With Gemini connected (mocked): the prompt contains the user's real numbers.
-  (config as { GEMINI_API_KEY?: string }).GEMINI_API_KEY = "test-key";
-  features.llm = true;
-  try {
-    // Reports get an AI summary when AI is connected.
-    setLlmFetchForTests((async () => json({ candidates: [{ content: { parts: [{ text: "- Revenue steady" }] } }] })) as unknown as typeof fetch);
-    const rep2 = await client.post("/api/business/reports", { period: "month" });
-    assert.equal(rep2.data.report.content.summary, "- Revenue steady");
-  } finally {
-    features.llm = false;
-    (config as { GEMINI_API_KEY?: string }).GEMINI_API_KEY = undefined;
-  }
-  assert.equal((await client.del(`/api/business/datasets/${id}`)).status, 200);
 });

@@ -1,0 +1,281 @@
+import { arch, art, badge, blob, circle, dots, glow, half, lin, line, podium, rad, rect, ring, shape, sparkle, star, stripes, wave, type Spec } from "./compose";
+
+const SHOP = "Shop Now →";
+
+// ------------------------------------------------------------------ Discounts & Special Offers (10)
+export const SALE: Spec[] = [
+  {
+    id: "sale-big-sale", name: "Big Sale", cat: "sale", tags: ["sale", "red", "bags", "70%"],
+    bg: lin(160, "#ef4444", "#b91c1c"), pos: "tl",
+    h: "Big Sale", s: "Up to", price: "70% OFF", priceFont: "Bebas Neue", priceSize: 150, cta: SHOP,
+    font: "Montserrat", weight: 900, size: 92, ink: "#ffffff", subInk: "#fee2e2", priceInk: "#fde047", gap: 0.0,
+    ctaBg: "#ffffff", ctaInk: "#b91c1c",
+    product: art("bags", { c1: "#ffffff", c2: "#fecaca", c3: "#f87171" }), pbox: [0.46, 0.3, 0.52, 0.66],
+    under: [circle(0.5, 0.26, 0.5, "rgba(255,255,255,0.12)")],
+  },
+  {
+    id: "sale-mega-sale", name: "Mega Sale", cat: "sale", tags: ["sale", "red", "80%", "bold"],
+    bg: lin(135, "#dc2626", "#7f1d1d"), pos: "tl",
+    h: "Mega\nSale", s: "Up to 80% OFF", cta: SHOP, font: "Bebas Neue", weight: 400, size: 150, ink: "#ffffff", subInk: "#fde047", subSize: 44, subWeight: 800, upper: true, spacing: 0.02, lh: 0.92,
+    ctaBg: "#ffffff", ctaInk: "#991b1b",
+    product: art("bags", { c1: "#ef4444", c2: "#b91c1c", c3: "#ffffff" }), pbox: [0.44, 0.3, 0.54, 0.66],
+    under: [stripes(0, 0, 1, 1, "#ffffff", 0.06)],
+    over: [badge("80%\nOFF", 0.74, 0.08, 0.2, "#fde047", "#7f1d1d", { shape: "burst", size: 46 })],
+  },
+  {
+    id: "sale-winter-sale", name: "Winter Sale", cat: "sale", tags: ["winter", "blue", "snow", "50%"],
+    bg: lin(180, "#f0f9ff", "#bae6fd"), pos: "tl",
+    h: "Winter\nSale", s: "Up to 50% OFF", cta: SHOP, font: "Montserrat", weight: 900, size: 100, ink: "#0c4a6e", subInk: "#0369a1", subWeight: 700,
+    ctaBg: "#0369a1",
+    product: art("snowflake", { c: "#7dd3fc" }), pbox: [0.44, 0.2, 0.56, 0.7], pshadow: false,
+    over: [sparkle(0.1, 0.72, 0.05, "#ffffff"), sparkle(0.3, 0.86, 0.035, "#ffffff"), sparkle(0.9, 0.1, 0.04, "#ffffff"), circle(0.2, 0.62, 0.02, "#ffffff"), circle(0.38, 0.76, 0.015, "#ffffff")],
+  },
+  {
+    id: "sale-flash-sale", name: "Flash Sale", cat: "sale", tags: ["sale", "red", "clock", "limited"],
+    bg: rad(0.7, 0.55, 0.8, "#dc2626", "#7f1d1d"), pos: "tl",
+    h: "Flash\nSale", s: "Limited Time.", cta: "Grab Now", font: "Anton", weight: 400, size: 120, ink: "#fde047", subInk: "#ffffff", upper: true,
+    ctaStyle: "box", ctaBg: "#fde047", ctaInk: "#991b1b",
+    product: art("clock", { body: "#ef4444" }), pbox: [0.44, 0.22, 0.52, 0.68], prot: 8,
+    under: [shape("burst", 0.4, 0.16, 0.62, 0.62, "rgba(253,224,71,0.18)", { keep: true })],
+  },
+  {
+    id: "sale-super-sale", name: "Super Sale", cat: "sale", tags: ["sale", "pink", "megaphone"],
+    bg: lin(160, "#fbcfe8", "#f472b6"), pos: "tl",
+    h: "Super\nSale", s: "Up to 60% OFF", cta: SHOP, font: "Poppins", weight: 900, size: 104, ink: "#831843", subInk: "#9d174d", subWeight: 700,
+    ctaBg: "#be185d",
+    product: art("megaphone", { body: "#f43f5e" }), pbox: [0.4, 0.3, 0.58, 0.6], prot: -12,
+    over: [badge("-60%", 0.72, 0.08, 0.2, "#facc15", "#831843", { shape: "burst", size: 50 })],
+  },
+  {
+    id: "sale-christmas-sale", name: "Christmas Sale", cat: "sale", tags: ["christmas", "new year", "red", "gold"],
+    bg: lin(160, "#b91c1c", "#7f1d1d"), pos: "tl",
+    h: "Christmas\nSale", s: "Up to 70% OFF", cta: SHOP, font: "DM Serif Display", weight: 400, size: 92, ink: "#ffffff", subInk: "#fcd34d", subWeight: 700,
+    ctaBg: "#fcd34d", ctaInk: "#7f1d1d",
+    product: art("xmastree"), pbox: [0.42, 0.08, 0.58, 0.9],
+    under: [dots(0, 0, 1, 1, "#ffffff", 0.12)], over: [star(0.1, 0.78, 0.05, "#fcd34d"), star(0.26, 0.88, 0.035, "#fcd34d", { opacity: 0.8 })],
+  },
+  {
+    id: "sale-halloween-sale", name: "Halloween Sale", cat: "sale", tags: ["halloween", "orange", "dark"],
+    bg: rad(0.68, 0.6, 0.8, "#7c2d12", "#140c08"), pos: "tl",
+    h: "Halloween\nSale", s: "Up to 60% OFF", cta: SHOP, font: "Anton", weight: 400, size: 104, ink: "#fb923c", subInk: "#ffffff", upper: true,
+    ctaBg: "#f97316", ctaInk: "#140c08",
+    product: art("pumpkin"), pbox: [0.42, 0.3, 0.56, 0.62],
+    under: [glow(0.38, 0.24, 0.7, "rgba(249,115,22,0.5)")], over: [star(0.86, 0.1, 0.04, "#fde68a"), star(0.66, 0.06, 0.025, "#fde68a")],
+  },
+  {
+    id: "sale-spring-sale", name: "Spring Sale", cat: "sale", tags: ["spring", "flowers", "green", "8 march"],
+    bg: lin(160, "#fef9c3", "#d9f99d"), pos: "tl",
+    h: "Spring\nSale", s: "Up to 50% OFF", cta: SHOP, font: "Poppins", weight: 800, size: 100, ink: "#3f6212", subInk: "#4d7c0f", subWeight: 700,
+    ctaBg: "#65a30d",
+    product: art("tulips", { petals: "#f43f5e" }), pbox: [0.46, 0.12, 0.5, 0.84],
+    under: [circle(0.48, 0.2, 0.48, "rgba(255,255,255,0.6)"), circle(0.1, 0.7, 0.08, "#fecdd3", { opacity: 0.7 }), circle(0.26, 0.82, 0.05, "#bbf7d0")],
+  },
+  {
+    id: "sale-weekend-sale", name: "Weekend Sale", cat: "sale", tags: ["sale", "gift", "red"],
+    bg: lin(150, "#f43f5e", "#dc2626"), pos: "tl",
+    h: "Weekend\nSale", s: "Up to 70% OFF", cta: SHOP, font: "Montserrat", weight: 900, size: 92, ink: "#ffffff", subInk: "#fff1f2", subWeight: 700,
+    ctaBg: "#ffffff", ctaInk: "#be123c",
+    product: art("gift", { box: "#ffffff", ribbon: "#ef4444" }), pbox: [0.46, 0.26, 0.5, 0.64],
+    under: [ring(0.42, 0.2, 0.62, "#ffffff", 3, { opacity: 0.25 })],
+    over: [rect(0.12, 0.74, 0.03, 0.012, "#fde047", 3, { rot: 30 }), rect(0.28, 0.86, 0.03, 0.012, "#ffffff", 3, { rot: -20 }), rect(0.86, 0.12, 0.03, 0.012, "#fde047", 3, { rot: 70 }), circle(0.36, 0.78, 0.018, "#fde047")],
+  },
+  {
+    id: "sale-shopping-time", name: "Shopping Time", cat: "sale", tags: ["shopping", "bags", "light blue", "pink"],
+    bg: lin(160, "#f0f9ff", "#dbeafe"), pos: "tl",
+    h: "Shopping\nTime", s: "Shop More.", cta: SHOP, font: "Rubik", weight: 800, size: 96, ink: "#1e3a8a", subInk: "#1d4ed8",
+    ctaBg: "#ec4899",
+    product: art("bags", { c1: "#f472b6", c2: "#ec4899", c3: "#fbcfe8" }), pbox: [0.44, 0.28, 0.54, 0.66],
+    over: [sparkle(0.88, 0.16, 0.05, "#f472b6"), sparkle(0.44, 0.26, 0.035, "#93c5fd")],
+  },
+];
+
+// ------------------------------------------------------------------ Furniture & Interior (8)
+export const FURNITURE: Spec[] = [
+  {
+    id: "home-modern-home", name: "Modern Home", cat: "furniture", tags: ["armchair", "rattan", "beige"],
+    bg: lin(180, "#f5ede1", "#ead9c3"), pos: "tl",
+    h: "Modern\nHome", s: "Live Stylish.", cta: SHOP, font: "DM Serif Display", weight: 400, size: 100, ink: "#3f2d1c", subInk: "#6b5440",
+    ctaBg: "#3f2d1c",
+    product: art("armchair", { c: "#d9b98a", legs: "#8a5a2b", kind: "rattan" }), pbox: [0.44, 0.24, 0.54, 0.68],
+    under: [arch(0.48, 0.1, 0.46, 0.8, "#fbf7f1"), rect(0, 0.9, 1, 0.1, "#dcc6a8")],
+  },
+  {
+    id: "home-stylish-furniture", name: "Stylish Furniture", cat: "furniture", tags: ["armchair", "velvet", "cream"],
+    bg: "#faf5ef", pos: "tl",
+    h: "Stylish\nFurniture", s: "Comfort Redefined.", cta: SHOP, font: "Montserrat", weight: 800, size: 88, ink: "#3b2f2f", subInk: "#78350f",
+    ctaStyle: "box", ctaBg: "#92400e",
+    product: art("armchair", { c: "#c2702a", legs: "#3f2a1d", kind: "velvet" }), pbox: [0.42, 0.28, 0.56, 0.64],
+    under: [rect(0.52, 0.06, 0.4, 0.5, "#f0e4d4", 24), rect(0.56, 0.1, 0.32, 0.42, "#fdfaf5", 18), rect(0, 0.88, 1, 0.12, "#ead7bf")],
+  },
+  {
+    id: "home-minimal-design", name: "Minimal Design", cat: "furniture", tags: ["vase", "decor", "beige", "minimal"],
+    bg: "#ece8e1", pos: "tl",
+    h: "Minimal\nDesign", s: "Less is More.", cta: SHOP, font: "Cormorant Garamond", weight: 600, size: 108, ink: "#292524", subInk: "#57534e",
+    ctaStyle: "outline", ctaBg: "#292524",
+    product: art("vase", { vase: "#d6d3d1", stems: "#a8a29e" }), pbox: [0.52, 0.12, 0.42, 0.8],
+    under: [half(0.46, 0.66, 0.54, 0.34, "#ddd6cc"), line(0.07, 0.9, 0.86, 0.002, "#292524", { opacity: 0.3 })],
+  },
+  {
+    id: "home-interior-style", name: "Interior Style", cat: "furniture", tags: ["lounge chair", "warm", "interior"],
+    bg: lin(180, "#f3e8d8", "#e7d3b5"), pos: "ml",
+    h: "Interior\nStyle", s: "Make it Home.", cta: SHOP, font: "Playfair Display", weight: 700, size: 92, ink: "#422006", subInk: "#713f12",
+    ctaBg: "#a16207",
+    product: art("armchair", { c: "#c08457", legs: "#5b3a1e", kind: "lounge" }), pbox: [0.44, 0.24, 0.56, 0.66],
+    under: [rect(0.5, 0.12, 0.44, 0.02, "#c9a77c", 4), rect(0, 0.86, 1, 0.14, "#d8bf9b")],
+  },
+  {
+    id: "home-cozy-home", name: "Cozy Home", cat: "furniture", tags: ["sofa", "beige", "living room"],
+    bg: lin(180, "#fdf6ec", "#f1e2cc"), pos: "tc",
+    h: "Cozy Home", s: "Feel at Home.", cta: SHOP, font: "Poppins", weight: 800, size: 92, ink: "#5b3a1e", subInk: "#7c5230",
+    ctaBg: "#92400e",
+    product: art("sofa", { c: "#e0b98a" }), pbox: [0.08, 0.42, 0.84, 0.5],
+    under: [rect(0, 0.84, 1, 0.16, "#e6cfae"), circle(0.82, 0.32, 0.1, "#fde68a", { opacity: 0.6 })],
+  },
+  {
+    id: "home-modern-living", name: "Modern Living", cat: "furniture", tags: ["chair", "grey", "modern"],
+    bg: lin(180, "#f4f4f5", "#e4e4e7"), pos: "bl",
+    h: "Modern\nLiving", s: "Live Better.", cta: SHOP, font: "Montserrat", weight: 800, size: 96, ink: "#18181b", subInk: "#52525b",
+    ctaBg: "#18181b",
+    product: art("armchair", { c: "#9ca3af", legs: "#78350f", kind: "modern" }), pbox: [0.5, 0.04, 0.48, 0.6],
+    under: [circle(0.5, 0.02, 0.48, "#ffffff")],
+  },
+  {
+    id: "home-dream-interior", name: "Dream Interior", cat: "furniture", tags: ["armchair", "grey", "elegant"],
+    bg: lin(180, "#f5f5f4", "#d6d3d1"), pos: "tl",
+    h: "Dream\nInterior", s: "Design Your Home.", cta: SHOP, font: "Playfair Display", weight: 700, size: 92, ink: "#1c1917", subInk: "#44403c",
+    ctaBg: "#1c1917",
+    product: art("armchair", { c: "#6b7280", legs: "#292524", kind: "velvet" }), pbox: [0.44, 0.28, 0.54, 0.64],
+    under: [arch(0.5, 0.06, 0.4, 0.66, "#fafaf9"), rect(0.5, 0.06, 0.4, 0.66, "rgba(0,0,0,0)", 0, { stroke: "#a8a29e", strokeW: 2, opacity: 0 })],
+  },
+  {
+    id: "home-smart-kitchen", name: "Smart Kitchen", cat: "furniture", tags: ["kitchen", "air fryer", "appliance"],
+    bg: "#f5f0e8", pos: "tl",
+    h: "Smart\nKitchen", s: "Cook Easy.", price: "1 590 000 so'm", cta: SHOP, font: "Poppins", weight: 800, size: 96, ink: "#1c1917", subInk: "#57534e",
+    ctaBg: "#ea580c",
+    product: art("airfryer", { body: "#1f2937" }), pbox: [0.46, 0.24, 0.5, 0.68],
+    under: [dots(0.5, 0.06, 0.44, 0.88, "#d6cfc2", 0.6), podium(0.46, 0.84, 0.5, 0.08, "#e7dccb")],
+  },
+];
+
+// ------------------------------------------------------------------ Sports & Fitness (7)
+export const SPORTS: Spec[] = [
+  {
+    id: "sport-stay-fit", name: "Stay Fit", cat: "sports", tags: ["dumbbells", "grey", "gym"],
+    bg: lin(160, "#f4f4f5", "#d4d4d8"), pos: "tl",
+    h: "Stay\nFit", s: "Live Healthy.", cta: "Join Now →", font: "Anton", weight: 400, size: 130, ink: "#111111", subInk: "#3f3f46", upper: true,
+    ctaBg: "#111111",
+    product: art("dumbbells", { metal: "#9ca3af", grip: "#4b5563" }), pbox: [0.4, 0.32, 0.58, 0.58],
+    under: [rect(0.5, 0.0, 0.18, 1, "#facc15", 0, { rot: 18, opacity: 0.9 })],
+  },
+  {
+    id: "sport-sport-life", name: "Sport Life", cat: "sports", tags: ["football", "green", "team"],
+    bg: lin(160, "#14532d", "#052e16"), pos: "tl",
+    h: "Sport\nLife", s: "Stronger You.", cta: "Join Now →", font: "Montserrat", weight: 900, size: 100, ink: "#ffffff", subInk: "#bbf7d0",
+    ctaBg: "#22c55e", ctaInk: "#052e16",
+    product: art("ball", { kind: "soccer", c: "#ffffff" }), pbox: [0.5, 0.36, 0.44, 0.5],
+    under: [ring(0.4, 0.26, 0.66, "#ffffff", 3, { opacity: 0.15 }), line(0.72, 0, 0.004, 1, "#ffffff", { opacity: 0.15 })],
+  },
+  {
+    id: "sport-never-give-up", name: "Never Give Up", cat: "sports", tags: ["running", "blue", "motivation"],
+    bg: lin(150, "#1d4ed8", "#0ea5e9"), pos: "tl",
+    h: "Never\nGive Up", s: "Keep Going.", cta: "Join Now →", font: "Oswald", weight: 700, size: 110, ink: "#ffffff", subInk: "#e0f2fe", upper: true,
+    ctaBg: "#ffffff", ctaInk: "#1d4ed8",
+    product: art("runner", { skin: "#8d5524", top: "#0f172a", bottom: "#111111" }), pbox: [0.4, 0.14, 0.6, 0.84], pshadow: false,
+    under: [line(0.36, 0.46, 0.2, 0.01, "rgba(255,255,255,0.5)"), line(0.3, 0.52, 0.24, 0.01, "rgba(255,255,255,0.35)"), line(0.4, 0.58, 0.14, 0.01, "rgba(255,255,255,0.5)")],
+  },
+  {
+    id: "sport-golf-life", name: "Golf Life", cat: "sports", tags: ["golf", "green", "club"],
+    bg: lin(180, "#16a34a", "#166534"), pos: "tl",
+    h: "Golf\nLife", s: "Play Better.", cta: "Join Now →", font: "Playfair Display", weight: 700, size: 104, ink: "#ffffff", subInk: "#dcfce7",
+    ctaBg: "#ffffff", ctaInk: "#166534",
+    product: art("ball", { kind: "golf", c: "#ffffff" }), pbox: [0.5, 0.3, 0.42, 0.54],
+    under: [half(0.1, 0.72, 1.1, 0.4, "#22c55e", { opacity: 0.55 }), shape("triangle", 0.84, 0.16, 0.08, 0.06, "#ef4444", { rot: 90 }), line(0.84, 0.16, 0.006, 0.4, "#ffffff")],
+  },
+  {
+    id: "sport-fitness-club", name: "Fitness Club", cat: "sports", tags: ["gym", "dark", "bodybuilding"],
+    bg: rad(0.7, 0.4, 0.8, "#3f3f46", "#0a0a0a"), pos: "tl",
+    h: "Fitness\nClub", s: "Be Stronger.", cta: "Join Now", font: "Anton", weight: 400, size: 116, ink: "#ffffff", ink2: "#ef4444", subInk: "#d4d4d8", upper: true,
+    ctaStyle: "box", ctaBg: "#ef4444",
+    product: art("athlete", { skin: "#c68642", shorts: "#111111" }), pbox: [0.4, 0.08, 0.62, 0.92], pshadow: false,
+  },
+  {
+    id: "sport-yoga-life", name: "Yoga Life", cat: "sports", tags: ["yoga", "light blue", "wellness"],
+    bg: lin(180, "#f0f9ff", "#e0f2fe"), pos: "tl",
+    h: "Yoga\nLife", s: "Find Balance.", cta: "Join Now →", font: "Raleway", weight: 800, size: 104, ink: "#0c4a6e", subInk: "#0369a1",
+    ctaBg: "#0284c7",
+    product: art("yoga", { skin: "#f1c7a8", outfit: "#a78bfa", mat: "#f9a8d4" }), pbox: [0.4, 0.06, 0.6, 0.94], pshadow: false,
+    under: [circle(0.5, 0.1, 0.42, "#fde68a", { opacity: 0.55 }), wave(0, 0.8, 1, 0.2, "rgba(125,211,252,0.35)")],
+  },
+  {
+    id: "sport-sportswear", name: "Sportswear", cat: "sports", tags: ["jacket", "dark", "apparel"],
+    bg: lin(160, "#0f172a", "#1e293b"), pos: "tl",
+    h: "Sportswear", s: "Move Better.", cta: SHOP, font: "Montserrat", weight: 900, size: 84, ink: "#ffffff", subInk: "#a3e635",
+    ctaBg: "#a3e635", ctaInk: "#0f172a",
+    product: art("jacket", { c1: "#111111", c2: "#e5e7eb" }), pbox: [0.42, 0.2, 0.54, 0.76],
+    under: [rect(0.3, 0.3, 1.0, 0.04, "#a3e635", 0, { rot: -28, opacity: 0.8 }), rect(0.3, 0.38, 1.0, 0.015, "#a3e635", 0, { rot: -28, opacity: 0.5 })],
+  },
+];
+
+// ------------------------------------------------------------------ Travel & Tourism (7)
+const shadeTop = (alpha = 0.45) => rect(0, 0, 1, 0.6, lin(180, `rgba(0,0,0,${alpha})`, "rgba(0,0,0,0)"));
+const shadeBottom = (alpha = 0.55) => rect(0, 0.4, 1, 0.6, lin(180, "rgba(0,0,0,0)", `rgba(0,0,0,${alpha})`));
+
+export const TRAVEL: Spec[] = [
+  {
+    id: "travel-travel-more", name: "Travel More", cat: "travel", tags: ["airplane", "sky", "blue"],
+    bg: lin(180, "#bae6fd", "#e0f2fe"), pos: "tl",
+    h: "Travel\nMore", s: "Discover the World.", cta: "Book Now →", font: "Montserrat", weight: 900, size: 100, ink: "#0c4a6e", subInk: "#0369a1",
+    ctaBg: "#0284c7",
+    product: art("airplane", { body: "#ffffff", accent: "#2563eb" }), pbox: [0.34, 0.3, 0.66, 0.5], prot: -8,
+    under: [blob(0.04, 0.74, 0.34, 0.14, "#ffffff", { opacity: 0.85 }), blob(0.62, 0.8, 0.4, 0.16, "#ffffff", { opacity: 0.9 }), blob(0.7, 0.1, 0.26, 0.1, "#ffffff", { opacity: 0.7 })],
+  },
+  {
+    id: "travel-explore-world", name: "Explore World", cat: "travel", tags: ["mountains", "lake", "nature", "photo"],
+    bg: "#7dd3fc", pos: "tl",
+    h: "Explore\nWorld", s: "New Horizons.", cta: "Book Now →", font: "Montserrat", weight: 900, size: 100, ink: "#ffffff", subInk: "#f0f9ff",
+    ctaBg: "#ffffff", ctaInk: "#0c4a6e",
+    product: art("scene_mountains", { sky: "#7dd3fc", water: "#0ea5e9" }), pbox: [0, 0, 1, 1], pfit: "cover", pshadow: false,
+    over: [shadeTop(0.4)],
+  },
+  {
+    id: "travel-summer-vibes", name: "Summer Vibes", cat: "travel", tags: ["palm", "aqua", "summer"],
+    bg: lin(180, "#a5f3fc", "#67e8f9"), pos: "tl",
+    h: "Summer\nVibes", s: "Enjoy the Sun.", cta: "Book Now →", font: "Pacifico", weight: 400, size: 86, ink: "#0c4a6e", subInk: "#155e75", lh: 1.2,
+    ctaBg: "#f59e0b",
+    product: art("palm", { leaves: "#16a34a", trunk: "#a16207" }), pbox: [0.44, 0.14, 0.54, 0.84], pshadow: false,
+    under: [circle(0.66, 0.06, 0.24, "#fde047")],
+  },
+  {
+    id: "travel-bali", name: "Bali", cat: "travel", tags: ["bali", "temple", "sunset", "photo"],
+    bg: "#fdba74", pos: "bl",
+    h: "Bali", s: "Paradise Awaits.", cta: "Book Now →", font: "Bebas Neue", weight: 400, size: 190, ink: "#ffffff", subInk: "#ffedd5", spacing: 0.03,
+    ctaBg: "#ffffff", ctaInk: "#9a3412",
+    product: art("scene_temple", { sky: "#fdba74", sea: "#0e7490" }), pbox: [0, 0, 1, 1], pfit: "cover", pshadow: false,
+    over: [shadeBottom(0.6)],
+  },
+  {
+    id: "travel-hello-summer", name: "Hello Summer", cat: "travel", tags: ["beach", "umbrella", "photo"],
+    bg: "#bae6fd", pos: "tl",
+    h: "Hello\nSummer", s: "Enjoy Every Moment.", cta: "Book Now →", font: "Poppins", weight: 800, size: 100, ink: "#0c4a6e", subInk: "#075985",
+    ctaBg: "#f97316",
+    product: art("scene_beach", { sky: "#bae6fd", sea: "#06b6d4", sand: "#fde68a", kind: "umbrella" }), pbox: [0, 0, 1, 1], pfit: "cover", pshadow: false,
+    over: [rect(0, 0, 1, 0.5, lin(180, "rgba(255,255,255,0.55)", "rgba(255,255,255,0)"))],
+  },
+  {
+    id: "travel-dubai", name: "Dubai", cat: "travel", tags: ["city", "luxury", "night", "photo"],
+    bg: "#1e3a8a", pos: "tc",
+    h: "Dubai", s: "Experience Luxury.", cta: "Book Now →", font: "Playfair Display", weight: 700, size: 130, ink: "#ffffff", subInk: "#fcd34d",
+    ctaStyle: "outline", ctaBg: "#fcd34d",
+    product: art("scene_city", { sky: "#1e3a8a", glow: "#f59e0b" }), pbox: [0, 0, 1, 1], pfit: "cover", pshadow: false,
+    over: [shadeTop(0.5)],
+  },
+  {
+    id: "travel-maldives", name: "Maldives", cat: "travel", tags: ["lagoon", "villas", "turquoise", "photo"],
+    bg: "#a5f3fc", pos: "tc",
+    h: "Maldives", s: "Paradise Awaits.", cta: "Book Now →", font: "Montserrat", weight: 900, size: 110, ink: "#0b3b3c", subInk: "#115e59",
+    ctaBg: "#0f766e", ctaInk: "#ffffff",
+    product: art("scene_villas", { sky: "#a5f3fc", sea: "#14b8a6" }), pbox: [0, 0, 1, 1], pfit: "cover", pshadow: false,
+    over: [rect(0, 0, 1, 0.42, lin(180, "rgba(255,255,255,0.55)", "rgba(255,255,255,0)"))],
+  },
+];
+

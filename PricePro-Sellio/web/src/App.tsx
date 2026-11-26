@@ -11,7 +11,6 @@ const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Studio = lazy(() => import("./pages/Studio"));
 const Forecast = lazy(() => import("./pages/Forecast"));
 const Intelligence = lazy(() => import("./pages/Intelligence"));
-const Business = lazy(() => import("./pages/Business"));
 const AdStudio = lazy(() => import("./pages/AdStudio"));
 const Growth = lazy(() => import("./pages/Growth"));
 const Projects = lazy(() => import("./pages/Projects"));
@@ -55,7 +54,6 @@ export function App() {
           <Route path="studio" element={<Studio />} />
           <Route path="forecast" element={<Forecast />} />
           <Route path="intelligence" element={<Intelligence />} />
-          <Route path="business" element={<Business />} />
           <Route path="ads" element={<AdStudio />} />
           <Route path="projects" element={<Projects />} />
           <Route path="analytics" element={<Analytics />} />

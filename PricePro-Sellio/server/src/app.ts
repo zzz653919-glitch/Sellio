@@ -28,7 +28,6 @@ import { adminRouter } from "./modules/admin/routes.js";
 import { supportRouter } from "./modules/support/routes.js";
 import { topDemand } from "./modules/forecast/topDemand.js";
 import { countryStats } from "./modules/intel/worldbank.js";
-import { businessRouter } from "./modules/business/routes.js";
 import { intelRouter } from "./modules/intel/routes.js";
 import { llmProvider } from "./services/llm.js";
 import { deliverDueAnnouncements } from "./services/announcements.js";
@@ -67,7 +66,11 @@ export function createApp() {
   const json1mb = express.json({ limit: "1mb" });
   app.use((req, res, next) => (req.path.startsWith("/api/business/datasets") ? next() : json1mb(req, res, next)));
   app.use(cookieParser());
-  app.use("/api", apiLimiter, async (_req, _res, next) => { await refreshSettings(); next(); }, loadSession, requireClientHeader);
+  // Settings and the session are read in parallel (two database round trips at once instead of one after another).
+  app.use("/api", apiLimiter, async (req, res, next) => {
+    await Promise.all([refreshSettings(), new Promise<void>((done, fail) => { loadSession(req, res, () => done()).catch(fail); })]);
+    next();
+  }, requireClientHeader);
 
   // Public status for the web app: maintenance mode and whether sign-up is open.
   app.get("/api/status", (_req, res) => {
@@ -159,7 +162,6 @@ export function createApp() {
   app.use("/api/notifications", notificationsRouter);
   app.use("/api/subscription", subscriptionRouter);
   app.use("/api/intel", intelRouter);
-  app.use("/api/business", businessRouter);
   app.use("/api/ads", adsRouter);
   app.use("/api/campaigns", campaignsRouter);
   app.use("/api/growth", growthRouter);

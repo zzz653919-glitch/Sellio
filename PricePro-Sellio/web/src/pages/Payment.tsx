@@ -114,15 +114,26 @@ export default function Payment() {
   }, [approvedId, refresh, qc]);
   useEffect(() => () => { if (preview?.url) URL.revokeObjectURL(preview.url); }, [preview]);
 
-  const start = useMutation({
-    mutationFn: (b: { plan: "pro" | "max"; interval: Interval }) => post<{ payment: PaymentItem }>("/payments", b),
-    onSuccess: () => { setPreview(null); refreshAll(); },
-  });
+  // An open (not yet sent) request is created or updated only when the receipt is uploaded,
+  // so choosing a plan never needs an extra "continue" step.
+  const matches = (p: PaymentItem | null) => Boolean(p && p.plan === plan && p.interval === interval);
   const sendReceipt = useMutation({
-    mutationFn: (f: File) => { const form = new FormData(); form.append("file", f); return upload<{ payment: PaymentItem }>(`/payments/${open!.id}/receipt`, form); },
+    mutationFn: async (f: File) => {
+      let target = open;
+      if (!matches(target)) target = (await post<{ payment: PaymentItem }>("/payments", { plan, interval })).payment;
+      const form = new FormData(); form.append("file", f);
+      return upload<{ payment: PaymentItem }>(`/payments/${target!.id}/receipt`, form);
+    },
     onSuccess: () => refreshAll(),
     onError: () => setPreview(null),
   });
+  // Coming back with a started payment: show the plan it was started for.
+  const openKey = open && !open.submitted ? `${open.id}:${open.plan}:${open.interval}` : null;
+  useEffect(() => {
+    if (!openKey) return;
+    const [, p, i] = openKey.split(":");
+    setPlan(p as "pro" | "max"); setBillingInterval(i as Interval);
+  }, [openKey]);
   const submit = useMutation({
     mutationFn: () => post<{ payment: PaymentItem }>(`/payments/${open!.id}/submit`),
     onSuccess: () => { toast("success", t("Your payment is being checked. Wait for the administrator's confirmation.")); refreshAll(); },
@@ -143,20 +154,23 @@ export default function Payment() {
     sendReceipt.mutate(file);
   };
 
-  const summary = open ?? null;
+  const summary = open?.submitted ? open : null;
   const price = selected ? (interval === "year" ? selected.year : selected.month) : null;
-  const mode = open ? (open.submitted ? "review" : "pay") : "choose";
+  const mode = open?.submitted ? "review" : "pay";
+  const ready = matches(open) && Boolean(open?.receipt);
+  const already = user?.plan === plan;
+  const choose = (key: "pro" | "max", i: Interval) => { setPlan(key); setBillingInterval(i); setPreview(null); setParams({ plan: key, interval: i }); };
 
   return (
     <div className="space-y-6">
       <PageHeader icon={<Wallet className="h-6 w-6" />} title={t("Payment")} subtitle={t("Pay by bank card and upload the receipt. Your plan is activated after an administrator confirms the payment.")} />
 
-      {user && user.plan !== "free" && mode === "choose" && (
+      {user && user.plan !== "free" && mode === "pay" && (
         <Alert tone="success" title={t("Your {plan} plan is active", { plan: PLAN_NAME[user.plan] })}>
           <Link to="/subscription" className="font-semibold underline">{t("See limits and history")}</Link>
         </Alert>
       )}
-      {mode === "choose" && latest?.status === "rejected" && (
+      {mode === "pay" && latest?.status === "rejected" && (
         <Alert tone="error" title={t("Your last payment was not confirmed")}>
           {t("Reason")}: {latest.rejectReason || t("not given")}. {t("You can pay again or upload the correct receipt.")}
         </Alert>
@@ -165,26 +179,25 @@ export default function Payment() {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
         {/* ---------- left: plan and payment summary ---------- */}
         <div className="space-y-6">
-          {mode === "choose" && (
+          {mode === "pay" && (
             <Card className="space-y-4 p-5 sm:p-6">
-              <h2 className="text-lg font-bold">{t("1. Choose a plan")}</h2>
+              <h2 className="text-lg font-bold">{t("1. Choose a plan and period")}</h2>
+              <Tabs value={interval} onChange={(v) => choose(plan, v)} tabs={[{ value: "month", label: t("Monthly") }, { value: "year", label: t("Yearly") }]} />
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                {c.plans.filter((p) => p.enabled).map((p) => (
-                  <button key={p.key} type="button" onClick={() => { setPlan(p.key); if (!p.year) setBillingInterval("month"); setParams({ plan: p.key }); }}
-                    className={cx("rounded-[16px] border p-4 text-left transition", plan === p.key ? "border-[var(--v-sky)] bg-[var(--v-sky-soft)] shadow-[0_0_0_1px_var(--v-sky)]" : "border-[var(--v-line)] bg-[var(--v-glass-2)] hover:bg-[var(--v-glass-3)]")}>
-                    <span className="flex items-center justify-between"><b className="text-lg">{p.name}</b>{plan === p.key && <Check className="h-5 w-5 text-[var(--v-sky)]" />}</span>
-                    <span className="mt-1 block text-sm muted">{t(p.requestPeriod === "day" ? "{n} requests per day" : "{n} requests per month", { n: p.requests })}</span>
-                    <span className="mt-2 block font-bold">{p.month ? som(p.month.uzs) : "—"} <span className="text-xs font-normal muted">/ {t("month")}</span></span>
-                  </button>
-                ))}
+                {c.plans.filter((p) => p.enabled).map((p) => {
+                  const pr = interval === "year" ? p.year : p.month;
+                  const save = interval === "year" && p.year && p.month ? p.month.usd * 12 - p.year.usd : 0;
+                  return (
+                    <button key={p.key} type="button" disabled={!pr} onClick={() => choose(p.key, interval)} data-plan={p.key}
+                      className={cx("rounded-[16px] border p-4 text-left transition disabled:cursor-not-allowed disabled:opacity-50", plan === p.key ? "border-[var(--v-sky)] bg-[var(--v-sky-soft)] shadow-[0_0_0_1px_var(--v-sky)]" : "border-[var(--v-line)] bg-[var(--v-glass-2)] hover:bg-[var(--v-glass-3)]")}>
+                      <span className="flex items-center justify-between"><b className="text-lg">{p.name}</b>{plan === p.key && <Check className="h-5 w-5 text-[var(--v-sky)]" />}</span>
+                      <span className="mt-1 block text-sm muted">{t(p.requestPeriod === "day" ? "{n} requests per day" : "{n} requests per month", { n: p.requests })}</span>
+                      <span className="mt-2 block font-bold">{pr ? som(pr.uzs) : t("Monthly only")} {pr && <span className="text-xs font-normal muted">/ {t(interval === "year" ? "year" : "month")}</span>}</span>
+                      {save > 0 && <span className="mt-1 block text-xs font-semibold text-[var(--v-ok)]">{t("You save ${n}", { n: save })}</span>}
+                    </button>
+                  );
+                })}
               </div>
-              {selected?.year && (
-                <Tabs value={interval} onChange={setBillingInterval} tabs={[{ value: "month", label: t("1 month") }, { value: "year", label: t("1 year") }]} />
-              )}
-              {start.error && <ErrorAlert error={start.error} />}
-              <Button size="lg" className="w-full" disabled={!price || user?.plan === plan} loading={start.isPending} onClick={() => start.mutate({ plan, interval })}>
-                {user?.plan === plan ? t("This plan is already active") : t("Continue to payment")}
-              </Button>
             </Card>
           )}
 
@@ -205,16 +218,12 @@ export default function Payment() {
             {selected && <p className="mt-3 text-xs muted">{t("After confirmation")}: {t(selected.requestPeriod === "day" ? "{n} requests per day" : "{n} requests per month", { n: selected.requests })} · {t("{n} AI text requests per month", { n: selected.ai })}</p>}
           </Card>
 
-          <Card className="p-5 sm:p-6">
-            <h2 className="mb-2 text-lg font-bold">{t("Payment history")}</h2>
-            <PaymentHistory items={list.data?.items ?? []} />
-          </Card>
         </div>
 
         {/* ---------- right: card, instructions, receipt ---------- */}
         <div className="space-y-6">
-          {mode === "choose" ? (
-            <Card className="p-6"><EmptyState icon={<Wallet className="h-6 w-6" />} title={t("Choose a plan to see the payment details")} text={t("The card number and the exact amount appear here.")} /></Card>
+          {mode === "pay" && already ? (
+            <Card className="p-6"><EmptyState icon={<CheckCircle2 className="h-6 w-6" />} title={t("This plan is already active")} text={t("Choose another plan to pay for it.")} /></Card>
           ) : mode === "review" ? (
             <Card className="space-y-4 p-6 text-center">
               <span className="tile mx-auto h-14 w-14 rounded-2xl t-warn"><Clock className="h-7 w-7" /></span>
@@ -227,11 +236,11 @@ export default function Payment() {
             <>
               <Card className="space-y-4 p-5 sm:p-6">
                 <h2 className="text-lg font-bold">{t("2. Transfer the money to this card")}</h2>
-                <BankCard card={open!.card} amount={open!.amountUzs} />
+                <BankCard card={c.card} amount={price?.uzs ?? 0} />
                 <ol className="space-y-2 text-sm">
                   {[
                     t("Open your bank app (Payme, Click, Uzum, your bank's app) and choose a transfer to a card."),
-                    t("Paste the card number and send exactly {sum}.", { sum: som(open!.amountUzs) }),
+                    t("Paste the card number and send exactly {sum}.", { sum: som(price?.uzs ?? 0) }),
                     t("Take a screenshot of the successful payment or download the receipt (PDF)."),
                     t("Upload the receipt below and press \"{btn}\".", { btn: t("Confirm payment") }),
                   ].map((s, i) => (
@@ -245,25 +254,31 @@ export default function Payment() {
                 <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp,application/pdf" className="hidden" onChange={(e) => { pick(e.target.files?.[0]); e.target.value = ""; }} />
                 <button type="button" onClick={() => fileRef.current?.click()}
                   onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); pick(e.dataTransfer.files?.[0]); }}
-                  className="flex w-full flex-col items-center gap-2 rounded-[16px] border border-dashed border-[var(--v-line)] p-6 text-center hover:bg-[var(--v-glass-2)]">
-                  {preview?.url ? <img src={preview.url} alt="" className="max-h-64 rounded-xl object-contain" />
-                    : open!.receipt ? <><FileText className="h-8 w-8 text-[var(--v-sky)]" /><span className="text-sm font-semibold">{preview?.name ?? open!.receipt.name}</span></>
-                    : <><UploadIcon className="h-8 w-8 text-[var(--v-sky)]" /><span className="text-sm font-semibold">{t("Choose or drop the receipt here")}</span></>}
-                  <span className="text-xs muted">{t("JPG, PNG, WEBP or PDF · up to 4 MB")}</span>
+                  className="flex w-full items-center gap-4 rounded-[16px] border border-dashed border-[var(--v-line)] p-3 text-left hover:bg-[var(--v-glass-2)] sm:p-4">
+                  <span className="grid h-20 w-20 flex-none place-items-center overflow-hidden rounded-xl bg-[var(--v-sky-soft)]">
+                    {preview?.url ? <img src={preview.url} alt="" className="h-full w-full object-cover" />
+                      : ready ? <FileText className="h-8 w-8 text-[var(--v-sky)]" />
+                      : <UploadIcon className="h-8 w-8 text-[var(--v-sky)]" />}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-semibold">{preview?.name ?? (ready ? open!.receipt!.name : t("Choose or drop the receipt here"))}</span>
+                    <span className="mt-0.5 block text-xs muted">{t("JPG, PNG, WEBP or PDF · up to 4 MB")}</span>
+                    {(preview || ready) && <span className="mt-1 block text-xs font-semibold text-[var(--v-sky)]">{t("Replace")}</span>}
+                  </span>
                 </button>
                 {sendReceipt.isPending && <p className="text-sm muted">{t("Uploading…")}</p>}
                 {sendReceipt.error && <ErrorAlert error={sendReceipt.error} />}
-                {open!.receipt && !sendReceipt.isPending && <p className="flex items-center gap-1.5 text-sm text-[var(--v-ok)]"><CheckCircle2 className="h-4 w-4" />{t("Receipt uploaded")}</p>}
+                {ready && !sendReceipt.isPending && <p className="flex items-center gap-1.5 text-sm text-[var(--v-ok)]"><CheckCircle2 className="h-4 w-4" />{t("Receipt uploaded")}</p>}
                 {submit.error && <ErrorAlert error={submit.error} />}
-                <Button size="lg" className="w-full" icon={<CheckCircle2 className="h-5 w-5" />} disabled={!open!.receipt || sendReceipt.isPending} loading={submit.isPending} onClick={() => submit.mutate()}>
+                <Button size="lg" className="w-full" icon={<CheckCircle2 className="h-5 w-5" />} disabled={!ready || sendReceipt.isPending} loading={submit.isPending} onClick={() => submit.mutate()}>
                   {t("Confirm payment")}
                 </Button>
                 <p className="text-center text-xs muted">{t("Your plan is not changed by this button. It is activated only after an administrator checks the receipt.")}</p>
-                <Button variant="ghost" className="w-full" loading={cancel.isPending} onClick={() => cancel.mutate()}>{t("Change plan or cancel")}</Button>
+                {open && !open.submitted && <Button variant="ghost" className="w-full" loading={cancel.isPending} onClick={() => cancel.mutate()}>{t("Cancel payment")}</Button>}
               </Card>
             </>
           )}
-          {latest?.status === "approved" && mode === "choose" && (
+          {latest?.status === "approved" && mode === "pay" && (
             <Alert tone="success" title={t("Payment confirmed")}>{t("{plan} plan is active until {date}.", { plan: PLAN_NAME[latest.plan], date: latest.periodEnd?.slice(0, 10) ?? "" })}</Alert>
           )}
         </div>

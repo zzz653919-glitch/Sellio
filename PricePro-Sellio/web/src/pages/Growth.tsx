@@ -104,7 +104,7 @@ function PlanView({ id }: { id: string }) {
       </StepCard>
 
       <StepCard n={2} step="explain" done={i.steps.explain} active={active === "explain"} title={t("AI explanation")}>
-        {i.explanation ? <Text>{i.explanation}</Text> : <p className="text-sm muted">{t("AI explains why this matters for your business, using the market data and your sales.")}</p>}
+        {i.explanation ? <Text>{i.explanation}</Text> : <p className="text-sm muted">{t("AI explains why this matters for your business, using the market data.")}</p>}
         {!textAi && <IntegrationNotice service="textAi" />}
         {explain.error && <ErrorAlert error={explain.error} />}
         <Button size="sm" variant={i.explanation ? "secondary" : "primary"} icon={<Bot className="h-4 w-4" />} loading={explain.isPending} disabled={!textAi} onClick={() => explain.mutate()}>{i.explanation ? t("Explain again") : t("Explain with AI")}</Button>
@@ -236,7 +236,7 @@ export default function Growth() {
           {list.error && <ErrorAlert error={list.error} />}
         </div>
       </div>
-      <Alert tone="info">{t("Market numbers come from Google Trends, business numbers from your own data. AI only explains and suggests; it does not create numbers.")}</Alert>
+      <Alert tone="info">{t("Market numbers come from Google Trends. AI only explains and suggests; it does not create numbers.")}</Alert>
       <ConfirmDialog open={Boolean(remove)} title={t("Delete this plan?")} text={t("The plan is deleted; its ads stay.")} confirmLabel={t("Delete")} loading={delMut.isPending} onConfirm={() => remove && delMut.mutate(remove)} onClose={() => setRemove(null)} />
     </div>
   );

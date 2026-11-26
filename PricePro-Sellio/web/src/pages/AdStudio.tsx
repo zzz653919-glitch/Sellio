@@ -1,21 +1,22 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Bot, Check as CheckIcon, Clapperboard, Copy, Download, Gauge, ImagePlus, LayoutTemplate, Megaphone, Palette as PaletteIcon, PenLine,
-  Save, Search, Shuffle, Sparkles, Swords, Trash2,
+  Save, Shuffle, Sparkles, Swords, Trash2,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { ErrorAlert, IntegrationNotice } from "../components/shared";
 import { Alert, Badge, Button, Card, EmptyState, Field, Input, PageHeader, Select, Spinner, Tabs, Toggle, cx, useToast } from "../components/ui";
 import { del, get, post, put, upload, errorMessage } from "../lib/api";
 import {
-  brandPalette, ensureFonts, FORMATS, getTemplate, loadImage, OCCASIONS, render, STYLES, TEMPLATES, toBlob,
+  brandPalette, ensureFonts, FORMATS, getTemplate, loadImage, render, TEMPLATES, toBlob,
   type Content, type FormatKey, type Layout, type Palette, type Template,
 } from "../lib/banner";
 import { scoreBanner, scoreImage, type ScoreResult } from "../lib/creativeScore";
 import { fmtDateTime } from "../lib/format";
 import { useI18n, type Lang } from "../lib/i18n";
 import { useMsg } from "../lib/msg";
+const TemplateStudio = lazy(() => import("../studio/TemplateStudio"));
 import { drawFrame, durationOf, recordVideo, supportedType, VIDEO_FORMATS, type VideoFormat, type VideoInput, type VideoStyle } from "../lib/video";
 
 // ------------------------------------------------------------------ API types
@@ -38,7 +39,6 @@ type Tab = "templates" | "maker" | "score" | "copy" | "video" | "competitors" | 
 type Draft = { template: string; format: FormatKey; headline: string; subline: string; price: string; oldPrice: string; badge: string; cta: string; productId: string | null; useBrand: boolean; primary: string; accent: string };
 
 const STYLE_LABEL: Record<string, string> = { minimal: "Minimal", modern: "Modern", premium: "Premium", luxury: "Luxury", promo: "Promotional", seasonal: "Seasonal" };
-const OCCASION_LABEL: Record<string, string> = { new_year: "New Year", navruz: "Navruz", march8: "8 March", school: "Back to school", black_friday: "Black Friday", summer: "Summer", sale: "Sale" };
 const CHECK_LABEL: Record<string, string> = { visualQuality: "Visual quality", readability: "Text readability", composition: "Composition", productVisibility: "Product visibility", brandConsistency: "Brand consistency" };
 
 const useBrand = () => useQuery({ queryKey: ["brand"], queryFn: () => get<{ brand: Brand | null }>("/ads/brand").then((r) => r.brand) });
@@ -183,51 +183,6 @@ function ProductPicker({ value, onChange }: { value: string | null; onChange: (i
 }
 
 // ------------------------------------------------------------------ templates
-function TemplatesTab({ draft, onUse, brand, product, logo }: { draft: Draft; onUse: (key: string) => void; brand: Brand | null | undefined; product: HTMLImageElement | null; logo: HTMLImageElement | null }) {
-  const { t } = useI18n();
-  const [style, setStyle] = useState<string>("all");
-  const [occasion, setOccasion] = useState<string>("all");
-  const [q, setQ] = useState("");
-  const list = TEMPLATES.filter((tp) => (style === "all" || tp.style === style) && (occasion === "all" || tp.tags.includes(occasion))
-    && (!q.trim() || `${tp.name} ${t(tp.name)} ${t(STYLE_LABEL[tp.style])} ${tp.tags.map((x) => t(OCCASION_LABEL[x] ?? x)).join(" ")}`.toLowerCase().includes(q.trim().toLowerCase())));
-  const sample: Content = useMemo(() => ({
-    headline: draft.headline || t("Your headline here"), subline: draft.subline || t("A short line about the product"), price: draft.price || "199 000 so'm", oldPrice: draft.oldPrice,
-    badge: draft.badge || "-20%", cta: draft.cta || t("Order now"), brandName: brand?.businessName ?? "", product, logo,
-  }), [draft, brand, product, logo, t]);
-  return (
-    <div className="space-y-4">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-        <div className="relative flex-1"><Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("Search templates")} className="pl-9" /></div>
-        <Select value={occasion} onChange={(e) => setOccasion(e.target.value)} options={[{ value: "all", label: t("All occasions") }, ...OCCASIONS.map((o) => ({ value: o, label: t(OCCASION_LABEL[o]) }))]} className="lg:w-56" />
-      </div>
-      <div className="flex flex-wrap gap-2">
-        {["all", ...STYLES].map((s) => (
-          <button key={s} type="button" onClick={() => setStyle(s)} className={cx("rounded-full border px-3 py-1 text-xs font-medium", style === s ? "border-brand-600 bg-brand-600 text-white" : "border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800")}>
-            {s === "all" ? t("All styles") : t(STYLE_LABEL[s])}
-          </button>
-        ))}
-      </div>
-      {list.length === 0 ? <EmptyState icon={<LayoutTemplate className="h-6 w-6" />} title={t("No templates found")} /> : (
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">
-          {list.map((tp) => {
-            const pal = draft.useBrand ? brandPalette(tp, brand ?? null) : tp.palette;
-            return (
-              <Card key={tp.key} className="space-y-2 p-3">
-                <TemplateThumb t={tp} content={sample} palette={pal} fonts={{ heading: (draft.useBrand && brand?.headingFont) || tp.fonts.heading, body: (draft.useBrand && brand?.bodyFont) || tp.fonts.body }} />
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="min-w-0"><p className="text-sm font-semibold leading-tight sm:truncate">{t(tp.name)}</p><p className="text-xs muted">{t(STYLE_LABEL[tp.style])}</p></div>
-                  <Button size="sm" className="w-full sm:w-auto" onClick={() => onUse(tp.key)}>{t("Use")}</Button>
-                </div>
-              </Card>
-            );
-          })}
-        </div>
-      )}
-      <p className="text-xs muted">{t("Templates are drawn in your browser: free and unlimited. Your product photo is placed as it is, so the product always looks real.")}</p>
-    </div>
-  );
-}
-
 function TemplateThumb(props: { t: Template; content: Content; palette: Palette; fonts: { heading: string; body: string } }) {
   const box = useRef<HTMLDivElement>(null);
   const [w, setW] = useState(200);
@@ -800,7 +755,7 @@ export default function AdStudio() {
           {t(plan.data.product)}{plan.data.direction ? ` · ${plan.data.direction.title}` : ""}. {t("Banners and texts you save here are added to this plan.")}
         </Alert>
       )}
-      {tab === "templates" && <TemplatesTab draft={draft} brand={brand.data} product={product} logo={draft.useBrand ? logo : null} onUse={(key) => { setDraft((d) => ({ ...d, template: key })); setTab("maker"); }} />}
+      {tab === "templates" && <Suspense fallback={<div className="grid place-items-center py-16"><Spinner /></div>}><TemplateStudio /></Suspense>}
       {tab === "maker" && <MakerTab draft={draft} setDraft={setDraft} brand={brand.data} product={product} logo={logo} productName={productLabel} initiativeId={initiativeId} />}
       {tab === "score" && <ScoreTab brand={brand.data} />}
       {tab === "copy" && <CopyTab defaultProduct={productLabel} initiativeId={initiativeId} onUse={(r) => { setDraft((d) => ({ ...d, headline: r.headlines[0] ?? d.headline, subline: (r.promos[0] ?? d.subline).slice(0, 90), cta: r.ctas[0] ?? d.cta })); setTab("maker"); }} />}

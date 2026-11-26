@@ -282,8 +282,11 @@ export async function getMarketAnalysis(userId: string, id: string) {
 }
 
 export async function listMarketAnalyses(userId: string, limit = 20) {
-  const refs = await savedRefs(userId, "forecast");
-  return (await Promise.all((await all<Row>("SELECT * FROM market_analyses WHERE user_id = ? ORDER BY created_at DESC LIMIT ?", userId, limit)).map(async (r) => {
+  const [refs, rows] = await Promise.all([
+    savedRefs(userId, "forecast"),
+    all<Row>("SELECT * FROM market_analyses WHERE user_id = ? ORDER BY created_at DESC LIMIT ?", userId, limit),
+  ]);
+  return (await Promise.all(rows.map(async (r) => {
     const s = await serialize(r, refs);
     // The list only needs the headline numbers.
     if (!s.result) return s;

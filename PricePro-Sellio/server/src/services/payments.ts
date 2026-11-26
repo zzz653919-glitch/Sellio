@@ -92,7 +92,10 @@ export async function createPaymentRequest(userId: string, currentPlan: Plan, pl
   if (open) {
     if (open.submitted_at) throw conflict("Your previous payment is being checked. Wait for the administrator's decision.");
     // Not sent yet: the user may switch plan or interval; the price and card are taken again.
-    await run("UPDATE payment_requests SET plan = ?, billing_interval = ?, amount_usd = ?, amount_uzs = ?, card_json = ?, updated_at = ? WHERE id = ? AND status = 'pending' AND submitted_at IS NULL",
+    // A receipt uploaded for the other amount no longer fits, so it is dropped.
+    const changed = open.plan !== plan || open.billing_interval !== interval;
+    if (changed && open.receipt_key) await removePrivateFile(open.receipt_key).catch(() => undefined);
+    await run(`UPDATE payment_requests SET plan = ?, billing_interval = ?, amount_usd = ?, amount_uzs = ?, card_json = ?, updated_at = ?${changed ? ", receipt_key = NULL, receipt_mime = NULL, receipt_name = NULL, receipt_size = NULL" : ""} WHERE id = ? AND status = 'pending' AND submitted_at IS NULL`,
       plan, interval, price.usd, price.uzs, card, now, open.id);
     return shapePayment((await get<PaymentRow>("SELECT * FROM payment_requests WHERE id = ?", open.id))!);
   }

@@ -92,11 +92,10 @@ usersAdminRouter.get("/users/:id", requirePermission("users.view"), async (req, 
   const id = param(req, "id");
   const u = await target(id);
   const count = async (sql: string) => (await get<{ n: number }>(sql, id))?.n ?? 0;
-  const [projects, generations, analyses, datasets, campaigns, tickets] = await Promise.all([
+  const [projects, generations, analyses, campaigns, tickets] = await Promise.all([
     count("SELECT COUNT(*) AS n FROM projects WHERE user_id = ?"),
     count("SELECT COUNT(*) AS n FROM generations WHERE user_id = ?"),
     count("SELECT COUNT(*) AS n FROM market_analyses WHERE user_id = ?"),
-    count("SELECT COUNT(*) AS n FROM business_datasets WHERE user_id = ?"),
     count("SELECT COUNT(*) AS n FROM campaigns WHERE user_id = ?"),
     count("SELECT COUNT(*) AS n FROM support_tickets WHERE user_id = ?"),
   ]);
@@ -116,7 +115,7 @@ usersAdminRouter.get("/users/:id", requirePermission("users.view"), async (req, 
   const language = (await get<{ language: string }>("SELECT language FROM user_settings WHERE user_id = ?", id))?.language ?? null;
   res.json({
     user: { ...shape(u), suspendedReason: u.suspended_reason, planSource: u.plan_source, language, updatedAt: u.updated_at },
-    counts: { projects, generations, analyses, datasets, campaigns, tickets },
+    counts: { projects, generations, analyses, campaigns, tickets },
     usage: await usage(id),
     usageHistory: (await usageHistory(id, 100)).map((e) => ({ id: e.id, service: e.service, refId: e.ref_id, status: e.status, plan: e.plan, period: e.period, createdAt: e.created_at })),
     subscription: subscription ? { plan: subscription.plan, status: subscription.status, provider: subscription.provider, periodEnd: subscription.current_period_end, cancelAtPeriodEnd: Boolean(subscription.cancel_at_period_end), updatedAt: subscription.updated_at } : null,

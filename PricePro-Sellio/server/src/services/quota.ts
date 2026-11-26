@@ -101,22 +101,22 @@ export type RequestStatus = {
 };
 
 export async function requestStatus(userId: string, known?: { plan?: Plan; timezone?: string }): Promise<RequestStatus> {
-  const plan = known?.plan ?? await userPlanRow(userId);
-  const timezone = known?.timezone ?? await userTimezone(userId);
+  const [plan, timezone] = await Promise.all([known?.plan ?? userPlanRow(userId), known?.timezone ?? userTimezone(userId)]);
   const info = getPlans()[plan];
   const { start, end } = periodBounds(info.requestPeriod, timezone);
-  const used = (await get<{ n: number }>(
-    `SELECT COUNT(*) AS n FROM usage_events WHERE user_id = ? AND created_at >= ? AND ${COUNTED}`,
-    userId, iso(start), iso(nowMs() - RESERVATION_TTL_MS),
-  ))?.n ?? 0;
+  const day = periodBounds("day", timezone);
+  const expired = iso(nowMs() - RESERVATION_TTL_MS);
+  // One round trip for both counts.
+  const row = await get<{ n: number; img: number }>(
+    `SELECT (SELECT COUNT(*) FROM usage_events WHERE user_id = ?1 AND created_at >= ?2 AND ${COUNTED.replaceAll("?", "?3")}) AS n,
+            (SELECT COUNT(*) FROM usage_events WHERE user_id = ?1 AND service = 'generation' AND created_at >= ?4 AND ${COUNTED.replaceAll("?", "?3")}) AS img`,
+    userId, iso(start), expired, iso(day.start),
+  );
+  const used = row?.n ?? 0;
   const limit = info.limits.requests;
   let imagesToday: RequestStatus["imagesToday"] = null;
   if (info.dailyImageLimit !== null) {
-    const day = periodBounds("day", timezone);
-    const n = (await get<{ n: number }>(
-      `SELECT COUNT(*) AS n FROM usage_events WHERE user_id = ? AND service = 'generation' AND created_at >= ? AND ${COUNTED}`,
-      userId, iso(day.start), iso(nowMs() - RESERVATION_TTL_MS),
-    ))?.n ?? 0;
+    const n = row?.img ?? 0;
     imagesToday = { used: n, limit: info.dailyImageLimit, remaining: Math.max(0, info.dailyImageLimit - n), resetsAt: iso(day.end) };
   }
   return { plan, timezone, period: info.requestPeriod, limit, used, remaining: Math.max(0, limit - used), periodStart: iso(start), resetsAt: iso(end), imagesToday };
