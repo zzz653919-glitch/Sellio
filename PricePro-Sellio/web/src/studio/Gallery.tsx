@@ -1,27 +1,31 @@
-import { Eye, Heart, LayoutTemplate, PencilLine, Search } from "lucide-react";
-import { memo, useEffect, useMemo, useRef, useState } from "react";
-import { Button, EmptyState, Input, Modal, cx } from "../components/ui";
+import { Eye, Heart, ImagePlus, LayoutTemplate, Loader2, PencilLine, Search, X } from "lucide-react";
+import { memo, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { Button, EmptyState, Input, Modal, cx, useToast } from "../components/ui";
 import { useI18n } from "../lib/i18n";
 import { CATEGORIES, TEMPLATES } from "./templates";
+import { galleryPhoto, onGalleryPhoto, readPhoto, setGalleryPhoto } from "./photo";
 import { thumbnail } from "./thumbs";
 import type { TemplateDef } from "./types";
 
 const CAT_LABEL = Object.fromEntries(CATEGORIES.map((c) => [c.key, c.label]));
 
 /** Preview image that renders only when it scrolls into view. */
+export const useGalleryPhoto = () => useSyncExternalStore(onGalleryPhoto, galleryPhoto, galleryPhoto);
+
 export const Thumb = memo(function Thumb({ t, width = 360, eager, className }: { t: TemplateDef; width?: number; eager?: boolean; className?: string }) {
   const ref = useRef<HTMLDivElement>(null);
   const [url, setUrl] = useState<string | null>(null);
+  const photo = useGalleryPhoto();
   useEffect(() => {
     let alive = true;
     const el = ref.current;
     if (!el) return;
-    const go = () => void thumbnail(t, width).then((u) => alive && setUrl(u));
+    const go = () => void thumbnail(t, width, photo).then((u) => alive && setUrl(u));
     if (eager || typeof IntersectionObserver === "undefined") { go(); return () => { alive = false; }; }
     const io = new IntersectionObserver((es) => { if (es.some((e) => e.isIntersecting)) { io.disconnect(); go(); } }, { rootMargin: "300px" });
     io.observe(el);
     return () => { alive = false; io.disconnect(); };
-  }, [t, width, eager]);
+  }, [t, width, eager, photo]);
   return (
     <div ref={ref} className={cx("relative aspect-square w-full overflow-hidden bg-[var(--v-th)]", className)}>
       {url ? <img src={url} alt={t.name} className="h-full w-full object-cover" draggable={false} /> : <div className="h-full w-full animate-pulse bg-slate-200/60 dark:bg-slate-700/40" />}
@@ -44,9 +48,37 @@ export function Gallery({ favorites, onToggleFavorite, onOpen }: { favorites: Se
     return TEMPLATES.filter((x) => (cat === "all" || (cat === "favorites" ? favorites.has(x.id) : x.category === cat))
       && (!needle || `${x.name} ${t(CAT_LABEL[x.category])} ${CAT_LABEL[x.category]} ${x.tags.join(" ")}`.toLowerCase().includes(needle)));
   }, [cat, q, favorites, t]);
+  const photo = useGalleryPhoto();
+  const toast = useToast();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [reading, setReading] = useState(false);
+  const pick = async (file: File | undefined) => {
+    if (!file) return;
+    setReading(true);
+    try { setGalleryPhoto(await readPhoto(file)); toast("success", t("Your photo is now shown in every template.")); }
+    catch (e) { toast("error", t(e instanceof Error ? e.message : "This image could not be opened.")); }
+    finally { setReading(false); if (fileRef.current) fileRef.current.value = ""; }
+  };
   const chips = [{ key: "all", label: t("All templates") }, { key: "favorites", label: t("Favorites") }, ...CATEGORIES.map((c) => ({ key: c.key, label: t(c.label) }))];
   return (
     <div className="space-y-4">
+      <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={(e) => void pick(e.target.files?.[0])} data-testid="gallery-photo-input" />
+      <div className="card flex flex-col gap-3 p-4 sm:flex-row sm:items-center"
+        onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); void pick(e.dataTransfer.files?.[0]); }}>
+        <span className="grid h-16 w-16 flex-none place-items-center overflow-hidden rounded-2xl bg-[var(--v-sky-soft)]">
+          {photo ? <img src={photo.src} alt="" className="h-full w-full object-contain" /> : <ImagePlus className="h-7 w-7 text-[var(--v-sky)]" />}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="font-bold">{photo ? t("Your product is in every template") : t("See your product in all 100 templates")}</p>
+          <p className="text-sm muted">{t("Upload one product photo: it takes the place of the sample picture in every template. A plain (white or one-colour) background is removed automatically.")}</p>
+        </div>
+        <div className="flex flex-none gap-2">
+          <Button icon={reading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />} disabled={reading} onClick={() => fileRef.current?.click()} data-testid="gallery-photo">
+            {photo ? t("Change photo") : t("Upload product photo")}
+          </Button>
+          {photo && <Button variant="ghost" icon={<X className="h-4 w-4" />} onClick={() => setGalleryPhoto(null)}>{t("Remove")}</Button>}
+        </div>
+      </div>
       <div className="relative">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
         <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("Search 100 templates by name")} className="pl-9" aria-label={t("Search templates")} />

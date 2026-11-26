@@ -8,6 +8,7 @@ import { useI18n } from "../lib/i18n";
 import { ensureFonts, fontWeight, FONTS } from "./fonts";
 import { exportDoc, loadSource, renderTo } from "./render";
 import { CATEGORIES, docFromTemplate, getTemplateDef } from "./templates";
+import { cutOut, galleryPhoto, placePhoto, productOf, readPhoto, withPhoto } from "./photo";
 import { docFonts } from "./thumbs";
 import { FORMATS, type Doc, type El, type Fill, type FormatKey, type ImageEl, type ShapeEl, type ShapeKind, type TextEl, type TextRole } from "./types";
 
@@ -44,60 +45,6 @@ const toHex = (c: string) => {
 };
 const ROLE_LABEL: Record<TextRole, string> = { headline: "Headline", subline: "Description", desc: "Description", price: "Price", oldPrice: "Old price", discount: "Discount", cta: "Button text", brand: "Brand", label: "Text" };
 const draftKey = (id: string) => `vendora-ad-draft:${id}`;
-
-/** Read an uploaded picture, scaled down to at most 2000 px (keeps transparency for PNG/WebP). */
-async function readImageFile(file: File): Promise<{ src: string; cutout: boolean }> {
-  if (!/^image\/(png|jpe?g|webp|gif|avif)$/i.test(file.type)) throw new Error("Choose a PNG, JPG or WebP image.");
-  if (file.size > 15 * 1024 * 1024) throw new Error("The image is larger than 15 MB.");
-  const url = URL.createObjectURL(file);
-  try {
-    const img = await new Promise<HTMLImageElement>((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error("This image could not be opened.")); i.src = url; });
-    const s = Math.min(1, 2000 / Math.max(img.naturalWidth, img.naturalHeight));
-    const c = document.createElement("canvas");
-    c.width = Math.max(1, Math.round(img.naturalWidth * s)); c.height = Math.max(1, Math.round(img.naturalHeight * s));
-    const ctx = c.getContext("2d", { willReadFrequently: true })!;
-    ctx.drawImage(img, 0, 0, c.width, c.height);
-    // A product cut out on a transparent background is placed as it is; a normal photo goes into the template's frame.
-    let cutout = false;
-    if (/png|webp|gif|avif/i.test(file.type)) {
-      const t = document.createElement("canvas"); t.width = 48; t.height = 48;
-      const tc = t.getContext("2d", { willReadFrequently: true })!; tc.drawImage(c, 0, 0, 48, 48);
-      const a = tc.getImageData(0, 0, 48, 48).data;
-      let clear = 0; for (let i = 3; i < a.length; i += 4) if (a[i] < 200) clear++;
-      cutout = clear / (48 * 48) > 0.04;
-    }
-    return { src: cutout ? c.toDataURL("image/png") : c.toDataURL("image/jpeg", 0.92), cutout };
-  } finally { URL.revokeObjectURL(url); }
-}
-
-/**
- * Where an uploaded photo goes in a template. A cut-out product keeps the sample picture's place.
- * A normal (rectangular) photo takes the shape behind the sample picture — a circle stays a circle,
- * an arch stays an arch — so the design keeps its look; without such a shape it gets rounded corners.
- */
-function placePhoto(doc: Doc, el: ImageEl, cutout: boolean): Partial<ImageEl> {
-  const base: Partial<ImageEl> = { zoom: 1, dx: 0, dy: 0 };
-  if (el.w >= 0.9 && el.h >= 0.9) return { ...base, fit: "cover", mask: "none" }; // full background picture
-  if (cutout) return { ...base, fit: "contain" };
-  const at = doc.els.findIndex((e) => e.id === el.id);
-  const area = el.w * el.h;
-  let best: { s: ShapeEl; score: number } | null = null;
-  for (const e of doc.els.slice(0, at)) {
-    if (e.type !== "shape" || !["circle", "ring", "arch", "blob", "rect", "halfcircle"].includes(e.shape)) continue;
-    if ((e.w >= 0.95 && e.h >= 0.95) || e.h < 0.08 || e.w < 0.08 || (e.opacity ?? 1) < 0.05) continue;
-    let { x, y, w, h } = e;
-    if (e.keep) { const m = Math.min(w * doc.w, h * doc.h); x += (w - m / doc.w) / 2; y += (h - m / doc.h) / 2; w = m / doc.w; h = m / doc.h; }
-    const ox = Math.max(0, Math.min(x + w, el.x + el.w) - Math.max(x, el.x)), oy = Math.max(0, Math.min(y + h, el.y + el.h) - Math.max(y, el.y));
-    const score = (ox * oy) / Math.min(area, w * h);
-    if (score > 0.45 && (!best || score > best.score)) best = { s: { ...e, x, y, w, h }, score };
-  }
-  if (!best) return { ...base, fit: "cover", mask: "rounded", radius: 36, shadow: true };
-  const s = best.s;
-  const inset = s.shape === "ring" ? 0.08 : 0;
-  const box = { x: s.x + s.w * inset, y: s.y + s.h * inset, w: s.w * (1 - 2 * inset), h: s.h * (1 - 2 * inset) };
-  const mask: ImageEl["mask"] = s.shape === "arch" ? "arch" : s.shape === "rect" || s.shape === "halfcircle" ? "rounded" : "circle";
-  return { ...base, ...box, fit: "cover", mask, radius: s.shape === "rect" ? Math.max(12, s.radius ?? 24) : 36, shadow: false };
-}
 
 function download(blob: Blob, name: string) {
   const a = document.createElement("a");
@@ -165,9 +112,10 @@ function FillInput({ value, onChange, label }: { value: Fill; onChange: (f: Fill
 type Drag = { mode: "move" | "resize"; dir?: string; id: string; sx: number; sy: number; box: { x: number; y: number; w: number; h: number }; base: Doc; moved: boolean; keep: boolean };
 const HANDLES = ["nw", "n", "ne", "e", "se", "s", "sw", "w"] as const;
 
-function Stage({ doc, selected, onSelect, set, commit, tick, onEditText }: {
+function Stage({ doc, selected, onSelect, set, commit, tick, onEditText, onReplaceImage, onDropFile }: {
   doc: Doc; selected: string | null; onSelect: (id: string | null) => void;
   set: (f: (d: Doc) => Doc, o?: { merge?: string; transient?: boolean }) => void; commit: (base: Doc) => void; tick: number; onEditText: (id: string) => void;
+  onReplaceImage: (id: string) => void; onDropFile: (file: File, imageId: string | null) => void;
 }) {
   const wrap = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -252,11 +200,20 @@ function Stage({ doc, selected, onSelect, set, commit, tick, onEditText }: {
     if (d?.moved) commit(d.base);
   };
   const sel = doc.els.find((e) => e.id === selected) ?? null;
+  const replaceLabel = useI18n().t("Replace photo");
   return (
     <div ref={wrap} className="w-full">
       <div className="relative mx-auto select-none overflow-hidden rounded-xl shadow-lg ring-1 ring-black/5" style={{ width: dispW, height: dispH, touchAction: "none" }}
         onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}
-        onDoubleClick={(e) => { const el = hit(point(e)); if (el?.type === "text") onEditText(el.id); }} data-testid="stage">
+        onDoubleClick={(e) => { const el = hit(point(e)); if (el?.type === "text") onEditText(el.id); if (el?.type === "image") onReplaceImage(el.id); }}
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={(e) => {
+          e.preventDefault();
+          const f = e.dataTransfer.files?.[0]; if (!f) return;
+          // Dropped on a picture: that picture is replaced; anywhere else: the template's product picture.
+          const p = point(e); const under = [...doc.els].reverse().find((x) => x.type === "image" && p.x >= x.x && p.x <= x.x + x.w && p.y >= x.y && p.y <= x.y + x.h);
+          onDropFile(f, under?.id ?? null);
+        }} data-testid="stage">
         <canvas ref={canvas} className="absolute inset-0 h-full w-full" />
         {guides.v && <div className="pointer-events-none absolute inset-y-0 left-1/2 w-px bg-fuchsia-500" />}
         {guides.h && <div className="pointer-events-none absolute inset-x-0 top-1/2 h-px bg-fuchsia-500" />}
@@ -273,6 +230,12 @@ function Stage({ doc, selected, onSelect, set, commit, tick, onEditText }: {
                   cursor: `${dir}-resize`,
                 }} />
             ))}
+            {sel.type === "image" && (
+              <button type="button" data-testid="replace-image" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onReplaceImage(sel.id); }}
+                className="absolute left-1/2 top-1/2 inline-flex -translate-x-1/2 -translate-y-1/2 items-center gap-1.5 whitespace-nowrap rounded-full bg-white/95 px-3 py-1.5 text-xs font-bold text-slate-900 shadow-lg ring-1 ring-black/10 hover:bg-white">
+                <Upload className="h-3.5 w-3.5" />{replaceLabel}
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -348,11 +311,12 @@ function TextProps({ e, upd, focusRef }: { e: TextEl; upd: (p: Partial<TextEl>, 
   );
 }
 
-function ImageProps({ e, upd, onUpload }: { e: ImageEl; upd: (p: Partial<ImageEl>, merge?: string) => void; onUpload: () => void }) {
+function ImageProps({ e, upd, onUpload, onCutOut, cutting }: { e: ImageEl; upd: (p: Partial<ImageEl>, merge?: string) => void; onUpload: () => void; onCutOut: () => void; cutting: boolean }) {
   const { t } = useI18n();
   return (
     <Section title={t("Picture")}>
       <Button className="w-full" icon={<Upload className="h-4 w-4" />} onClick={onUpload}>{t("Replace with my photo")}</Button>
+      {!e.src.startsWith("art:") && <Button className="w-full" variant="secondary" loading={cutting} onClick={onCutOut} data-testid="cut-out">{t("Remove background")}</Button>}
       <div className="grid grid-cols-2 gap-2">
         <Select value={e.fit} aria-label={t("Fit")} onChange={(x) => upd({ fit: x.target.value as ImageEl["fit"] })} options={[{ value: "contain", label: t("Show whole picture") }, { value: "cover", label: t("Fill the frame") }]} />
         <Select value={e.mask ?? "none"} aria-label={t("Shape")} onChange={(x) => upd({ mask: x.target.value as ImageEl["mask"] })} options={[{ value: "none", label: t("No frame") }, { value: "rounded", label: t("Rounded") }, { value: "circle", label: t("Circle") }, { value: "arch", label: t("Arch") }]} />
@@ -400,7 +364,8 @@ export default function Editor({ templateId, onBack, favorite, onToggleFavorite 
         if (d?.v === 1 && Array.isArray(d.els) && JSON.stringify({ bg: d.bg, els: d.els }) !== JSON.stringify({ bg: fresh.bg, els: fresh.els })) return { initial: d, restored: true };
       }
     } catch { /* storage blocked */ }
-    return { initial: fresh, restored: false };
+    // A photo chosen in the gallery goes straight into the sample picture's place.
+    return { initial: withPhoto(fresh, galleryPhoto()), restored: false };
   }, [def]);
   const [showRestored, setShowRestored] = useState(restored);
   const { doc, set, commit, undo, redo, reset, canUndo, canRedo } = useHistory(initial);
@@ -451,22 +416,32 @@ export default function Editor({ templateId, onBack, favorite, onToggleFavorite 
     reset(docFromTemplate(def, doc.format, { w: doc.w, h: doc.h }));
     setSelected(null); setShowRestored(false);
   };
-  const productImage = doc.els.find((e): e is ImageEl => e.type === "image" && e.name === "Product image") ?? doc.els.find((e): e is ImageEl => e.type === "image") ?? null;
+  const productImage = productOf(doc);
   const pickFile = (target: string | "new") => { uploadTarget.current = target; fileRef.current?.click(); };
-  const onFile = async (file: File | undefined) => {
+  const onFile = async (file: File | undefined, targetId?: string | "new") => {
     if (!file) return;
     try {
       setBusy("upload");
-      const { src, cutout } = await readImageFile(file);
+      const { src, cutout } = await readPhoto(file);
       await loadSource(src);
-      const target = uploadTarget.current;
+      const target = targetId ?? uploadTarget.current;
       const old = target && target !== "new" ? doc.els.find((e): e is ImageEl => e.id === target && e.type === "image") : undefined;
       if (old) upd(old.id, { src, ...placePhoto(doc, old, cutout) });
       else add({ id: newId(), type: "image", src, x: 0.3, y: 0.3, w: 0.4, h: 0.4, fit: cutout ? "contain" : "cover", mask: cutout ? "none" : "rounded", radius: 36, shadow: true, name: "Picture" });
-      toast("success", t("Picture added."));
+      toast("success", cutout ? t("Photo placed. The plain background was removed.") : t("Photo placed in the template's frame."));
     } catch (err) {
       toast("error", t(err instanceof Error ? err.message : "This image could not be opened."));
     } finally { setBusy(null); if (fileRef.current) fileRef.current.value = ""; }
+  };
+  const removeBg = async (el: ImageEl) => {
+    setBusy("cut");
+    try {
+      const src = await cutOut(el.src);
+      if (!src) { toast("error", t("The background could not be found. Use a photo on a plain background.")); return; }
+      await loadSource(src);
+      upd(el.id, { src, ...placePhoto(doc, el, true) });
+      toast("success", t("Background removed."));
+    } catch { toast("error", t("The background could not be found. Use a photo on a plain background.")); } finally { setBusy(null); }
   };
   const doExport = async (type: "image/png" | "image/jpeg") => {
     try {
@@ -555,7 +530,9 @@ export default function Editor({ templateId, onBack, favorite, onToggleFavorite 
           </div>
           <div className="card p-3 sm:p-5" style={{ background: "repeating-conic-gradient(rgba(148,163,184,.12) 0% 25%, transparent 0% 50%) 50% / 20px 20px" }}>
             <Stage doc={doc} selected={selected} onSelect={(id) => { setSelected(id); if (id) setTab("element"); }} set={set} commit={commit} tick={tick}
-              onEditText={(id) => { setSelected(id); setTab("element"); setTimeout(() => textRef.current?.focus(), 50); }} />
+              onEditText={(id) => { setSelected(id); setTab("element"); setTimeout(() => textRef.current?.focus(), 50); }}
+              onReplaceImage={(id) => { setSelected(id); pickFile(id); }}
+              onDropFile={(f, id) => void onFile(f, id ?? productImage?.id ?? "new")} />
           </div>
           <div className="flex flex-wrap gap-2">
             <Button icon={<Download className="h-4 w-4" />} loading={busy === "image/png"} onClick={() => void doExport("image/png")} data-testid="export-png">{t("Download PNG")}</Button>
@@ -577,7 +554,11 @@ export default function Editor({ templateId, onBack, favorite, onToggleFavorite 
                 <Button className="w-full" icon={<ImagePlus className="h-4 w-4" />} loading={busy === "upload"} onClick={() => pickFile(productImage?.id ?? "new")} data-testid="upload-product">
                   {productImage ? t("Upload my product photo") : t("Add a photo")}
                 </Button>
-                <p className="text-[11px] muted">{t("Your photo takes the place and shape of the sample picture (a circle stays a circle). A PNG with a transparent background is placed as it is.")}</p>
+                {productImage && !productImage.src.startsWith("art:") && (
+                  <Button className="w-full" variant="secondary" loading={busy === "cut"} onClick={() => void removeBg(productImage)}>{t("Remove background")}</Button>
+                )}
+                <p className="text-[11px] muted">{t("Your photo goes exactly where the sample picture was. A plain background is removed automatically; a photo with a real background takes the template's frame (a circle stays a circle).")}</p>
+                <p className="text-[11px] muted">{t("Tip: drag a photo onto the design, or double-click the picture to replace it.")}</p>
                 <p className="text-[11px] muted">{t("Don't need something? Click it on the design and press Delete, or remove it in Layers.")}</p>
               </Section>
               <Section title={t("Texts")}>
@@ -613,7 +594,7 @@ export default function Editor({ templateId, onBack, favorite, onToggleFavorite 
                 </Section>
               )}
               {sel?.type === "text" && <TextProps e={sel} upd={(p, m) => upd(sel.id, p, m)} focusRef={textRef} />}
-              {sel?.type === "image" && <ImageProps e={sel} upd={(p, m) => upd(sel.id, p, m)} onUpload={() => pickFile(sel.id)} />}
+              {sel?.type === "image" && <ImageProps e={sel} upd={(p, m) => upd(sel.id, p, m)} onUpload={() => pickFile(sel.id)} onCutOut={() => void removeBg(sel)} cutting={busy === "cut"} />}
               {sel?.type === "shape" && <ShapeProps e={sel} upd={(p, m) => upd(sel.id, p, m)} />}
               {sel && (
                 <Section title={t("Arrange")}>
