@@ -23,11 +23,15 @@ import { adsRouter } from "./modules/ads/routes.js";
 import { advisorRouter } from "./modules/advisor/routes.js";
 import { campaignsRouter } from "./modules/campaigns/routes.js";
 import { growthRouter } from "./modules/growth/routes.js";
+import { adminRouter } from "./modules/admin/routes.js";
+import { supportRouter } from "./modules/support/routes.js";
 import { topDemand } from "./modules/forecast/topDemand.js";
 import { countryStats } from "./modules/intel/worldbank.js";
 import { businessRouter } from "./modules/business/routes.js";
 import { intelRouter } from "./modules/intel/routes.js";
 import { llmProvider } from "./services/llm.js";
+import { deliverDueAnnouncements } from "./services/announcements.js";
+import { refreshSettings, settings } from "./services/settings.js";
 import { stripeWebhook, subscriptionRouter } from "./modules/subscription/routes.js";
 import { userRouter } from "./modules/user/routes.js";
 
@@ -62,7 +66,19 @@ export function createApp() {
   const json1mb = express.json({ limit: "1mb" });
   app.use((req, res, next) => (req.path.startsWith("/api/business/datasets") ? next() : json1mb(req, res, next)));
   app.use(cookieParser());
-  app.use("/api", apiLimiter, loadSession, requireClientHeader);
+  app.use("/api", apiLimiter, async (_req, _res, next) => { await refreshSettings(); next(); }, loadSession, requireClientHeader);
+
+  // Public status for the web app: maintenance mode and whether sign-up is open.
+  app.get("/api/status", (_req, res) => {
+    const s = settings();
+    res.json({ maintenance: s.maintenance.enabled, message: s.maintenance.message, registrationOpen: s.registrationOpen });
+  });
+  // Maintenance mode: normal users get 503; administrators, sign-in, health and webhooks keep working.
+  app.use("/api", (req, res, next) => {
+    if (!settings().maintenance.enabled || req.user?.admin_role) return next();
+    if (/^\/(health|status|meta|auth\/|admin\/|cron\/)/.test(req.path)) return next();
+    res.status(503).json({ error: { code: "MAINTENANCE", message: settings().maintenance.message || "Vendora is under maintenance. Please try again soon." } });
+  });
 
   /** Open /api/health after deploying: it says what is missing (never shows secret values). */
   app.get("/api/health", async (req, res) => {
@@ -124,6 +140,7 @@ export function createApp() {
     const started = Date.now();
     const result: Record<string, string> = {};
     try { result.radar = (await topDemand("UZ")) ? "ok" : "not configured"; } catch (e) { result.radar = e instanceof Error ? e.message : "failed"; }
+    try { result.announcements = `${await deliverDueAnnouncements(true)} delivered`; } catch (e) { result.announcements = e instanceof Error ? e.message : "failed"; }
     try { result.worldBank = features.worldBank ? ((await countryStats(["UZ"])), "ok") : "off"; } catch (e) { result.worldBank = e instanceof Error ? e.message : "failed"; }
     res.json({ ok: true, ms: Date.now() - started, ...result });
   });
@@ -145,6 +162,8 @@ export function createApp() {
   app.use("/api/ads", adsRouter);
   app.use("/api/campaigns", campaignsRouter);
   app.use("/api/growth", growthRouter);
+  app.use("/api/support", supportRouter);
+  app.use("/api/admin", adminRouter);
   app.use("/api", notFoundHandler);
 
   // Serve the built web app in production.

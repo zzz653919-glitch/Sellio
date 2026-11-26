@@ -488,4 +488,124 @@ CREATE TABLE initiative_assets (
 CREATE INDEX idx_initiative_assets ON initiative_assets(initiative_id);
 `,
   },
+  {
+    // Admin panel: roles, account status, audit and login logs, settings, support, announcements, API usage.
+    version: 9,
+    sql: `
+ALTER TABLE users ADD COLUMN status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','suspended'));
+ALTER TABLE users ADD COLUMN suspended_reason TEXT;
+ALTER TABLE users ADD COLUMN plan_source TEXT;
+ALTER TABLE sessions ADD COLUMN admin_mfa_at TEXT;
+ALTER TABLE notifications ADD COLUMN announcement_id TEXT;
+
+CREATE TABLE admin_roles (
+  user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  role TEXT NOT NULL CHECK (role IN ('super_admin','admin','moderator')),
+  totp_secret TEXT,
+  totp_enabled_at TEXT,
+  granted_by TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE audit_logs (
+  id TEXT PRIMARY KEY,
+  admin_id TEXT,
+  admin_email TEXT NOT NULL,
+  action TEXT NOT NULL,
+  target_type TEXT,
+  target_id TEXT,
+  summary TEXT NOT NULL,
+  details_json TEXT,
+  ip TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX idx_audit_created ON audit_logs(created_at);
+CREATE INDEX idx_audit_admin ON audit_logs(admin_id, created_at);
+
+CREATE TABLE login_attempts (
+  id TEXT PRIMARY KEY,
+  email TEXT NOT NULL,
+  user_id TEXT,
+  success INTEGER NOT NULL,
+  reason TEXT,
+  ip TEXT,
+  user_agent TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX idx_login_attempts_created ON login_attempts(created_at);
+CREATE INDEX idx_login_attempts_email ON login_attempts(email, created_at);
+
+CREATE TABLE platform_settings (
+  key TEXT PRIMARY KEY,
+  value_json TEXT NOT NULL,
+  updated_by TEXT,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE support_tickets (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  subject TEXT NOT NULL,
+  category TEXT NOT NULL DEFAULT 'other',
+  status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','pending','resolved')),
+  assigned_to TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  last_message_at TEXT NOT NULL
+);
+CREATE INDEX idx_support_user ON support_tickets(user_id, updated_at);
+CREATE INDEX idx_support_status ON support_tickets(status, updated_at);
+
+CREATE TABLE support_messages (
+  id TEXT PRIMARY KEY,
+  ticket_id TEXT NOT NULL REFERENCES support_tickets(id) ON DELETE CASCADE,
+  author_id TEXT,
+  author_role TEXT NOT NULL CHECK (author_role IN ('user','staff')),
+  body TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX idx_support_messages ON support_messages(ticket_id, created_at);
+
+CREATE TABLE announcements (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  body TEXT NOT NULL,
+  link TEXT,
+  audience TEXT NOT NULL CHECK (audience IN ('all','selected')),
+  user_ids_json TEXT NOT NULL DEFAULT '[]',
+  publish_at TEXT NOT NULL,
+  delivered_at TEXT,
+  recipients INTEGER,
+  created_by TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX idx_announcements_due ON announcements(delivered_at, publish_at);
+
+CREATE TABLE user_flags (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  reason TEXT NOT NULL,
+  flagged_by TEXT,
+  created_at TEXT NOT NULL,
+  resolved_at TEXT,
+  resolved_by TEXT
+);
+CREATE INDEX idx_user_flags_open ON user_flags(resolved_at, created_at);
+
+CREATE TABLE api_calls (
+  id TEXT PRIMARY KEY,
+  provider TEXT NOT NULL,
+  operation TEXT NOT NULL,
+  ok INTEGER NOT NULL,
+  status INTEGER,
+  duration_ms INTEGER,
+  error TEXT,
+  user_id TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX idx_api_calls_created ON api_calls(created_at);
+CREATE INDEX idx_api_calls_provider ON api_calls(provider, created_at);
+`,
+  },
 ];

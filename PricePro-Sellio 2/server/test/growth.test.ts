@@ -77,7 +77,7 @@ test("growth workflow: opportunity → AI directions → ads → campaign → re
   let g = (await client.get(`/api/growth/${id}`)).data.initiative;
   assert.equal(g.copies[0].headline, "Salqin uy");
   assert.equal(g.banners.length, 1);
-  assert.equal(g.nextStep, "campaign");
+  assert.equal(g.nextStep, null);
 
   // Step 5: campaign built from the chosen direction.
   const camp = await client.post(`/api/growth/${id}/campaign`, { budget: 1_000_000 });

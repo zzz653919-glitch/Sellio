@@ -5,6 +5,7 @@
  * not a number of units sold. Each time series is normalized on its own (100 = its own peak).
  */
 import { config, features } from "../../config.js";
+import { recordApiCall } from "../../services/apiLog.js";
 import type { Point } from "./engine.js";
 
 export type TrendsRange = "today 3-m" | "today 12-m" | "today 5-y";
@@ -72,13 +73,18 @@ export class SerpApiTrendsProvider implements TrendsProvider {
 
   private async call(params: Record<string, string>) {
     const qs = new URLSearchParams({ engine: "google_trends", api_key: this.apiKey, hl: "en", tz: "0", ...params });
+    const started = Date.now();
+    const op = `${params.data_type ?? "search"}${params.region ? `:${params.region}` : ""}`;
     let res: Response;
     try {
       res = await this.fetchFn(`${this.baseUrl}/search.json?${qs}`, { signal: AbortSignal.timeout(30_000) });
     } catch {
+      await recordApiCall({ provider: "serpapi", operation: op, ok: false, ms: Date.now() - started, error: "unreachable" });
       throw new TrendsError("Google Trends (SerpApi) could not be reached.");
     }
     const body = (await res.json().catch(() => null)) as { error?: string } | null;
+    const failed = !res.ok || !body || (body.error && !NO_RESULTS.test(body.error));
+    await recordApiCall({ provider: "serpapi", operation: op, ok: !failed, status: res.status, ms: Date.now() - started, error: failed ? (body?.error ?? `HTTP ${res.status}`) : null });
     if (body?.error && NO_RESULTS.test(body.error)) return null;
     if (!res.ok || !body || body.error) throw new TrendsError(body?.error ?? `Google Trends returned HTTP ${res.status}`);
     return body;

@@ -108,7 +108,7 @@ function Importer({ onDone }: { onDone: (id: string) => void }) {
       <div className="flex flex-wrap gap-2">
         <input ref={inputRef} type="file" accept=".csv,.xlsx" className="hidden" onChange={(e) => void pick(e.target.files?.[0])} />
         <Button icon={<UploadIcon className="h-4 w-4" />} loading={reading} onClick={() => inputRef.current?.click()}>{t("Choose file")}</Button>
-        <Button variant="ghost" icon={<Download className="h-4 w-4" />} onClick={() => download("pricepro-sales-template.csv", TEMPLATE_CSV)}>{t("Download a template")}</Button>
+        <Button variant="ghost" icon={<Download className="h-4 w-4" />} onClick={() => download("vendora-sales-template.csv", TEMPLATE_CSV)}>{t("Download a template")}</Button>
       </div>
       {readError && <Alert tone="error">{readError}</Alert>}
       {file && built && (

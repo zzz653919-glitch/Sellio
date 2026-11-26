@@ -5,6 +5,7 @@
  */
 import { config, features } from "../../config.js";
 import { notConfigured, upstreamError } from "../../lib/errors.js";
+import { recordApiCall } from "../../services/apiLog.js";
 import { cached, DAY_MS } from "./cache.js";
 
 /** UN M49 codes as used by Comtrade (India 699 and France 251 are Comtrade-specific). */
@@ -34,6 +35,7 @@ async function fetchFlow(reporter: number, flow: "M" | "X"): Promise<TradeFlow> 
   const now = new Date().getUTCFullYear();
   for (const year of [now - 1, now - 2, now - 3]) {
     const qs = new URLSearchParams({ reporterCode: String(reporter), period: String(year), partnerCode: "0", flowCode: flow, cmdCode: "AG2", includeDesc: "true" });
+    const started = Date.now();
     let res: Response;
     try {
       res = await (fetchOverride ?? fetch)(`${config.COMTRADE_API_BASE}/get/C/A/HS?${qs}`, {
@@ -41,9 +43,11 @@ async function fetchFlow(reporter: number, flow: "M" | "X"): Promise<TradeFlow> 
         signal: AbortSignal.timeout(30_000),
       });
     } catch {
+      await recordApiCall({ provider: "comtrade", operation: `${flow} ${year}`, ok: false, ms: Date.now() - started, error: "unreachable" });
       throw upstreamError("comtrade", "UN Comtrade could not be reached.");
     }
     const body = (await res.json().catch(() => null)) as { error?: string; message?: string } | null;
+    await recordApiCall({ provider: "comtrade", operation: `${flow} ${year}`, ok: res.ok, status: res.status, ms: Date.now() - started, error: res.ok ? null : (body?.message ?? body?.error ?? `HTTP ${res.status}`) });
     if (!res.ok) throw upstreamError("comtrade", `UN Comtrade: ${body?.message ?? body?.error ?? `HTTP ${res.status}`}`);
     const rows = parseComtrade(body);
     if (rows.length === 0) continue; // this year is not published yet

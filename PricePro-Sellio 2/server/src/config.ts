@@ -40,7 +40,7 @@ const EnvSchema = z.object({
     .string()
     .optional()
     .transform((v) => v === "true"),
-  EMAIL_FROM: z.string().default("PricePro <no-reply@pricepro.local>"),
+  EMAIL_FROM: z.string().default("Vendora <no-reply@vendora.local>"),
 
   // AI image generation (OpenAI Images API)
   OPENAI_API_KEY: optional,
@@ -74,6 +74,9 @@ const EnvSchema = z.object({
 
   // Vercel Cron: a daily request refreshes shared market data so users do not wait for it.
   CRON_SECRET: optional,
+
+  // Admin panel: comma-separated emails that are always Super Admins (the first administrators).
+  SUPER_ADMIN_EMAILS: z.string().optional().transform((v) => (v ?? "").split(",").map((e) => e.trim().toLowerCase()).filter(Boolean)),
 });
 
 const parsed = EnvSchema.safeParse(process.env);

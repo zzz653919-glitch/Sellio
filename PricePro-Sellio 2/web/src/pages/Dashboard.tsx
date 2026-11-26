@@ -44,7 +44,7 @@ function ServicePanel({ icon, title, gradient, action, to, children }: { icon: R
 }
 
 type GrowthPlan = { id: string; product: string; nextStep: string | null; done: number; total: number };
-const NEXT_LABEL: Record<string, string> = { explain: "AI explanation", direction: "Marketing direction", assets: "Ads", campaign: "Campaign", results: "Results" };
+const NEXT_LABEL: Record<string, string> = { explain: "AI explanation", direction: "Marketing direction", assets: "Ads" };
 
 /** The connected workflow on the dashboard: open plans and their next step. */
 function GrowthCard() {
@@ -59,7 +59,7 @@ function GrowthCard() {
         <Link to="/growth" className="text-sm font-medium text-brand-600 hover:underline dark:text-brand-400">{t("Open →")}</Link>
       </div>
       {plans.length === 0 ? (
-        <p className="text-sm muted">{t("Pick a growing product, let the AI explain it, make ads, run a campaign and enter the results — step by step.")} <Link to="/intelligence?tab=opportunities" className="font-medium text-brand-600 hover:underline dark:text-brand-400">{t("See opportunities")}</Link></p>
+        <p className="text-sm muted">{t("Pick a growing product, let the AI explain it and make ads — step by step.")} <Link to="/intelligence?tab=opportunities" className="font-medium text-brand-600 hover:underline dark:text-brand-400">{t("See opportunities")}</Link></p>
       ) : plans.map((p) => (
         <Link key={p.id} to={`/growth?id=${p.id}`} className="flex items-center gap-3 rounded-xl border border-slate-100 p-3 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/50">
           <div className="min-w-0 flex-1">

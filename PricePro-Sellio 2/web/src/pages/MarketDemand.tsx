@@ -166,7 +166,7 @@ function HorizonTable({ areas }: { areas: Area[] }) {
   );
 }
 
-/** Turn a demand analysis into a Growth Hub plan (ads → campaign → results). */
+/** Turn a demand analysis into a Growth Hub plan (AI explanation → direction → ads). */
 function GrowthPlanButton({ analysisId, product }: { analysisId: string; product: string }) {
   const { t } = useI18n();
   const navigate = useNavigate();

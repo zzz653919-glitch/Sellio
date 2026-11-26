@@ -85,7 +85,7 @@ let ready: Promise<Driver> | null = null;
 export function getDb(): Promise<Driver> {
   ready ??= (async () => {
     if (process.env.VERCEL && !config.TURSO_DATABASE_URL) {
-      throw new Error("TURSO_DATABASE_URL is not set. On Vercel the filesystem is not persistent, so PricePro needs a Turso database (see README → Deploy to Vercel).");
+      throw new Error("TURSO_DATABASE_URL is not set. On Vercel the filesystem is not persistent, so Vendora needs a Turso database (see README → Deploy to Vercel).");
     }
     const driver = config.TURSO_DATABASE_URL
       ? await libsqlDriver(config.TURSO_DATABASE_URL, config.TURSO_AUTH_TOKEN)

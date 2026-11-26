@@ -168,11 +168,6 @@ function OpportunitiesTab() {
                 : <Button size="sm" icon={<Rocket className="h-4 w-4" />} loading={start.isPending && start.variables?.query === o.query} onClick={() => start.mutate(o)}>{t("Start a growth plan")}</Button>}
             </div>
           </div>
-          {o.mine?.results && (
-            <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs dark:bg-amber-500/10">
-              {t("Your campaign for it")}: {t("{n} sales", { n: o.mine.results.conversions })}{o.mine.results.roas !== null && <> · ROAS {o.mine.results.roas}×</>}{o.mine.results.cpa !== null && <> · CPA {fmtNumber(o.mine.results.cpa)}</>} <span className="muted">({t("Entered by you")})</span>
-            </p>
-          )}
           {start.error && start.variables?.query === o.query && <ErrorAlert error={start.error} />}
           <ul className="ml-1 space-y-1 text-sm">
             {o.reasons.map((r, i) => <li key={i} className="flex gap-2"><span className="text-brand-500">•</span>{msg(r)}</li>)}
@@ -424,7 +419,7 @@ function CompetitorsTab() {
   const set = (k: keyof typeof EMPTY_COMPETITOR) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setEditing((s) => s && { ...s, form: { ...s.form, [k]: e.target.value } });
   return (
     <div className="space-y-5">
-      <Alert tone="info">{t("Write down what you know about competitors from their public pages, prices and ads. PricePro does not collect data from other websites; it compares their search interest on Google and helps you find how to stand out.")}</Alert>
+      <Alert tone="info">{t("Write down what you know about competitors from their public pages, prices and ads. Vendora does not collect data from other websites; it compares their search interest on Google and helps you find how to stand out.")}</Alert>
       <div className="flex flex-wrap gap-2">
         <Button icon={<Plus className="h-4 w-4" />} onClick={() => setEditing({ id: null, form: EMPTY_COMPETITOR })}>{t("Add competitor")}</Button>
         {items.length > 0 && <Button variant="secondary" icon={<Bot className="h-4 w-4" />} onClick={() => navigate(`/advisor?q=${encodeURIComponent(t("Compare me with my saved competitors and suggest how I can stand out (prices, offer, advertising)."))}`)}>{t("How to stand out (AI advisor)")}</Button>}
@@ -483,19 +478,6 @@ function CompetitorsTab() {
 }
 
 // ------------------------------------------------------------------ Seasons
-const HOLIDAYS: { month: number; day: string; name: string }[] = [
-  { month: 1, day: "1", name: "New Year" },
-  { month: 2, day: "14", name: "Valentine's Day" },
-  { month: 3, day: "8", name: "International Women's Day" },
-  { month: 3, day: "21", name: "Navruz" },
-  { month: 5, day: "9", name: "Day of Remembrance" },
-  { month: 9, day: "1", name: "Independence Day and back to school" },
-  { month: 10, day: "1", name: "Teachers' Day" },
-  { month: 11, day: "11", name: "11.11 sales" },
-  { month: 11, day: "~28", name: "Black Friday" },
-  { month: 12, day: "31", name: "New Year's Eve" },
-];
-
 function SeasonsTab() {
   const { t } = useI18n();
   const radar = useRadar();
@@ -533,20 +515,6 @@ function SeasonsTab() {
           </div>
         )}
         <SourceNote>{t("Source: Google Trends search interest in Uzbekistan, 5 years. Updated: {date}.", { date: fmtDate(d.computedAt) })}</SourceNote>
-      </Card>
-      <Card className="space-y-3 p-5">
-        <h3 className="font-semibold">{t("Holidays and sales dates")}</h3>
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          {HOLIDAYS.map((h) => {
-            const peaking = items.filter((i) => i.peakMonths.includes(h.month)).map((i) => t(i.label));
-            return (
-              <div key={h.name} className="rounded-xl border border-slate-100 p-3 dark:border-slate-800">
-                <p className="text-sm font-semibold">{h.day} {fmtMonthName(h.month)} — {t(h.name)}</p>
-                <p className="text-xs muted">{peaking.length ? <>{t("Peak season in this month")}: {peaking.join(", ")}</> : t("No watched product peaks in this month.")}</p>
-              </div>
-            );
-          })}
-        </div>
       </Card>
     </div>
   );

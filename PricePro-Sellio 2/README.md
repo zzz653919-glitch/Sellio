@@ -1,4 +1,4 @@
-# PricePro
+# Vendora
 
 AI-powered product intelligence platform with two core services:
 
@@ -60,7 +60,7 @@ Without SMTP in development, emails are printed to the server log and the sign-i
 
 1. Turn on 2-Step Verification for the Google account.
 2. Create an App password: Google Account → Security → App passwords.
-3. In `.env`: `SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=465`, `SMTP_SECURE=true`, `SMTP_USER=your@gmail.com`, `SMTP_PASS=<app password>`, `EMAIL_FROM="PricePro <your@gmail.com>"`.
+3. In `.env`: `SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=465`, `SMTP_SECURE=true`, `SMTP_USER=your@gmail.com`, `SMTP_PASS=<app password>`, `EMAIL_FROM="Vendora <your@gmail.com>"`.
 
 ## Tests
 
