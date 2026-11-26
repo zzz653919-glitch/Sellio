@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  ArrowDownRight, ArrowUpRight, CalendarDays, Globe2, Lightbulb, LineChart as LineIcon, MapPin, Pencil, Plus, Radar as RadarIcon, Rocket,
+  ArrowDownRight, ArrowUpRight, CalendarDays, Globe2, Lightbulb, LineChart as LineIcon, MapPin, Pencil, Plus, Radar as RadarIcon,
   Search, Ship, Swords, Trash2, TrendingDown, TrendingUp,
 } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -26,7 +26,6 @@ type RadarData =
   | { configured: true; computedAt: string; checked: number; items: RadarItem[]; rising: RadarItem[]; declining: RadarItem[]; upcoming: RadarItem[]; updates: { query: string; label: string; kind: string; msg: Msg }[] };
 type Opportunity = {
   query: string; label: string; category?: string; score: number; reasons: Msg[]; evidence: { yoyPct: number | null; next3Pct: number | null; nowVsAvgPct: number; confidence: string | null; peakMonths: number[] };
-  mine?: { initiativeId: string; hasCampaign: boolean; results: { conversions: number; cpa: number | null; roas: number | null; spend: number } | null } | null;
 };
 type Options = {
   sources: { trends: boolean; worldBank: boolean; comtrade: boolean; llm: boolean };
@@ -134,12 +133,7 @@ function OpportunitiesTab() {
   const { t } = useI18n();
   const msg = useMsg();
   const navigate = useNavigate();
-  const qc = useQueryClient();
   const q = useQuery({ queryKey: ["intel-opportunities"], queryFn: () => get<{ configured: boolean; computedAt?: string; checked?: number; items?: Opportunity[] }>("/intel/opportunities"), staleTime: 3600_000, retry: false });
-  const start = useMutation({
-    mutationFn: (o: Opportunity) => post<{ initiative: { id: string } }>("/growth", { source: "opportunity", product: t(o.label), query: o.query }),
-    onSuccess: (d) => { void qc.invalidateQueries({ queryKey: ["intel-opportunities"] }); void qc.invalidateQueries({ queryKey: ["growth"] }); navigate(`/growth?id=${d.initiative.id}`); },
-  });
   if (q.isLoading) return <Loading text={t("Looking for growing products…")} />;
   if (q.error) return <ErrorAlert error={q.error} />;
   if (!q.data?.configured) return <IntegrationNotice service="trends" />;
@@ -162,12 +156,8 @@ function OpportunitiesTab() {
             </div>
             <div className="flex flex-wrap gap-2">
               <Button size="sm" variant="secondary" icon={<LineIcon className="h-4 w-4" />} onClick={() => navigate(`/forecast?q=${encodeURIComponent(o.query)}`)}>{t("Detailed analysis")}</Button>
-              {o.mine
-                ? <Button size="sm" icon={<Rocket className="h-4 w-4" />} onClick={() => navigate(`/growth?id=${o.mine!.initiativeId}`)}>{t("Open my plan")}</Button>
-                : <Button size="sm" icon={<Rocket className="h-4 w-4" />} loading={start.isPending && start.variables?.query === o.query} onClick={() => start.mutate(o)}>{t("Start a growth plan")}</Button>}
             </div>
           </div>
-          {start.error && start.variables?.query === o.query && <ErrorAlert error={start.error} />}
           <ul className="ml-1 space-y-1 text-sm">
             {o.reasons.map((r, i) => <li key={i} className="flex gap-2"><span className="text-brand-500">•</span>{msg(r)}</li>)}
           </ul>

@@ -46,18 +46,3 @@ test("indicators are validated; AI text requests count against the plan", async 
   assert.ok((body!.generationConfig as unknown as { maxOutputTokens: number }).maxOutputTokens > 6000);
   assert.equal((await client.get("/api/dashboard")).data.usage.metrics.ai.used, 1);
 });
-
-test("a growth campaign never ends before it starts", async () => {
-  const { client, user } = await newUser();
-  const g = await client.post("/api/growth", { source: "manual", product: "Fans" });
-  const id = g.data.initiative.id;
-  // Evidence saved months ago with a peak that is already over.
-  await run("UPDATE initiatives SET evidence_json = ?, direction_json = ? WHERE id = ?",
-    JSON.stringify({ kind: "opportunity", nextPeak: { date: "2020-05-01", months: 2 } }),
-    JSON.stringify({ title: "Summer", audience: "", message: "", channels: ["instagram"], offer: "", why: "" }), id);
-  const c = await client.post(`/api/growth/${id}/campaign`, {});
-  assert.equal(c.status, 201, JSON.stringify(c.data));
-  const camp = (await client.get(`/api/campaigns/${c.data.campaignId}`)).data.campaign;
-  assert.ok(camp.endDate > camp.startDate, `${camp.startDate} → ${camp.endDate}`);
-  void user;
-});

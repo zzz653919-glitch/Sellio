@@ -196,7 +196,7 @@ function TemplateThumb(props: { t: Template; content: Content; palette: Palette;
 }
 
 // ------------------------------------------------------------------ banner maker
-function MakerTab({ draft, setDraft, brand, product, logo, productName, initiativeId }: { draft: Draft; setDraft: (f: (d: Draft) => Draft) => void; brand: Brand | null | undefined; product: HTMLImageElement | null; logo: HTMLImageElement | null; productName: string; initiativeId: string | null }) {
+function MakerTab({ draft, setDraft, brand, product, logo, productName }: { draft: Draft; setDraft: (f: (d: Draft) => Draft) => void; brand: Brand | null | undefined; product: HTMLImageElement | null; logo: HTMLImageElement | null; productName: string }) {
   const { t, lang } = useI18n();
   const toast = useToast();
   const qc = useQueryClient();
@@ -260,14 +260,13 @@ function MakerTab({ draft, setDraft, brand, product, logo, productName, initiati
       f.append("template", template.key);
       f.append("format", draft.format);
       if (draft.productId) f.append("productUploadId", draft.productId);
-      if (initiativeId) f.append("initiativeId", initiativeId);
       return upload<{ generation: { id: string } }>("/ads/banners", f);
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["generations"] }); if (initiativeId) void qc.invalidateQueries({ queryKey: ["growth"] }); toast("success", t("Saved to your advertisements. Open AI Product Studio history or My Projects to find it.")); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["generations"] }); toast("success", t("Saved to your advertisements. Open AI Product Studio history or My Projects to find it.")); },
     onError: (e) => toast("error", errorMessage(e)),
   });
   const write = useMutation({
-    mutationFn: () => post<{ copy: { result: CopyResult } }>("/ads/copy", { product: name.trim() || draft.headline || t("Product"), offer: draft.badge || undefined, price: draft.price || undefined, language: lang as Lang, platforms: ["instagram"], ...(initiativeId ? { initiativeId } : {}) }),
+    mutationFn: () => post<{ copy: { result: CopyResult } }>("/ads/copy", { product: name.trim() || draft.headline || t("Product"), offer: draft.badge || undefined, price: draft.price || undefined, language: lang as Lang, platforms: ["instagram"] }),
     onSuccess: (d) => {
       const r = d.copy.result;
       setAlts(r);
@@ -418,7 +417,7 @@ function CopyResultView({ r, onUse }: { r: CopyResult; onUse: (r: CopyResult) =>
   );
 }
 
-function CopyTab({ onUse, defaultProduct, initiativeId }: { onUse: (r: CopyResult) => void; defaultProduct: string; initiativeId: string | null }) {
+function CopyTab({ onUse, defaultProduct }: { onUse: (r: CopyResult) => void; defaultProduct: string }) {
   const { t, lang } = useI18n();
   const qc = useQueryClient();
   const options = useAdsOptions();
@@ -427,7 +426,7 @@ function CopyTab({ onUse, defaultProduct, initiativeId }: { onUse: (r: CopyResul
   useEffect(() => { if (defaultProduct) setF((s) => (s.product ? s : { ...s, product: defaultProduct })); }, [defaultProduct]);
   const [current, setCurrent] = useState<CopyResult | null>(null);
   const gen = useMutation({
-    mutationFn: () => post<{ copy: CopyItem }>("/ads/copy", { ...f, description: f.description || undefined, audience: f.audience || undefined, offer: f.offer || undefined, price: f.price || undefined, tone: f.tone || undefined, ...(initiativeId ? { initiativeId } : {}) }),
+    mutationFn: () => post<{ copy: CopyItem }>("/ads/copy", { ...f, description: f.description || undefined, audience: f.audience || undefined, offer: f.offer || undefined, price: f.price || undefined, tone: f.tone || undefined }),
     onSuccess: (d) => { setCurrent(d.copy.result); qc.invalidateQueries({ queryKey: ["ad-copies"] }); qc.invalidateQueries({ queryKey: ["dashboard"] }); },
   });
   const remove = useMutation({ mutationFn: (id: string) => del(`/ads/copy/${id}`), onSuccess: () => qc.invalidateQueries({ queryKey: ["ad-copies"] }) });
@@ -716,20 +715,9 @@ export default function AdStudio() {
   const brand = useBrand();
   const uploads = useUploads();
   const [productName] = useState(() => params.get("product") ?? "");
-  const [initiativeId] = useState(() => params.get("initiative"));
   const [draft, setDraftState] = useState<Draft>(() => ({ ...EMPTY, headline: params.get("product") ?? "" }));
   const setDraft = useCallback((f: (d: Draft) => Draft) => setDraftState(f), []);
-  const setTab = (v: Tab) => setParams({ tab: v, ...(initiativeId ? { initiative: initiativeId } : {}) });
-  // Working on a Growth Hub plan: its direction pre-fills the banner, and saved ads are attached to the plan.
-  const plan = useQuery({
-    queryKey: ["growth", initiativeId],
-    queryFn: () => get<{ initiative: { id: string; product: string; direction: { title: string; message: string; offer: string } | null } }>(`/growth/${initiativeId}`).then((r) => r.initiative),
-    enabled: Boolean(initiativeId),
-  });
-  useEffect(() => {
-    const d = plan.data?.direction;
-    if (d) setDraftState((x) => (x.subline ? x : { ...x, subline: (d.offer || d.message).slice(0, 90) }));
-  }, [plan.data]);
+  const setTab = (v: Tab) => setParams({ tab: v });
   const productUrl = draft.productId ? uploads.data?.find((u) => u.id === draft.productId)?.url ?? `/api/files/${draft.productId}` : null;
   const product = useImage(productUrl);
   const logo = useImage(brand.data?.logoUrl ?? null);
@@ -750,15 +738,10 @@ export default function AdStudio() {
         ]} />
       </div>
       {brand.error && <ErrorAlert error={brand.error} />}
-      {plan.data && (
-        <Alert tone="info" title={t("Working on a growth plan")} action={<Link to={`/growth?id=${plan.data.id}`} className="text-sm font-semibold text-brand-600 hover:underline dark:text-brand-400">{t("Back to the plan →")}</Link>}>
-          {t(plan.data.product)}{plan.data.direction ? ` · ${plan.data.direction.title}` : ""}. {t("Banners and texts you save here are added to this plan.")}
-        </Alert>
-      )}
       {tab === "templates" && <Suspense fallback={<div className="grid place-items-center py-16"><Spinner /></div>}><TemplateStudio /></Suspense>}
-      {tab === "maker" && <MakerTab draft={draft} setDraft={setDraft} brand={brand.data} product={product} logo={logo} productName={productLabel} initiativeId={initiativeId} />}
+      {tab === "maker" && <MakerTab draft={draft} setDraft={setDraft} brand={brand.data} product={product} logo={logo} productName={productLabel} />}
       {tab === "score" && <ScoreTab brand={brand.data} />}
-      {tab === "copy" && <CopyTab defaultProduct={productLabel} initiativeId={initiativeId} onUse={(r) => { setDraft((d) => ({ ...d, headline: r.headlines[0] ?? d.headline, subline: (r.promos[0] ?? d.subline).slice(0, 90), cta: r.ctas[0] ?? d.cta })); setTab("maker"); }} />}
+      {tab === "copy" && <CopyTab defaultProduct={productLabel} onUse={(r) => { setDraft((d) => ({ ...d, headline: r.headlines[0] ?? d.headline, subline: (r.promos[0] ?? d.subline).slice(0, 90), cta: r.ctas[0] ?? d.cta })); setTab("maker"); }} />}
       {tab === "video" && <VideoTab draft={draft} brand={brand.data} />}
       {tab === "competitors" && <CompetitorAdsTab />}
       {tab === "brand" && <BrandTab brand={brand.data} />}

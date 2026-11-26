@@ -13,7 +13,7 @@ import { saveSetting, settings } from "../../services/settings.js";
 import { requirePermission } from "./permissions.js";
 import { confirmPassword, daysBetween, like, pageOf, rangeOf } from "./util.js";
 
-/** Plans, subscriptions and payments. Payment data only comes from verified Stripe webhooks. */
+/** Plans, subscriptions and payments. Paid plans come from card payments approved by an administrator. */
 export const billingAdminRouter = Router();
 
 billingAdminRouter.get("/plans", requirePermission("subscriptions.view"), async (_req, res) => {
@@ -21,7 +21,7 @@ billingAdminRouter.get("/plans", requirePermission("subscriptions.view"), async 
   const plans = getPlans();
   res.json({
     plans: PLAN_KEYS.map((key) => ({ key, ...plans[key], users: counts.find((c) => c.plan === key)?.n ?? 0, defaults: PLANS[key] })),
-    paymentsConnected: features.payments,
+    paymentsConnected: settings().manualPayment.enabled,
   });
 });
 
@@ -37,7 +37,7 @@ const planSchema = z.object({
   password: z.string().min(1),
 });
 
-/** Edit plan details and limits (Super Admin). The price shown does not change the Stripe price. */
+/** Edit plan details, prices and limits (Super Admin). */
 billingAdminRouter.put("/plans/:plan", requirePermission("plans.manage"), async (req, res) => {
   const plan = param(req, "plan");
   if (!(PLAN_KEYS as readonly string[]).includes(plan)) throw badRequest("Unknown plan");
@@ -59,7 +59,7 @@ billingAdminRouter.get("/subscriptions", requirePermission("subscriptions.view")
   const where: string[] = [];
   const p: (string | number)[] = [];
   if (q.status === "active") where.push("s.plan IN ('pro','max') AND s.status IN ('active','trialing','past_due')");
-  if (q.status === "ended") where.push("s.provider = 'stripe' AND (s.status IN ('canceled','unpaid','incomplete_expired') OR s.plan = 'free')");
+  if (q.status === "ended") where.push("(s.status IN ('canceled','unpaid','incomplete_expired','expired') OR s.plan = 'free')");
   if (q.status === "admin") where.push("s.provider = 'admin'");
   if (q.q) { where.push("u.email LIKE ? ESCAPE '\\'"); p.push(like(q.q)); }
   const w = where.length ? `WHERE ${where.join(" AND ")}` : "";
@@ -68,7 +68,7 @@ billingAdminRouter.get("/subscriptions", requirePermission("subscriptions.view")
   const total = (await get<{ n: number }>(`SELECT COUNT(*) AS n FROM subscriptions s JOIN users u ON u.id = s.user_id ${w}`, ...p))?.n ?? 0;
   const summary = await get<{ active: number; ended: number; admin: number }>(
     `SELECT SUM(CASE WHEN plan IN ('pro','max') AND status IN ('active','trialing','past_due') THEN 1 ELSE 0 END) AS active,
-            SUM(CASE WHEN provider = 'stripe' AND (status IN ('canceled','unpaid','incomplete_expired') OR plan = 'free') THEN 1 ELSE 0 END) AS ended,
+            SUM(CASE WHEN status IN ('canceled','unpaid','incomplete_expired','expired') OR plan = 'free' THEN 1 ELSE 0 END) AS ended,
             SUM(CASE WHEN provider = 'admin' THEN 1 ELSE 0 END) AS admin FROM subscriptions`);
   res.json({
     items: rows.map((r) => ({ userId: r.user_id, email: r.email, plan: r.plan, status: r.status, provider: r.provider ?? "none", periodEnd: r.current_period_end, cancelAtPeriodEnd: Boolean(r.cancel_at_period_end), updatedAt: r.updated_at })),
@@ -128,7 +128,7 @@ billingAdminRouter.get("/usage/summary", requirePermission("subscriptions.view")
 
 // ---------- Payments and revenue ----------
 
-/** Revenue = paid invoices (Stripe "invoice.paid"); checkout events are listed but not counted twice. */
+/** Revenue = approved card payments. */
 billingAdminRouter.get("/payments", requirePermission("payments.view"), async (req, res) => {
   const r = rangeOf(req);
   const totals = await all<{ type: string; currency: string | null; n: number; cents: number | null }>(
@@ -145,7 +145,7 @@ billingAdminRouter.get("/payments", requirePermission("payments.view"), async (r
   const days = daysBetween(r.from, r.to);
   const currencies = [...new Set(daily.map((d) => d.currency ?? "usd"))];
   res.json({
-    connected: features.payments,
+    connected: settings().manualPayment.enabled,
     range: { from: r.from, to: r.to },
     totals: totals.map((t) => ({ type: t.type, currency: t.currency, count: t.n, amountCents: t.cents ?? 0 })),
     allTimeRevenue: allTime.map((a) => ({ currency: a.currency, amountCents: a.cents ?? 0 })),
@@ -163,7 +163,7 @@ billingAdminRouter.get("/payments/export", requirePermission("payments.view"), a
     "SELECT e.type, e.amount_cents, e.currency, e.provider_ref, e.created_at, u.email FROM subscription_events e JOIN users u ON u.id = e.user_id WHERE e.type IN ('payment','payment_failed','refund','upgraded') AND e.created_at BETWEEN ? AND ? ORDER BY e.created_at", r.fromIso, r.toIso);
   await logAudit(req, "payments.exported", { type: "payments" }, `Exported ${rows.length} payment records`, r);
   res.type("text/csv").attachment(csvFilename(`vendora-payments-${r.from}-${r.to}`)).send(toCsv([
-    ["date", "type", "user", "amount", "currency", "stripe_reference"],
+    ["date", "type", "user", "amount", "currency", "reference"],
     ...rows.map((x) => [x.created_at, x.type, x.email, x.amount_cents === null ? "" : (x.amount_cents / 100).toFixed(2), x.currency ?? "", x.provider_ref ?? ""]),
   ]));
 });

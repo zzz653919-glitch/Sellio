@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Globe2, Info, Minus, Play, RefreshCw, Rocket, Search, Trash2, TrendingDown, TrendingUp } from "lucide-react";
+import { Check, Globe2, Info, Minus, Play, RefreshCw, Search, Trash2, TrendingDown, TrendingUp } from "lucide-react";
 import { useMemo, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { ErrorAlert, FavoriteButton, IntegrationNotice, SaveProjectButton } from "../components/shared";
 import { Alert, Badge, Button, Card, ConfirmDialog, EmptyState, Field, Input, Select, Tabs, cx, useToast } from "../components/ui";
@@ -172,19 +172,6 @@ function HorizonTable({ areas }: { areas: Area[] }) {
   );
 }
 
-/** Turn a demand analysis into a Growth Hub plan (AI explanation → direction → ads). */
-function GrowthPlanButton({ analysisId, product }: { analysisId: string; product: string }) {
-  const { t } = useI18n();
-  const navigate = useNavigate();
-  const toast = useToast();
-  const m = useMutation({
-    mutationFn: () => post<{ initiative: { id: string } }>("/growth", { source: "forecast", product, analysisId }),
-    onSuccess: (d) => navigate(`/growth?id=${d.initiative.id}`),
-    onError: (e) => toast("error", errorMessage(e)),
-  });
-  return <Button size="sm" variant="secondary" icon={<Rocket className="h-4 w-4" />} loading={m.isPending} onClick={() => m.mutate()}>{t("Make a growth plan")}</Button>;
-}
-
 function AnalysisResult({ a, onDelete, onRefresh, refreshing, refreshError }: { a: Analysis; onDelete: () => void; onRefresh: () => void; refreshing: boolean; refreshError: unknown }) {
   const { t } = useI18n();
   const r = a.result;
@@ -277,7 +264,6 @@ function AnalysisResult({ a, onDelete, onRefresh, refreshing, refreshError }: { 
 
       <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-4 dark:border-slate-800">
         <SaveProjectButton type="forecast" refId={a.id} projectId={a.projectId} invalidate={["market", a.id]} />
-        <GrowthPlanButton analysisId={a.id} product={a.query} />
         <FavoriteButton itemType="forecast" refId={a.id} favoriteId={a.favoriteId} invalidate={["market", a.id]} />
         <Button size="sm" variant="ghost" className="ml-auto" icon={<Trash2 className="h-4 w-4" />} onClick={onDelete}>{t("Delete")}</Button>
       </div>

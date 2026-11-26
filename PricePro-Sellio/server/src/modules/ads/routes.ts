@@ -18,7 +18,6 @@ import { getGeneration } from "../studio/service.js";
 import { getBrand } from "./brand.js";
 
 export { getBrand };
-import { attachAsset, ownedInitiative } from "../growth/routes.js";
 
 /** Advertising & Design Studio: brand kit, AI copy, AI reviews, competitor ads and saved banners. */
 export const adsRouter = Router();
@@ -107,7 +106,6 @@ const copySchema = z.object({
   tone: z.string().trim().max(100).optional(),
   language: z.enum(["uz", "ru", "en"]),
   platforms: z.array(z.enum(PLATFORMS)).min(1).max(4),
-  initiativeId: z.uuid().optional(),
 });
 
 export type AdCopy = {
@@ -144,7 +142,6 @@ export function cleanCopy(raw: Record<string, unknown>, platforms: readonly stri
 adsRouter.post("/copy", requireVerified, serviceLimiter, async (req, res) => {
   const user = currentUser(req);
   const b = parseBody(req, copySchema);
-  await ownedInitiative(user.id, b.initiativeId); // 404 before any AI call
   await assertWithinLimit(user.id, "ai");
   const brand = await getBrand(user.id);
   const raw = await completeJson<Record<string, unknown>>({
@@ -166,7 +163,6 @@ Brand: ${brandLine(brand)}`,
   const id = newId();
   await run("INSERT INTO ad_copies (id,user_id,product,language,input_json,result_json,created_at) VALUES (?,?,?,?,?,?,?)", id, user.id, b.product, b.language, JSON.stringify(b), JSON.stringify(result), nowIso());
   await recordAiRequest(user.id, "copy");
-  await attachAsset(user.id, b.initiativeId, "copy", id);
   res.status(201).json({ copy: { id, product: b.product, language: b.language, input: b, result, createdAt: nowIso() } });
 });
 
@@ -275,7 +271,6 @@ const bannerSchema = z.object({
   template: z.string().trim().min(1).max(60),
   format: z.string().trim().min(1).max(40),
   productUploadId: z.uuid().optional(),
-  initiativeId: z.uuid().optional(),
 });
 
 export const BANNERS_PER_MONTH = 300;
@@ -290,7 +285,6 @@ adsRouter.post("/banners", requireVerified, serviceLimiter, imageUpload.single("
   try { info = inspectImage(req.file.buffer); } catch { throw badRequest("The banner must be a PNG, JPEG or WebP image."); }
   if (info.width < 200 || info.height < 50 || info.width > 4000 || info.height > 4000) throw badRequest("Unexpected banner size.");
   const product = b.productUploadId ? await getOwnedUpload(user.id, b.productUploadId) : null;
-  await ownedInitiative(user.id, b.initiativeId);
   const saved = await saveImage(user.id, "generated", req.file.buffer, info, `${b.productName}.png`);
   const id = newId(), now = nowIso();
   await run(
@@ -301,6 +295,5 @@ adsRouter.post("/banners", requireVerified, serviceLimiter, imageUpload.single("
     b.template, now, now, now,
   );
   await logActivity(user.id, "ad_created", "studio", `Advertisement created: ${b.productName}`, { refId: id });
-  await attachAsset(user.id, b.initiativeId, "banner", id);
   res.status(201).json({ generation: await getGeneration(user.id, id) });
 });

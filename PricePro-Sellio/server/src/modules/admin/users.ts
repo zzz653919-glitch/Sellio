@@ -137,18 +137,17 @@ usersAdminRouter.post("/users/:id/plan", requirePermission("users.manage"), asyn
   await confirmPassword(req, b.password);
   const t = await target(id);
   if (t.plan === b.plan) throw badRequest(`The user is already on the ${b.plan} plan.`);
-  const stripe = await get<{ status: string }>("SELECT status FROM subscriptions WHERE user_id = ? AND provider = 'stripe' AND status IN ('active','trialing','past_due')", id);
   const now = nowIso();
   await transaction([
     ["UPDATE users SET plan = ?, plan_source = 'admin', updated_at = ? WHERE id = ?", b.plan, now, id],
     [`INSERT INTO subscriptions (user_id, plan, status, provider, updated_at) VALUES (?, ?, 'active', 'admin', ?)
-      ON CONFLICT(user_id) DO UPDATE SET plan = excluded.plan, status = CASE WHEN subscriptions.provider = 'stripe' THEN subscriptions.status ELSE 'active' END,
-      provider = CASE WHEN subscriptions.provider = 'stripe' THEN subscriptions.provider ELSE 'admin' END, updated_at = excluded.updated_at`, id, b.plan, now],
+      ON CONFLICT(user_id) DO UPDATE SET plan = excluded.plan, status = 'active',
+      provider = 'admin', updated_at = excluded.updated_at`, id, b.plan, now],
     ["INSERT INTO subscription_events (id,user_id,type,plan,provider_ref,created_at) VALUES (?,?,?,?,?,?)", newId(), id, "admin_assigned", b.plan, `admin:${currentUser(req).email}`, now],
   ]);
   await notify(id, "account", `You are now on the ${getPlans()[b.plan].name} plan`, b.plan === "free" ? "An administrator moved your account to the Free plan." : `An administrator gave your account the ${getPlans()[b.plan].name} plan.`);
-  await logAudit(req, "user.plan_assigned", { type: "user", id }, `Plan of ${t.email}: ${t.plan} → ${b.plan}`, { note: b.note, stripeSubscriptionActive: Boolean(stripe) });
-  res.json({ ok: true, warning: stripe && b.plan === "free" ? "The user still has an active Stripe subscription. Cancel it in Stripe, or it will set the paid plan back on the next payment." : null });
+  await logAudit(req, "user.plan_assigned", { type: "user", id }, `Plan of ${t.email}: ${t.plan} → ${b.plan}`, { note: b.note });
+  res.json({ ok: true, warning: null });
 });
 
 const suspendSchema = z.object({ reason: z.string().trim().min(3, "Write a reason").max(300) });

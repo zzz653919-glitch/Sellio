@@ -7,14 +7,14 @@ AI-powered product intelligence platform with two core services:
 
    The analysis runs inside Vercel/Node with no paid AI service: STL decomposition (periodic, robust) of the monthly series, then a Prophet-style regression (piecewise-linear trend with regularised changepoints + yearly Fourier terms), an STL + damped-trend model and a seasonal-naive model compete on a 12-month back-test; the best one makes the forecast. Seasonal strength, per-month effects and their year-to-year consistency are reported with every result.
 
-Plus: Dashboard, My Projects, Analytics, Favorites, Notifications, Profile, Settings (light/dark, Uzbek/Russian/English), Free/Pro subscriptions (Stripe) and authentication with email sign-in codes.
+Plus: Dashboard, My Projects, Analytics, Favorites, Notifications, Profile, Settings (light/dark, Uzbek/Russian/English), Free/Pro/Max plans paid by bank card (receipt + administrator approval) and authentication with email sign-in codes.
 
 ## Data integrity rules (enforced in code)
 
 - **No fake AI generation.** Without `OPENAI_API_KEY` the Studio returns `SERVICE_NOT_CONFIGURED` and stores nothing. Provider output is validated as a real image before it is saved.
 - **Demand is search interest, labelled as such.** The Demand Forecast page uses Google Trends (0–100 relative search interest per area), never presented as units sold. Areas with too little data are shown as "no data", not filled in.
 - **Statistics are real.** Dashboard and analytics numbers are computed from the user's own stored activity.
-- **No fake payments.** The plan changes only when a signed Stripe webhook confirms payment.
+- **No fake payments.** A paid plan starts only when an administrator approves the uploaded payment receipt.
 
 ## Architecture
 
@@ -80,7 +80,6 @@ NODE_ENV=production APP_URL=https://your-domain npm start
 
 The server serves the built web app and the API on one port. Put it behind HTTPS (set `TRUST_PROXY=1` behind a proxy), keep `server/data/` on a persistent disk, and configure SMTP (required: sign-in codes are sent by email).
 
-Stripe: create recurring Prices and set `STRIPE_PRICE_PRO` (Pro, monthly), `STRIPE_PRICE_MAX_MONTHLY` (Max, $20 per month) and `STRIPE_PRICE_MAX_YEARLY` (Max, $200 per year). Add a webhook endpoint `https://your-domain/api/webhooks/stripe` for `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted` and `invoice.paid`, and set `STRIPE_WEBHOOK_SECRET`.
 
 ## Deploy to Vercel
 
@@ -98,7 +97,7 @@ lives in **Turso** and images in **Vercel Blob** (both have free plans).
 4. **Environment variables** (Settings → Environment Variables):
    - `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN` (required)
    - `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM` (required: sign-in codes are emailed; Gmail example above)
-   - optional: `SERPAPI_API_KEY` (demand forecast), `OPENAI_API_KEY` (AI Studio), `STRIPE_*`
+   - optional: `SERPAPI_API_KEY` (demand forecast), `OPENAI_API_KEY` (AI Studio)
    - `APP_URL` only if you use a custom domain (otherwise the Vercel production domain is used)
 5. **Deploy**, then open `https://<your-domain>/api/health`. It lists anything still missing
    (database, storage, email) without showing secret values.
@@ -124,4 +123,3 @@ function instance.
 | Growth Hub (opportunity → AI explanation → direction → ads → campaign → results → learnings) | the same keys as above; learnings need none | Each step says what is missing |
 | Daily refresh of shared market data (Vercel Cron, `vercel.json`) | `CRON_SECRET` (any long random text) | Data is refreshed on the first visit instead |
 | AI video scenes and voice-over | not integrated (needs a video service) | Promo videos are made in the browser from the user's photos |
-| Payments | `STRIPE_*` | Upgrades disabled |

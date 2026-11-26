@@ -176,9 +176,11 @@ export default function Payment() {
         </Alert>
       )}
 
+      {/* Plan and summary on the left, the card on the right, the receipt across the full width below.
+          On a phone: plan → summary → card → receipt. */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
-        {/* ---------- left: plan and payment summary ---------- */}
-        <div className="space-y-6">
+        {/* Both columns stretch to the same height, so the summary and the card end on one line. */}
+        <div className="flex flex-col gap-6 lg:col-start-1">
           {mode === "pay" && (
             <Card className="space-y-4 p-5 sm:p-6">
               <h2 className="text-lg font-bold">{t("1. Choose a plan and period")}</h2>
@@ -201,7 +203,7 @@ export default function Payment() {
             </Card>
           )}
 
-          <Card className="p-5 sm:p-6">
+          <Card className="flex-1 p-5 sm:p-6">
             <h2 className="text-lg font-bold">{t("Payment summary")}</h2>
             <p className="mt-1 text-sm font-semibold">{t("Due today")}</p>
             <div className="mt-3 overflow-hidden rounded-[14px] border border-[var(--v-line-soft)]">
@@ -217,11 +219,8 @@ export default function Payment() {
             </div>
             {selected && <p className="mt-3 text-xs muted">{t("After confirmation")}: {t(selected.requestPeriod === "day" ? "{n} requests per day" : "{n} requests per month", { n: selected.requests })} · {t("{n} AI text requests per month", { n: selected.ai })}</p>}
           </Card>
-
         </div>
-
-        {/* ---------- right: card, instructions, receipt ---------- */}
-        <div className="space-y-6">
+        <div className="flex flex-col gap-6 [&>*:first-child]:flex-1">
           {mode === "pay" && already ? (
             <Card className="p-6"><EmptyState icon={<CheckCircle2 className="h-6 w-6" />} title={t("This plan is already active")} text={t("Choose another plan to pay for it.")} /></Card>
           ) : mode === "review" ? (
@@ -233,24 +232,31 @@ export default function Payment() {
               <a href={`/api/payments/${open!.id}/receipt`} target="_blank" rel="noreferrer" className="inline-flex items-center justify-center gap-1 text-sm font-semibold text-[var(--v-sky)] hover:underline"><FileText className="h-4 w-4" />{t("View the receipt you sent")}</a>
             </Card>
           ) : (
-            <>
-              <Card className="space-y-4 p-5 sm:p-6">
-                <h2 className="text-lg font-bold">{t("2. Transfer the money to this card")}</h2>
-                <BankCard card={c.card} amount={price?.uzs ?? 0} />
-                <ol className="space-y-2 text-sm">
-                  {[
-                    t("Open your bank app (Payme, Click, Uzum, your bank's app) and choose a transfer to a card."),
-                    t("Paste the card number and send exactly {sum}.", { sum: som(price?.uzs ?? 0) }),
-                    t("Take a screenshot of the successful payment or download the receipt (PDF)."),
-                    t("Upload the receipt below and press \"{btn}\".", { btn: t("Confirm payment") }),
-                  ].map((s, i) => (
-                    <li key={i} className="flex gap-3"><span className="grid h-6 w-6 flex-none place-items-center rounded-full bg-[var(--v-sky-soft)] text-xs font-bold text-[var(--v-sky)]">{i + 1}</span><span>{s}</span></li>
-                  ))}
-                </ol>
-              </Card>
-
+            <Card className="space-y-4 p-5 sm:p-6">
+              <h2 className="text-lg font-bold">{t("2. Transfer the money to this card")}</h2>
+              <BankCard card={c.card} amount={price?.uzs ?? 0} />
+              <ol className="space-y-2 text-sm">
+                {[
+                  t("Open your bank app (Payme, Click, Uzum, your bank's app) and choose a transfer to a card."),
+                  t("Paste the card number and send exactly {sum}.", { sum: som(price?.uzs ?? 0) }),
+                  t("Take a screenshot of the successful payment or download the receipt (PDF)."),
+                  t("Upload the receipt below and press \"{btn}\".", { btn: t("Confirm payment") }),
+                ].map((s, i) => (
+                  <li key={i} className="flex gap-3"><span className="grid h-6 w-6 flex-none place-items-center rounded-full bg-[var(--v-sky-soft)] text-xs font-bold text-[var(--v-sky)]">{i + 1}</span><span>{s}</span></li>
+                ))}
+              </ol>
+            </Card>
+          )}
+          {latest?.status === "approved" && mode === "pay" && (
+            <Alert tone="success" title={t("Payment confirmed")}>{t("{plan} plan is active until {date}.", { plan: PLAN_NAME[latest.plan], date: latest.periodEnd?.slice(0, 10) ?? "" })}</Alert>
+          )}
+        </div>
+        {mode === "pay" && !already && (
+          <div className="lg:col-span-2">
               <Card className="space-y-4 p-5 sm:p-6">
                 <h2 className="text-lg font-bold">{t("3. Upload the receipt")}</h2>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-6">
+                <div className="space-y-3">
                 <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp,application/pdf" className="hidden" onChange={(e) => { pick(e.target.files?.[0]); e.target.value = ""; }} />
                 <button type="button" onClick={() => fileRef.current?.click()}
                   onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); pick(e.dataTransfer.files?.[0]); }}
@@ -269,19 +275,19 @@ export default function Payment() {
                 {sendReceipt.isPending && <p className="text-sm muted">{t("Uploading…")}</p>}
                 {sendReceipt.error && <ErrorAlert error={sendReceipt.error} />}
                 {ready && !sendReceipt.isPending && <p className="flex items-center gap-1.5 text-sm text-[var(--v-ok)]"><CheckCircle2 className="h-4 w-4" />{t("Receipt uploaded")}</p>}
+                </div>
+                <div className="space-y-3">
                 {submit.error && <ErrorAlert error={submit.error} />}
                 <Button size="lg" className="w-full" icon={<CheckCircle2 className="h-5 w-5" />} disabled={!ready || sendReceipt.isPending} loading={submit.isPending} onClick={() => submit.mutate()}>
                   {t("Confirm payment")}
                 </Button>
                 <p className="text-center text-xs muted">{t("Your plan is not changed by this button. It is activated only after an administrator checks the receipt.")}</p>
                 {open && !open.submitted && <Button variant="ghost" className="w-full" loading={cancel.isPending} onClick={() => cancel.mutate()}>{t("Cancel payment")}</Button>}
+                </div>
+                </div>
               </Card>
-            </>
-          )}
-          {latest?.status === "approved" && mode === "pay" && (
-            <Alert tone="success" title={t("Payment confirmed")}>{t("{plan} plan is active until {date}.", { plan: PLAN_NAME[latest.plan], date: latest.periodEnd?.slice(0, 10) ?? "" })}</Alert>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );

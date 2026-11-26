@@ -11,11 +11,7 @@ if (process.env.TEST_LIBSQL === "1") process.env.TURSO_DATABASE_URL = `file:${pa
 else delete process.env.TURSO_DATABASE_URL;
 process.env.STORAGE_DIR = path.join(dir, "storage");
 process.env.APP_URL = "http://localhost:5173";
-process.env.STRIPE_WEBHOOK_SECRET = "whsec_test_secret";
-process.env.STRIPE_PRICE_PRO = "price_pro_test";
-process.env.STRIPE_PRICE_MAX_MONTHLY = "price_max_month_test";
-process.env.STRIPE_PRICE_MAX_YEARLY = "price_max_year_test";
-for (const k of ["BLOB_READ_WRITE_TOKEN", "BLOB_STORE_ID", "OPENAI_API_KEY", "SERPAPI_API_KEY", "GEMINI_API_KEY", "COMTRADE_API_KEY", "LLM_PROVIDER", "ANTHROPIC_API_KEY", "STRIPE_SECRET_KEY", "SMTP_HOST", "CRON_SECRET"]) {
+for (const k of ["BLOB_READ_WRITE_TOKEN", "BLOB_STORE_ID", "OPENAI_API_KEY", "SERPAPI_API_KEY", "GEMINI_API_KEY", "COMTRADE_API_KEY", "LLM_PROVIDER", "ANTHROPIC_API_KEY", "SMTP_HOST", "CRON_SECRET"]) {
   delete process.env[k];
 }
 

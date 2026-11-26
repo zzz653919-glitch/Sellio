@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
 import {
-  ArrowLeft, BarChart3, Bell, ChevronDown, ChevronRight, Compass, Megaphone, Radar, CreditCard, FolderKanban, Heart, LayoutDashboard, LifeBuoy, LineChart, LogOut, Menu, Moon, Settings,
+  ArrowLeft, BarChart3, Bell, ChevronDown, ChevronRight, Megaphone, Radar, CreditCard, FolderKanban, Heart, LayoutDashboard, LifeBuoy, LineChart, LogOut, Menu, Moon, Settings,
   ShieldCheck, Sparkles, Sun, User as UserIcon, Wallet, X,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -22,7 +22,6 @@ export const NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
     label: "Workspace",
     items: [
       { to: "/", label: "Dashboard", icon: LayoutDashboard, end: true },
-      { to: "/growth", label: "Growth Hub", icon: Compass },
       { to: "/studio", label: "AI Product Studio", icon: Sparkles },
       { to: "/ads", label: "Ad Studio", icon: Megaphone },
       { to: "/intelligence", label: "Market Intelligence", icon: Radar },

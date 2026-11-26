@@ -40,21 +40,11 @@ intelRouter.get("/radar", async (_req, res) => {
   res.json(data ? { configured: true, ...buildRadar(data) } : { configured: false });
 });
 
-/** Opportunities, each with the user's own plan for it and the results they entered (if any). */
-intelRouter.get("/opportunities", async (req, res) => {
-  const user = currentUser(req);
+/** Opportunities: growing products, ranked only by measured search interest. */
+intelRouter.get("/opportunities", async (_req, res) => {
   const data = await topDemand("UZ");
   if (!data) { res.json({ configured: false }); return; }
-  const plans = await all<{ id: string; query: string | null; campaign_id: string | null }>("SELECT id, query, campaign_id FROM initiatives WHERE user_id = ? AND source = 'opportunity'", user.id);
-  const stats = plans.some((p) => p.campaign_id)
-    ? await all<{ campaign_id: string; impressions: number; clicks: number; conversions: number; spend: number; revenue: number | null }>(
-      "SELECT campaign_id, impressions, clicks, conversions, spend, revenue FROM campaign_stats WHERE user_id = ? AND campaign_id IN (SELECT campaign_id FROM initiatives WHERE user_id = ? AND source = 'opportunity')", user.id, user.id)
-    : [];
-  const items = findOpportunities(data).map((o) => {
-    const plan = plans.find((p) => p.query === o.query);
-    const rows = plan?.campaign_id ? stats.filter((x) => x.campaign_id === plan.campaign_id) : [];
-    return { ...o, mine: plan ? { initiativeId: plan.id, hasCampaign: Boolean(plan.campaign_id), results: rows.length ? metrics(rows) : null } : null };
-  });
+  const items = findOpportunities(data);
   res.json({ configured: true, computedAt: data.computedAt, checked: data.checked, items });
 });
 

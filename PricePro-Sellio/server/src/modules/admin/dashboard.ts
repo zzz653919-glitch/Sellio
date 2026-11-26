@@ -27,7 +27,7 @@ dashboardAdminRouter.get("/dashboard", requirePermission("dashboard.view"), asyn
     n("SELECT COUNT(*) AS n FROM users WHERE plan = 'free'"),
     n("SELECT COUNT(*) AS n FROM users WHERE plan = 'pro'"),
     n("SELECT COUNT(*) AS n FROM users WHERE plan = 'max'"),
-    n("SELECT COUNT(*) AS n FROM subscriptions WHERE plan IN ('pro','max') AND provider = 'stripe' AND status IN ('active','trialing','past_due')"),
+    n("SELECT COUNT(*) AS n FROM subscriptions WHERE plan IN ('pro','max') AND status IN ('active','trialing','past_due')"),
     n("SELECT COUNT(*) AS n FROM support_tickets WHERE status != 'resolved'"),
     n("SELECT COUNT(*) AS n FROM user_flags WHERE resolved_at IS NULL"),
     n("SELECT COUNT(*) AS n FROM generations WHERE status = 'failed' AND created_at >= ?", since7),

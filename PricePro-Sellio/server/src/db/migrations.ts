@@ -709,4 +709,13 @@ DROP TABLE IF EXISTS business_datasets;
 DELETE FROM activity WHERE service = 'business';
 `,
   },
+  {
+    // The Growth Hub (plans that linked opportunities, AI explanations, ads and campaigns) was removed.
+    version: 16,
+    sql: `
+DROP TABLE IF EXISTS initiative_assets;
+DROP TABLE IF EXISTS initiatives;
+DELETE FROM activity WHERE service = 'growth';
+`,
+  },
 ];

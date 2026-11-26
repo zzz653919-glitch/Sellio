@@ -16,8 +16,6 @@ export async function deleteAccount(u: string) {
     ["DELETE FROM support_tickets WHERE user_id = ?", u],
     ["DELETE FROM user_flags WHERE user_id = ?", u],
     ["DELETE FROM admin_roles WHERE user_id = ?", u],
-    ["DELETE FROM initiative_assets WHERE user_id = ?", u],
-    ["DELETE FROM initiatives WHERE user_id = ?", u],
     ["DELETE FROM campaign_stats WHERE user_id = ?", u],
     ["DELETE FROM campaign_items WHERE user_id = ?", u],
     ["DELETE FROM sales_points WHERE dataset_id IN (SELECT id FROM sales_datasets WHERE user_id = ?)", u],

@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import { after, test } from "node:test";
 import { config } from "../src/config.js";
 import { run } from "../src/db/index.js";
-import { handleStripeEvent } from "../src/modules/subscription/routes.js";
 import { deliverDueAnnouncements } from "../src/services/announcements.js";
 import { recordApiCall } from "../src/services/apiLog.js";
 import { resetSettingsCache } from "../src/services/settings.js";
@@ -185,11 +184,10 @@ test("announcements now and scheduled; support conversation; content moderation;
   assert.equal((await sa.client.req("DELETE", `/api/admin/content/images/${upl.data.upload.id}`, { reason: "Not allowed" })).status, 200);
   assert.ok((await u.client.get("/api/notifications")).data.items.some((n: { title: string }) => n.title === "Content removed by an administrator"));
 
-  // Payments come only from verified Stripe events.
-  await run("UPDATE subscriptions SET provider = 'stripe', provider_customer_id = 'cus_test' WHERE user_id = ?", u.user.id);
-  await handleStripeEvent({ id: "evt1", type: "invoice.paid", data: { object: { customer: "cus_test", amount_paid: 1900, currency: "usd", id: "in_1" } } });
-  await handleStripeEvent({ id: "evt2", type: "invoice.payment_failed", data: { object: { customer: "cus_test", amount_due: 1900, currency: "usd", id: "in_2" } } });
-  await handleStripeEvent({ id: "evt3", type: "charge.refunded", data: { object: { customer: "cus_test", amount_refunded: 500, currency: "usd", id: "ch_1" } } });
+  // Payment events (recorded when an administrator approves a card payment) are summed per type.
+  const ev = (type: string, cents: number) => run("INSERT INTO subscription_events (id,user_id,type,plan,amount_cents,currency,provider_ref,created_at) VALUES (?,?,?,?,?,?,?,?)",
+    crypto.randomUUID(), u.user.id, type, "pro", cents, "usd", null, new Date().toISOString());
+  await ev("payment", 1900); await ev("payment_failed", 1900); await ev("refund", 500);
   const pay = await sa.client.get("/api/admin/payments");
   const tot = (type: string) => pay.data.totals.find((x: { type: string }) => x.type === type);
   assert.equal(tot("payment").amountCents, 1900);

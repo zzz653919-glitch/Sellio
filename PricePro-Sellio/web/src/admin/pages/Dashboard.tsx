@@ -61,7 +61,7 @@ export default function Dashboard() {
         <Stat label={t("Active users (30 days)")} value={s.activeUsers30} hint={t("{n} in 7 days", { n: s.activeUsers7 })} tone="green" />
         <Stat label={t("New users")} value={s.newUsers} hint={t("in the selected period")} tone="green" />
         <Stat label={t("Free plan")} value={s.freeUsers} tone="slate" />
-        <Stat label={t("Pro / Max plans")} value={`${s.proUsers} / ${s.maxUsers ?? 0}`} hint={t("{n} paid via Stripe", { n: s.paidSubscriptions })} />
+        <Stat label={t("Pro / Max plans")} value={`${s.proUsers} / ${s.maxUsers ?? 0}`} hint={t("{n} paid by card", { n: s.paidSubscriptions })} />
         <Stat label={t("Total projects")} value={s.totalProjects} tone="slate" />
         <Stat label={t("AI advertisements")} value={s.adsAi} hint={t("+{n} template banners", { n: s.adsTemplates })} />
         <Stat label={t("Demand forecasts")} value={s.forecasts} />

@@ -1,19 +1,18 @@
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import {
-  Activity as ActivityIcon, ArrowRight, BarChart3, CheckCircle2, Compass, FolderKanban, ImageIcon, LineChart, Sparkles, TrendingDown,
+  Activity as ActivityIcon, ArrowRight, BarChart3, CheckCircle2, FolderKanban, ImageIcon, LineChart, Sparkles, TrendingDown,
   TrendingUp, XCircle,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { StatCard, UsageMeter } from "../components/shared";
-import { Alert, Button, Card, EmptyState, PageLoader, Progress, cx } from "../components/ui";
+import { Alert, Button, Card, EmptyState, PageLoader, cx } from "../components/ui";
 import { get } from "../lib/api";
 import { fmtPct, fmtToday, timeAgo } from "../lib/format";
 import { useI18n } from "../lib/i18n";
 import { useQty } from "../lib/qty";
 import type { PaymentItem } from "./Payment";
-import { useMsg, type Msg } from "../lib/msg";
 import type { Activity, Generation, Usage, User } from "../lib/types";
 import { PLAN_NAME } from "../lib/types";
 
@@ -43,37 +42,6 @@ function ServicePanel({ icon, title, gradient, action, to, children }: { icon: R
       <div className="border-t border-[var(--v-line-soft)] p-3">
         <Link to={to}><Button className="w-full" icon={<ArrowRight className="h-4 w-4" />}>{action}</Button></Link>
       </div>
-    </Card>
-  );
-}
-
-type GrowthPlan = { id: string; product: string; nextStep: string | null; done: number; total: number };
-const NEXT_LABEL: Record<string, string> = { explain: "AI explanation", direction: "Marketing direction", assets: "Ads" };
-
-/** The connected workflow on the dashboard: open plans and their next step. */
-function GrowthCard() {
-  const { t } = useI18n();
-  const msg = useMsg();
-  const q = useQuery({ queryKey: ["growth"], queryFn: () => get<{ items: GrowthPlan[]; learnings: { insights: Msg[] } }>("/growth") });
-  const plans = (q.data?.items ?? []).filter((p) => p.nextStep).slice(0, 3);
-  return (
-    <Card className="space-y-3 p-5">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="flex items-center gap-2 font-semibold"><Compass className="h-4 w-4 text-brand-600" />{t("Growth Hub")}</h2>
-        <Link to="/growth" className="text-sm font-medium text-brand-600 hover:underline dark:text-brand-400">{t("Open →")}</Link>
-      </div>
-      {plans.length === 0 ? (
-        <p className="text-sm muted">{t("Pick a growing product, let the AI explain it and make ads — step by step.")} <Link to="/intelligence?tab=opportunities" className="font-medium text-brand-600 hover:underline dark:text-brand-400">{t("See opportunities")}</Link></p>
-      ) : plans.map((p) => (
-        <Link key={p.id} to={`/growth?id=${p.id}`} className="flex items-center gap-3 rounded-xl border border-slate-100 p-3 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/50">
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold">{t(p.product)}</p>
-            <p className="text-xs muted">{t("Next")}: {t(NEXT_LABEL[p.nextStep!] ?? p.nextStep!)}</p>
-          </div>
-          <div className="w-24"><Progress value={p.done} max={p.total} /></div>
-        </Link>
-      ))}
-      {q.data?.learnings.insights[0] && <p className="text-xs muted">💡 {msg(q.data.learnings.insights[0])}</p>}
     </Card>
   );
 }
@@ -125,7 +93,6 @@ export default function Dashboard() {
         <StatCard icon={<BarChart3 className="h-4 w-4" />} label={t("Products analyzed")} value={qty(d.stats.productsAnalyzed)} hint={t("{n} forecasts completed", { n: d.stats.forecastsCompleted })} tone="cyan" />
       </div>
 
-      <GrowthCard />
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <ServicePanel icon={<Sparkles className="h-5 w-5" />} title={t("AI Product Studio")} gradient="t-lilac" action={t("Create Advertisement")} to="/studio">

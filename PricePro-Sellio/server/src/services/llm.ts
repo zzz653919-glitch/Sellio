@@ -51,7 +51,9 @@ async function post(url: string, headers: Record<string, string>, body: unknown,
     throw new Busy(0, "unreachable");
   }
   const json = (await res.json().catch(() => null)) as Record<string, unknown> | null;
-  await log(res.ok, res.status, res.ok ? null : String(((json?.error ?? {}) as { message?: string }).message ?? `HTTP ${res.status}`));
+  // The model name in the error log shows which model was busy (and that the next one was tried).
+  const model = decodeURIComponent(url.match(/models\/([^:]+)/)?.[1] ?? ((body as { model?: string })?.model ?? ""));
+  await log(res.ok, res.status, res.ok ? null : `${model ? `[${model}] ` : ""}${String(((json?.error ?? {}) as { message?: string }).message ?? `HTTP ${res.status}`)}`);
   if (!res.ok) {
     const err = (json?.error ?? {}) as { message?: string; status?: string; code?: string };
     // Overloaded ("high demand"), temporary server errors and quota limits: another model may still answer.

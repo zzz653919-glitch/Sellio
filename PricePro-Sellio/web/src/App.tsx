@@ -12,7 +12,6 @@ const Studio = lazy(() => import("./pages/Studio"));
 const Forecast = lazy(() => import("./pages/Forecast"));
 const Intelligence = lazy(() => import("./pages/Intelligence"));
 const AdStudio = lazy(() => import("./pages/AdStudio"));
-const Growth = lazy(() => import("./pages/Growth"));
 const Projects = lazy(() => import("./pages/Projects"));
 const Analytics = lazy(() => import("./pages/Analytics"));
 const Favorites = lazy(() => import("./pages/Favorites"));
@@ -50,7 +49,6 @@ export function App() {
         <Route path="/admin/*" element={<Protected><AdminApp /></Protected>} />
         <Route element={<Protected><MaintenanceGate><AppLayout /></MaintenanceGate></Protected>}>
           <Route index element={<Dashboard />} />
-          <Route path="growth" element={<Growth />} />
           <Route path="studio" element={<Studio />} />
           <Route path="forecast" element={<Forecast />} />
           <Route path="intelligence" element={<Intelligence />} />

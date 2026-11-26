@@ -23,7 +23,6 @@ import { projectsRouter } from "./modules/projects/routes.js";
 import { studioRouter } from "./modules/studio/routes.js";
 import { adsRouter } from "./modules/ads/routes.js";
 import { campaignsRouter } from "./modules/campaigns/routes.js";
-import { growthRouter } from "./modules/growth/routes.js";
 import { adminRouter } from "./modules/admin/routes.js";
 import { supportRouter } from "./modules/support/routes.js";
 import { topDemand } from "./modules/forecast/topDemand.js";
@@ -32,7 +31,7 @@ import { intelRouter } from "./modules/intel/routes.js";
 import { llmProvider } from "./services/llm.js";
 import { deliverDueAnnouncements } from "./services/announcements.js";
 import { refreshSettings, settings } from "./services/settings.js";
-import { stripeWebhook, subscriptionRouter } from "./modules/subscription/routes.js";
+import { subscriptionRouter } from "./modules/subscription/routes.js";
 import { userRouter } from "./modules/user/routes.js";
 
 export function createApp() {
@@ -59,8 +58,6 @@ export function createApp() {
     }),
   );
 
-  // Stripe needs the raw body for signature verification, so it is mounted before JSON parsing.
-  app.post("/api/webhooks/stripe", express.raw({ type: "application/json", limit: "1mb" }), stripeWebhook);
 
   // Sales data uploads parse their own (larger) JSON body.
   const json1mb = express.json({ limit: "1mb" });
@@ -115,7 +112,7 @@ export function createApp() {
       platform: onVercel ? "vercel" : "server",
       checks: { database, storage, email },
       integrations: {
-        imageGeneration: features.imageGeneration, serpapi: features.serpapi, payments: features.payments,
+        imageGeneration: features.imageGeneration, serpapi: features.serpapi, cardPayments: settings().manualPayment.enabled,
         worldBank: features.worldBank, comtrade: features.comtrade, textAi: llmProvider()?.name ?? false,
       },
     });
@@ -129,7 +126,7 @@ export function createApp() {
         trends: features.serpapi,
         worldBank: features.worldBank,
         comtrade: features.comtrade,
-        payments: features.payments,
+        cardPayments: settings().manualPayment.enabled,
       },
     });
   });
@@ -164,7 +161,6 @@ export function createApp() {
   app.use("/api/intel", intelRouter);
   app.use("/api/ads", adsRouter);
   app.use("/api/campaigns", campaignsRouter);
-  app.use("/api/growth", growthRouter);
   app.use("/api/payments", paymentsRouter);
   app.use("/api/support", supportRouter);
   app.use("/api/admin", adminRouter);

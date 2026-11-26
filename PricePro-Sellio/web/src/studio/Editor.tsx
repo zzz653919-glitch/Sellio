@@ -46,7 +46,7 @@ const ROLE_LABEL: Record<TextRole, string> = { headline: "Headline", subline: "D
 const draftKey = (id: string) => `vendora-ad-draft:${id}`;
 
 /** Read an uploaded picture, scaled down to at most 2000 px (keeps transparency for PNG/WebP). */
-async function readImageFile(file: File): Promise<string> {
+async function readImageFile(file: File): Promise<{ src: string; cutout: boolean }> {
   if (!/^image\/(png|jpe?g|webp|gif|avif)$/i.test(file.type)) throw new Error("Choose a PNG, JPG or WebP image.");
   if (file.size > 15 * 1024 * 1024) throw new Error("The image is larger than 15 MB.");
   const url = URL.createObjectURL(file);
@@ -55,9 +55,48 @@ async function readImageFile(file: File): Promise<string> {
     const s = Math.min(1, 2000 / Math.max(img.naturalWidth, img.naturalHeight));
     const c = document.createElement("canvas");
     c.width = Math.max(1, Math.round(img.naturalWidth * s)); c.height = Math.max(1, Math.round(img.naturalHeight * s));
-    c.getContext("2d")!.drawImage(img, 0, 0, c.width, c.height);
-    return /png|webp|gif|avif/i.test(file.type) ? c.toDataURL("image/png") : c.toDataURL("image/jpeg", 0.92);
+    const ctx = c.getContext("2d", { willReadFrequently: true })!;
+    ctx.drawImage(img, 0, 0, c.width, c.height);
+    // A product cut out on a transparent background is placed as it is; a normal photo goes into the template's frame.
+    let cutout = false;
+    if (/png|webp|gif|avif/i.test(file.type)) {
+      const t = document.createElement("canvas"); t.width = 48; t.height = 48;
+      const tc = t.getContext("2d", { willReadFrequently: true })!; tc.drawImage(c, 0, 0, 48, 48);
+      const a = tc.getImageData(0, 0, 48, 48).data;
+      let clear = 0; for (let i = 3; i < a.length; i += 4) if (a[i] < 200) clear++;
+      cutout = clear / (48 * 48) > 0.04;
+    }
+    return { src: cutout ? c.toDataURL("image/png") : c.toDataURL("image/jpeg", 0.92), cutout };
   } finally { URL.revokeObjectURL(url); }
+}
+
+/**
+ * Where an uploaded photo goes in a template. A cut-out product keeps the sample picture's place.
+ * A normal (rectangular) photo takes the shape behind the sample picture — a circle stays a circle,
+ * an arch stays an arch — so the design keeps its look; without such a shape it gets rounded corners.
+ */
+function placePhoto(doc: Doc, el: ImageEl, cutout: boolean): Partial<ImageEl> {
+  const base: Partial<ImageEl> = { zoom: 1, dx: 0, dy: 0 };
+  if (el.w >= 0.9 && el.h >= 0.9) return { ...base, fit: "cover", mask: "none" }; // full background picture
+  if (cutout) return { ...base, fit: "contain" };
+  const at = doc.els.findIndex((e) => e.id === el.id);
+  const area = el.w * el.h;
+  let best: { s: ShapeEl; score: number } | null = null;
+  for (const e of doc.els.slice(0, at)) {
+    if (e.type !== "shape" || !["circle", "ring", "arch", "blob", "rect", "halfcircle"].includes(e.shape)) continue;
+    if ((e.w >= 0.95 && e.h >= 0.95) || e.h < 0.08 || e.w < 0.08 || (e.opacity ?? 1) < 0.05) continue;
+    let { x, y, w, h } = e;
+    if (e.keep) { const m = Math.min(w * doc.w, h * doc.h); x += (w - m / doc.w) / 2; y += (h - m / doc.h) / 2; w = m / doc.w; h = m / doc.h; }
+    const ox = Math.max(0, Math.min(x + w, el.x + el.w) - Math.max(x, el.x)), oy = Math.max(0, Math.min(y + h, el.y + el.h) - Math.max(y, el.y));
+    const score = (ox * oy) / Math.min(area, w * h);
+    if (score > 0.45 && (!best || score > best.score)) best = { s: { ...e, x, y, w, h }, score };
+  }
+  if (!best) return { ...base, fit: "cover", mask: "rounded", radius: 36, shadow: true };
+  const s = best.s;
+  const inset = s.shape === "ring" ? 0.08 : 0;
+  const box = { x: s.x + s.w * inset, y: s.y + s.h * inset, w: s.w * (1 - 2 * inset), h: s.h * (1 - 2 * inset) };
+  const mask: ImageEl["mask"] = s.shape === "arch" ? "arch" : s.shape === "rect" || s.shape === "halfcircle" ? "rounded" : "circle";
+  return { ...base, ...box, fit: "cover", mask, radius: s.shape === "rect" ? Math.max(12, s.radius ?? 24) : 36, shadow: false };
 }
 
 function download(blob: Blob, name: string) {
@@ -350,14 +389,20 @@ export default function Editor({ templateId, onBack, favorite, onToggleFavorite 
   const { t } = useI18n();
   const toast = useToast();
   const def = getTemplateDef(templateId);
-  const initial = useMemo<Doc>(() => {
-    if (!def) return docFromTemplate(getTemplateDef("fashion-new-sneakers")!);
+  // Earlier edits of this template are kept in the browser; the user is told and can start over.
+  const { initial, restored } = useMemo<{ initial: Doc; restored: boolean }>(() => {
+    if (!def) return { initial: docFromTemplate(getTemplateDef("fashion-new-sneakers")!), restored: false };
+    const fresh = docFromTemplate(def);
     try {
       const saved = localStorage.getItem(draftKey(def.id));
-      if (saved) { const d = JSON.parse(saved) as Doc; if (d?.v === 1 && Array.isArray(d.els)) return d; }
+      if (saved) {
+        const d = JSON.parse(saved) as Doc;
+        if (d?.v === 1 && Array.isArray(d.els) && JSON.stringify({ bg: d.bg, els: d.els }) !== JSON.stringify({ bg: fresh.bg, els: fresh.els })) return { initial: d, restored: true };
+      }
     } catch { /* storage blocked */ }
-    return docFromTemplate(def);
+    return { initial: fresh, restored: false };
   }, [def]);
+  const [showRestored, setShowRestored] = useState(restored);
   const { doc, set, commit, undo, redo, reset, canUndo, canRedo } = useHistory(initial);
   const [selected, setSelected] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("content");
@@ -401,17 +446,23 @@ export default function Editor({ templateId, onBack, favorite, onToggleFavorite 
     set((d) => ({ ...d, format: f, w: size.w, h: size.h }));
     setCustom({ w: String(size.w), h: String(size.h) });
   };
+  const startOver = () => {
+    if (!def) return;
+    reset(docFromTemplate(def, doc.format, { w: doc.w, h: doc.h }));
+    setSelected(null); setShowRestored(false);
+  };
   const productImage = doc.els.find((e): e is ImageEl => e.type === "image" && e.name === "Product image") ?? doc.els.find((e): e is ImageEl => e.type === "image") ?? null;
   const pickFile = (target: string | "new") => { uploadTarget.current = target; fileRef.current?.click(); };
   const onFile = async (file: File | undefined) => {
     if (!file) return;
     try {
       setBusy("upload");
-      const src = await readImageFile(file);
+      const { src, cutout } = await readImageFile(file);
       await loadSource(src);
       const target = uploadTarget.current;
-      if (target && target !== "new") upd(target, { src, zoom: 1, dx: 0, dy: 0, fit: (doc.els.find((e) => e.id === target) as ImageEl | undefined)?.fit ?? "contain" });
-      else add({ id: newId(), type: "image", src, x: 0.3, y: 0.3, w: 0.4, h: 0.4, fit: "contain", shadow: true, name: "Picture" });
+      const old = target && target !== "new" ? doc.els.find((e): e is ImageEl => e.id === target && e.type === "image") : undefined;
+      if (old) upd(old.id, { src, ...placePhoto(doc, old, cutout) });
+      else add({ id: newId(), type: "image", src, x: 0.3, y: 0.3, w: 0.4, h: 0.4, fit: cutout ? "contain" : "cover", mask: cutout ? "none" : "rounded", radius: 36, shadow: true, name: "Picture" });
       toast("success", t("Picture added."));
     } catch (err) {
       toast("error", t(err instanceof Error ? err.message : "This image could not be opened."));
@@ -473,8 +524,19 @@ export default function Editor({ templateId, onBack, favorite, onToggleFavorite 
         <IconBtn title={t(favorite ? "Remove from favorites" : "Add to favorites")} on={favorite} onClick={onToggleFavorite}><Heart className={cx("h-4 w-4", favorite && "fill-current")} /></IconBtn>
         <IconBtn title={t("Undo")} onClick={undo} disabled={!canUndo}><Undo2 className="h-4 w-4" /></IconBtn>
         <IconBtn title={t("Redo")} onClick={redo} disabled={!canRedo}><Redo2 className="h-4 w-4" /></IconBtn>
-        <IconBtn title={t("Reset to the original template")} onClick={() => { reset(docFromTemplate(def, doc.format, { w: doc.w, h: doc.h })); setSelected(null); }}><RotateCcw className="h-4 w-4" /></IconBtn>
+        <Button size="sm" variant="secondary" icon={<RotateCcw className="h-4 w-4" />} onClick={startOver} title={t("Reset to the original template")} data-testid="reset">
+          <span className="hidden sm:inline">{t("Original")}</span>
+        </Button>
       </div>
+      {showRestored && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-[var(--v-line)] bg-[var(--v-sky-soft)] px-4 py-3 text-sm" data-testid="restored">
+          <span>{t("Your earlier edits of this template were restored.")}</span>
+          <span className="flex gap-2">
+            <Button size="sm" variant="ghost" onClick={() => setShowRestored(false)}>{t("Keep editing")}</Button>
+            <Button size="sm" icon={<RotateCcw className="h-4 w-4" />} onClick={startOver}>{t("Start from the original")}</Button>
+          </span>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[minmax(0,1fr)_380px]">
         {/* canvas */}
@@ -515,7 +577,8 @@ export default function Editor({ templateId, onBack, favorite, onToggleFavorite 
                 <Button className="w-full" icon={<ImagePlus className="h-4 w-4" />} loading={busy === "upload"} onClick={() => pickFile(productImage?.id ?? "new")} data-testid="upload-product">
                   {productImage ? t("Upload my product photo") : t("Add a photo")}
                 </Button>
-                <p className="text-[11px] muted">{t("PNG with a transparent background looks best. The sample picture is replaced, the layout stays.")}</p>
+                <p className="text-[11px] muted">{t("Your photo takes the place and shape of the sample picture (a circle stays a circle). A PNG with a transparent background is placed as it is.")}</p>
+                <p className="text-[11px] muted">{t("Don't need something? Click it on the design and press Delete, or remove it in Layers.")}</p>
               </Section>
               <Section title={t("Texts")}>
                 {texts.length === 0 && <p className="text-xs muted">{t("No texts yet.")}</p>}

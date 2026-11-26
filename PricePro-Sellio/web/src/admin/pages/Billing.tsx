@@ -31,7 +31,7 @@ function PlanEditor({ plan, onClose }: { plan: Plan; onClose: () => void }) {
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setF((s) => ({ ...s, [k]: e.target.value }));
   return (
     <ConfirmWithPassword open title={t("Edit plan: {x}", { x: plan.name })} confirmLabel={t("Save")} error={save.error} loading={save.isPending} onConfirm={(p) => save.mutate(p)} onClose={onClose}
-      text={t("Limits apply immediately. The price here is only what users see; the real charge is the price set in Stripe.")}>
+      text={t("Limits and prices apply immediately. The card payment page charges these prices.")}>
       <div className="grid grid-cols-2 gap-3">
         <Field label={t("Name")}><Input value={f.name} onChange={set("name")} maxLength={40} /></Field>
         <Field label={t("Price per month (USD)")}><Input type="number" min={0} value={f.priceMonthlyUsd} onChange={set("priceMonthlyUsd")} /></Field>
@@ -67,8 +67,8 @@ function Subscriptions() {
   return (
     <div className="space-y-4">
       <h1 className="text-[26px] font-extrabold tracking-[-0.03em]">{t("Subscriptions")}</h1>
-      {plans.data && !plans.data.paymentsConnected && <Alert tone="info">{t("Online payments (Stripe) are not connected, so no paid subscriptions can start. Plans can still be assigned by administrators; no payment is recorded for them.")}</Alert>}
-      {subs.data && <div className="grid grid-cols-1 gap-3 sm:grid-cols-3"><Stat label={t("Active paid / Pro")} value={subs.data.summary.active} tone="green" /><Stat label={t("Ended (Stripe)")} value={subs.data.summary.ended} tone="slate" /><Stat label={t("Assigned by admin")} value={subs.data.summary.admin} tone="amber" /></div>}
+      {plans.data && !plans.data.paymentsConnected && <Alert tone="info">{t("Card payments are turned off in Settings, so users cannot buy a plan right now. Administrators can still assign plans.")}</Alert>}
+      {subs.data && <div className="grid grid-cols-1 gap-3 sm:grid-cols-3"><Stat label={t("Active paid / Pro")} value={subs.data.summary.active} tone="green" /><Stat label={t("Ended")} value={subs.data.summary.ended} tone="slate" /><Stat label={t("Assigned by admin")} value={subs.data.summary.admin} tone="amber" /></div>}
       <div className="overflow-x-auto"><Tabs value={tab} onChange={(v) => { setTab(v); setPage(1); }} tabs={[{ value: "plans", label: t("Plans") }, { value: "subs", label: t("Subscriptions") }, { value: "history", label: t("History") }, { value: "usage", label: t("Usage") }]} /></div>
       {tab === "plans" && (plans.isLoading ? <PageLoader /> : plans.error ? <ErrorAlert error={plans.error} /> : (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
@@ -168,10 +168,10 @@ function PaymentsPage() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <div><h1 className="text-[26px] font-extrabold tracking-[-0.03em]">{t("Payments and revenue")}</h1><p className="text-sm muted">{t("Only payments confirmed by Stripe webhooks are shown. Nothing is entered or marked as paid by hand.")}</p></div>
+        <div><h1 className="text-[26px] font-extrabold tracking-[-0.03em]">{t("Payments and revenue")}</h1><p className="text-sm muted">{t("Card payments approved by an administrator are shown here.")}</p></div>
         <div className="flex flex-wrap gap-2"><DateRange from={range.from} to={range.to} onChange={(r) => { setRange(r); setPage(1); }} /><button type="button" className="inline-flex items-center gap-1 text-sm text-brand-600 hover:underline" onClick={() => downloadUrl(`/admin/payments/export?from=${range.from}&to=${range.to}`)}><Download className="h-4 w-4" />CSV</button></div>
       </div>
-      {!d.connected && <Alert tone="warning">{t("Stripe is not connected (STRIPE_SECRET_KEY, STRIPE_PRICE_PRO, STRIPE_WEBHOOK_SECRET), so there are no payments to show.")}</Alert>}
+      {!d.connected && <Alert tone="warning">{t("Card payments are turned off in Settings.")}</Alert>}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <Stat label={t("Revenue in period")} value={fmt(sumOf("payment"))} tone="green" hint={t("{n} payments", { n: sumOf("payment").reduce((s, x) => s + x.count, 0) })} />
         <Stat label={t("Total revenue")} value={fmt(d.allTimeRevenue)} />
@@ -191,7 +191,7 @@ function PaymentsPage() {
       )}
       {d.monthly.length > 0 && <Section title={t("Monthly revenue")}><Table head={[t("Month"), t("Revenue"), t("Payments")]}>{d.monthly.map((m) => <tr key={`${m.month}${m.currency}`}><td>{m.month}</td><td>{money(m.amountCents, m.currency)}</td><td>{m.payments}</td></tr>)}</Table></Section>}
       <Section title={t("Payment history")}>
-        <Table head={[t("Event"), t("User"), t("Amount"), t("Stripe reference"), t("Date")]} empty={!d.history.length}>
+        <Table head={[t("Event"), t("User"), t("Amount"), t("Reference"), t("Date")]} empty={!d.history.length}>
           {d.history.map((h) => <tr key={h.id}><td><Badge tone={h.type === "payment" ? "green" : h.type === "payment_failed" ? "red" : h.type === "refund" ? "amber" : "slate"}>{t(h.type)}</Badge></td><td className="text-xs">{h.user}</td><td>{money(h.amountCents, h.currency)}</td><td className="text-xs">{h.reference ?? "—"}</td><td>{fmtDateTime(h.createdAt)}</td></tr>)}
         </Table>
         <Pager page={d.page} limit={d.limit} total={d.total} onPage={setPage} />
