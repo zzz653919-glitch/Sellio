@@ -2197,4 +2197,5 @@ export const UZ: Record<string, string> = {
   "Make the light warmer": "Yorug'likni iliqroq qil",
   "Add a little more space around the product": "Mahsulot atrofida ko'proq joy qoldir",
   "Make it look more premium": "Yanada premium ko'rinishda qil",
+  "Upload a product photo and the AI creates your advertisement. The original and generated images are shown side by side.": "Mahsulot rasmini yuklang — reklamani AI o'zi yaratadi. Asl va yaratilgan rasmlar yonma-yon ko'rsatiladi.",
 };

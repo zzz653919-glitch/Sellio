@@ -2132,4 +2132,5 @@ export const RU: Record<string, string> = {
   "Make the light warmer": "Сделай свет теплее",
   "Add a little more space around the product": "Оставь больше места вокруг товара",
   "Make it look more premium": "Сделай более премиально",
+  "Upload a product photo and the AI creates your advertisement. The original and generated images are shown side by side.": "Загрузите фото товара — ИИ сам создаст рекламу. Оригинал и результат показаны рядом.",
 };

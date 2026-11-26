@@ -11,16 +11,6 @@ import { fmtBytes, timeAgo } from "../lib/format";
 import { useI18n } from "../lib/i18n";
 import type { Generation, StudioOptions, Upload } from "../lib/types";
 
-const STYLE_SWATCH: Record<string, string> = {
-  auto: "from-violet-500 via-sky-400 to-emerald-300",
-  premium_luxury: "from-amber-400 via-yellow-600 to-stone-900",
-  minimal_studio: "from-slate-100 via-white to-slate-300",
-  modern_commercial: "from-fuchsia-500 via-brand-500 to-cyan-400",
-  ecommerce_product: "from-white via-slate-50 to-slate-200",
-  lifestyle: "from-emerald-300 via-amber-200 to-orange-300",
-  social_media: "from-pink-500 via-orange-400 to-yellow-300",
-};
-
 /** Ready-made change requests for a finished advertisement (the user can also type their own). */
 const EDIT_IDEAS = ["Make the background darker", "Put it on a wooden table", "Make the light warmer", "Add a little more space around the product", "Make it look more premium"];
 
@@ -191,7 +181,7 @@ export default function Studio() {
   const [selected, setSelected] = useState<Upload | null>(null);
   const [dragging, setDragging] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
-  const [form, setForm] = useState({ productName: params.get("product")?.slice(0, 120) ?? "", category: "", style: "auto", background: "auto", size: "square", quality: "medium", lighting: "soft", brandColor: "", useBrandColor: false, instructions: "" });
+  const [form, setForm] = useState({ productName: params.get("product")?.slice(0, 120) ?? "", size: "square" });
   const [deleteGen, setDeleteGen] = useState<Generation | null>(null);
   const [more, setMore] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -243,14 +233,10 @@ export default function Studio() {
       post<{ generation: Generation }>("/studio/generations", {
         uploadId,
         productName: form.productName.trim() || undefined,
-        category: form.category || undefined,
-        style: form.style,
-        background: form.background,
-        settings: {
-          size: form.size, quality: form.quality, lighting: form.lighting,
-          brandColor: form.useBrandColor && form.brandColor ? form.brandColor : undefined,
-          instructions: form.instructions.trim() || undefined,
-        },
+        // Style, scene, light and colours are always chosen by the AI.
+        style: "auto",
+        background: "auto",
+        settings: { size: form.size, quality: "medium", lighting: "soft" },
       }),
     onSuccess: (d) => {
       qc.invalidateQueries({ queryKey: ["generations"] });
@@ -340,32 +326,7 @@ export default function Studio() {
               <div className="space-y-4 border-t border-slate-200 pt-4 dark:border-slate-800">
                 <p className="text-xs muted">{t("Leave anything empty and the AI decides it.")}</p>
                 <Field label={t("Product name")}><Input value={form.productName} maxLength={120} onChange={(e) => setForm({ ...form, productName: e.target.value })} placeholder={t("e.g. Leather backpack")} /></Field>
-                <Field label={t("Category")}><Select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} options={[{ value: "", label: t("AI chooses") }, ...(opts?.categories ?? []).map((c) => ({ value: c, label: t(c) }))]} /></Field>
-                <p className="text-sm font-semibold">{t("Advertising style")}</p>
-                <div className="grid grid-cols-2 gap-2">
-              {(opts?.styles ?? []).map((s) => (
-                <button key={s.value} onClick={() => setForm({ ...form, style: s.value })}
-                  className={cx("overflow-hidden rounded-xl border-2 text-left transition", form.style === s.value ? "border-brand-500 ring-4 ring-brand-500/15" : "border-slate-200 hover:border-slate-300 dark:border-slate-800")}>
-                  <div className={cx("h-10 bg-gradient-to-br", STYLE_SWATCH[s.value])} />
-                  <p className="px-2.5 py-2 text-xs font-semibold">{t(s.label)}</p>
-                </button>
-              ))}
-            </div>
-            <Field label={t("Background")}><Select value={form.background} onChange={(e) => setForm({ ...form, background: e.target.value })} options={(opts?.backgrounds ?? []).map((b) => ({ value: b.value, label: t(b.label) }))} /></Field>
-                <div className="grid grid-cols-2 gap-3">
-              <Field label={t("Format")}><Select value={form.size} onChange={(e) => setForm({ ...form, size: e.target.value })} options={(opts?.sizes ?? []).map((s) => ({ value: s.value, label: `${t(s.label)} (${s.pixels})` }))} /></Field>
-              <Field label={t("Quality")}><Select value={form.quality} onChange={(e) => setForm({ ...form, quality: e.target.value })} options={(opts?.qualities ?? []).map((q) => ({ value: q, label: t(q) }))} /></Field>
-              <Field label={t("Lighting")}><Select value={form.lighting} onChange={(e) => setForm({ ...form, lighting: e.target.value })} options={(opts?.lighting ?? []).map((l) => ({ value: l, label: t(l) }))} /></Field>
-              <Field label={t("Brand colour")}>
-                <div className="flex items-center gap-2">
-                  <input type="checkbox" checked={form.useBrandColor} onChange={(e) => setForm({ ...form, useBrandColor: e.target.checked, brandColor: form.brandColor || "#4f46e5" })} aria-label={t("Use brand colour")} />
-                  <input type="color" disabled={!form.useBrandColor} value={form.brandColor || "#4f46e5"} onChange={(e) => setForm({ ...form, brandColor: e.target.value })} className="h-10 w-full cursor-pointer rounded-lg border border-slate-300 bg-transparent disabled:opacity-40 dark:border-slate-700" />
-                </div>
-              </Field>
-            </div>
-            <Field label={t("Extra instructions (optional)")} hint={`${form.instructions.length}/300`}>
-              <textarea className="input min-h-20" maxLength={300} value={form.instructions} onChange={(e) => setForm({ ...form, instructions: e.target.value })} placeholder={t("e.g. add soft reflections, place on a podium")} />
-            </Field>
+                <Field label={t("Format")}><Select value={form.size} onChange={(e) => setForm({ ...form, size: e.target.value })} options={(opts?.sizes ?? []).map((s) => ({ value: s.value, label: `${t(s.label)} (${s.pixels})` }))} /></Field>
               </div>
             )}
           </Card>
@@ -379,7 +340,7 @@ export default function Studio() {
               </motion.div>
             ) : (
               <Card className="p-6">
-                <EmptyState icon={<ImagePlus className="h-6 w-6" />} title={t("Your advertisement will appear here")} text={t("Upload a product photo, choose a style and create your advertisement. The original and generated images are shown side by side.")} />
+                <EmptyState icon={<ImagePlus className="h-6 w-6" />} title={t("Your advertisement will appear here")} text={t("Upload a product photo and the AI creates your advertisement. The original and generated images are shown side by side.")} />
               </Card>
             )}
           </AnimatePresence>
