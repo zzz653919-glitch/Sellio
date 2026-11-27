@@ -2436,4 +2436,8 @@ export const RU: Record<string, string> = {
   "Lifestyle scene": "Lifestyle-сцена",
   "Premium advertising poster": "Премиальный постер",
   "Universal product design": "Универсальный дизайн",
+  "The AI is making the product photo": "ИИ создаёт фото товара",
+  "The AI re-shoots your product in the chosen theme, background and light and picks the best angle itself. The product's shape, colours and details stay exactly as they are. Uses one AI image from your limit.": "ИИ переснимет товар в выбранной теме, фоне и свете и сам выберет лучший ракурс. Форма, цвета и детали товара остаются без изменений. Расходуется одно ИИ-изображение из лимита.",
+  "All themes": "Все темы",
+  "Choose this theme": "Выбрать эту тему",
 };

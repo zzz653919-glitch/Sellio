@@ -26,6 +26,31 @@ export type ThemePreset = {
   suggest: { layout: string; background: string; lighting: string; angle: string };
 };
 
+/** The five designs in each theme's folder (all in the same theme, different compositions). */
+export const THEME_LAYOUTS: Record<ThemeKey, string[]> = {
+  brand: ["hero", "bold", "split", "specs", "minimal"],
+  "dark-luxury": ["poster", "dark", "editorial", "minimal", "halves"],
+  "light-minimal": ["minimal", "hero", "halves", "specs", "editorial"],
+  flowers: ["frame", "hero", "circle", "minimal", "lifestyle"],
+  "premium-gold": ["editorial", "poster", "dark", "frame", "minimal"],
+  "black-white": ["halves", "minimal", "specs", "editorial", "poster"],
+  "modern-gradient": ["bold", "glass", "hero", "sale", "split"],
+  glass: ["glass", "poster", "bold", "circle", "halves"],
+  neon: ["dark", "poster", "glass", "split", "bold"],
+  nature: ["circle", "frame", "lifestyle", "minimal", "editorial"],
+  pastel: ["hero", "circle", "frame", "bold", "minimal"],
+  marble: ["editorial", "minimal", "frame", "specs", "poster"],
+  "studio-3d": ["minimal", "hero", "split", "specs", "beforeAfter"],
+  cinematic: ["poster", "dark", "lifestyle", "halves", "editorial"],
+  pop: ["sale", "bold", "diagonal", "hero", "circle"],
+  minimalist: ["minimal", "halves", "editorial", "specs", "hero"],
+  beige: ["frame", "editorial", "minimal", "circle", "halves"],
+  tech: ["split", "specs", "dark", "multiAngle", "bold"],
+  abstract: ["diagonal", "sale", "bold", "hero", "glass"],
+  seasonal: ["hero", "frame", "circle", "sale", "minimal"],
+  custom: ["hero", "halves", "bold", "split", "minimal"],
+};
+
 const lin = (angle: number, ...c: string[]): Fill => ({ type: "linear", angle, stops: c.map((x, i) => [c.length === 1 ? 0 : i / (c.length - 1), x]) });
 const rad = (...c: string[]): Fill => ({ type: "radial", cx: 0.5, cy: 0.42, r: 0.75, stops: c.map((x, i) => [c.length === 1 ? 0 : i / (c.length - 1), x]) });
 

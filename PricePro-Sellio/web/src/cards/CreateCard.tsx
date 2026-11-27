@@ -5,7 +5,7 @@
  * background and light (the product itself is kept exactly as it is).
  */
 import { useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Check, ChevronDown, Image as ImageIcon, Loader2, Palette as PaletteIcon, Sparkles, UploadCloud, Wand2, X } from "lucide-react";
+import { ArrowLeft, Check, ChevronDown, Folder, Loader2, Palette as PaletteIcon, Sparkles, UploadCloud, Wand2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ErrorAlert } from "../components/shared";
 import { Button, Card, Field, Input, Select, cx, useToast } from "../components/ui";
@@ -19,17 +19,12 @@ import {
   type Full, type GenConfig, type Ratio, type Summary,
 } from "./common";
 import {
-  brandOf, buildCard, defaultStyle, LAYOUT_LABEL, layoutsFor, MARKETPLACE_LAYOUTS, manualCopy, SAMPLE_COPY,
+  brandOf, buildCard, defaultStyle, LAYOUT_LABEL, manualCopy, SAMPLE_COPY,
   type BackgroundKey, type CardCopy, type CardInput, type CardPhoto, type LayoutKey, type LightKey, type MarketplaceKey, type StyleConfig,
 } from "./layouts";
-import { ThemeGallery } from "./ThemeGallery";
+import { ThemeFolder, ThemeGallery, themeLayouts } from "./ThemeGallery";
 import { FONT_PAIRS, THEME_BY_KEY, THEMES, type ThemePreset } from "./themes";
 
-export const ANGLE_OPTIONS: [string, string][] = [
-  ["auto", "AI auto angle"], ["front", "Front view"], ["side", "Side view"], ["angle45", "45-degree view"], ["top", "Top view"], ["bottom", "Bottom view"],
-  ["back", "Back view"], ["macro", "Close-up / macro"], ["detail", "Detail view"], ["isometric", "Isometric view"], ["three-quarter", "3/4 perspective"],
-  ["low", "Low angle"], ["high", "High angle"], ["multiple", "Multiple angles"],
-];
 const BG_OPTIONS: { key: BackgroundKey; label: string; swatch: string }[] = [
   { key: "auto", label: "Theme default", swatch: "conic-gradient(#f43f5e,#f59e0b,#10b981,#3b82f6,#a855f7,#f43f5e)" },
   { key: "white", label: "Pure white", swatch: "#FFFFFF" }, { key: "black", label: "Dark black", swatch: "#0B0B0F" },
@@ -50,29 +45,6 @@ const SCENE_THEMES = ["flowers", "nature", "marble", "studio-3d", "cinematic", "
 const wantsTransparent = (cfg: Pick<GenConfig, "style" | "layouts">) =>
   !(SCENE_BACKGROUNDS.includes(cfg.style.background) || (cfg.style.background === "auto" && SCENE_THEMES.includes(cfg.style.theme)) || cfg.layouts.every((l) => l === "lifestyle"));
 
-/** Two main colours of a picture (for "use the reference colours"). */
-async function dominantColors(src: string): Promise<string[]> {
-  const im = await new Promise<HTMLImageElement>((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = src; });
-  const c = document.createElement("canvas"); c.width = 48; c.height = 48;
-  const x = c.getContext("2d", { willReadFrequently: true })!; x.drawImage(im, 0, 0, 48, 48);
-  const d = x.getImageData(0, 0, 48, 48).data;
-  const bins = new Map<string, { n: number; r: number; g: number; b: number; sat: number }>();
-  for (let i = 0; i < d.length; i += 4) {
-    if (d[i + 3] < 128) continue;
-    const r = d[i], g = d[i + 1], b = d[i + 2];
-    const k = `${r >> 5},${g >> 5},${b >> 5}`;
-    const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
-    const e = bins.get(k) ?? { n: 0, r: 0, g: 0, b: 0, sat: 0 };
-    e.n++; e.r += r; e.g += g; e.b += b; e.sat += mx ? (mx - mn) / mx : 0;
-    bins.set(k, e);
-  }
-  const hex = (e: { n: number; r: number; g: number; b: number }) => `#${[e.r, e.g, e.b].map((v) => Math.round(v / e.n).toString(16).padStart(2, "0")).join("")}`;
-  const ranked = [...bins.values()].sort((a, b) => b.n * (0.4 + b.sat / b.n) - a.n * (0.4 + a.sat / a.n));
-  const out: string[] = [];
-  for (const e of ranked) { const h = hex(e); if (!out.some((o) => Math.abs(parseInt(o.slice(1), 16) - parseInt(h.slice(1), 16)) < 0x202020)) out.push(h); if (out.length === 2) break; }
-  return out;
-}
-
 type PhotoState = { file?: File; preview: string; cutout: boolean; uploadId: string | null; busy: boolean };
 type Step = { key: string; label: string; state: "wait" | "run" | "done" | "warn"; note?: string };
 
@@ -92,13 +64,12 @@ export function CreateCard({ onDone, onCancel, from, regen }: { onDone: (groupId
   const qc = useQueryClient();
   const opts = useOptions();
   const fileRef = useRef<HTMLInputElement>(null);
-  const refRef = useRef<HTMLInputElement>(null);
   const [photo, setPhoto] = useState<PhotoState | null>(null);
   const [photoError, setPhotoError] = useState<unknown>(null);
   const [dragging, setDragging] = useState(false);
-  const [reference, setReference] = useState<{ preview: string; uploadId: string | null; colors: string[]; busy: boolean } | null>(null);
   const [f, setF] = useState({ name: "", features: "", benefits: "", price: "", oldPrice: "", marketplace: "uzum" as MarketplaceKey, language: (["uz", "ru", "en"].includes(lang) ? lang : "uz") as CardInput["language"] });
-  const [cfg, setCfg] = useState<Omit<GenConfig, "size">>({ style: defaultStyle("uzum"), layouts: MARKETPLACE_LAYOUTS.uzum.slice(0, 2), angle: "auto", aiPhoto: true, variations: 1, ratio: "3:4" });
+  // a theme is a folder of five designs; the camera angle is left to the AI
+  const [cfg, setCfg] = useState<Omit<GenConfig, "size">>({ style: defaultStyle("uzum"), layouts: themeLayouts(defaultStyle("uzum").theme), angle: "auto", aiPhoto: true, variations: 1, ratio: "3:4" });
   const [customColors, setCustomColors] = useState(false);
   const [more, setMore] = useState(true);
   const [gallery, setGallery] = useState(false);
@@ -118,7 +89,7 @@ export function CreateCard({ onDone, onCancel, from, regen }: { onDone: (groupId
   const firstPlatform = useRef(true);
   useEffect(() => {
     if (firstPlatform.current) { firstPlatform.current = false; return; }
-    if (platform) setCfg((c) => ({ ...c, ratio: platform.ratio, layouts: MARKETPLACE_LAYOUTS[f.marketplace].slice(0, Math.max(1, Math.min(4, c.layouts.length))) }));
+    if (platform) setCfg((c) => ({ ...c, ratio: platform.ratio }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [f.marketplace]);
 
@@ -139,9 +110,8 @@ export function CreateCard({ onDone, onCancel, from, regen }: { onDone: (groupId
         const up = i.originalUploadId ?? card.photoUploadId;
         if (up) setPhoto({ preview: `/api/files/${up}`, cutout: i.photoCutout ?? true, uploadId: up, busy: false });
         if (i.config) {
-          setCfg({ style: i.config.style, layouts: i.config.layouts, angle: i.config.angle, aiPhoto: i.config.aiPhoto, variations: i.config.variations, ratio: i.config.ratio });
+          setCfg({ style: i.config.style, layouts: i.config.layouts, angle: "auto", aiPhoto: i.config.aiPhoto, variations: 1, ratio: i.config.ratio });
           if (i.config.style.colors?.main) setCustomColors(true);
-          if (i.config.referenceUploadId) setReference({ preview: `/api/files/${i.config.referenceUploadId}`, uploadId: i.config.referenceUploadId, colors: [], busy: false });
         } else setCfg((c) => ({ ...c, layouts: list.map((x) => x.layout).filter((l, k, a) => a.indexOf(l) === k).slice(0, 4) }));
       } catch (e) { setError(e); } finally { if (alive) setPrefilled(true); }
     })();
@@ -176,25 +146,11 @@ export function CreateCard({ onDone, onCancel, from, regen }: { onDone: (groupId
       setPhoto({ file, preview: URL.createObjectURL(file), cutout: false, uploadId: r.upload.id, busy: false });
     } catch (e) { setPhoto({ ...photo, busy: false }); setPhotoError(e); }
   };
-  const pickReference = async (file: File | undefined) => {
-    if (!file) return;
-    const preview = URL.createObjectURL(file);
-    setReference({ preview, uploadId: null, colors: [], busy: true });
-    try {
-      const colors = await dominantColors(preview).catch(() => []);
-      const fd = new FormData(); fd.append("file", file);
-      const r = await upload<{ upload: { id: string } }>("/studio/uploads", fd);
-      setReference({ preview, uploadId: r.upload.id, colors, busy: false });
-    } catch (e) { setReference(null); toast("error", errorMessage(e)); } finally { if (refRef.current) refRef.current.value = ""; }
-  };
-
+  /** Open a theme's folder: its five designs, its background and light. */
   const applyTheme = (th: ThemePreset) => {
-    setCfg((c) => {
-      const suggested = th.suggest.layout as LayoutKey | "";
-      const layouts = suggested ? [suggested, ...c.layouts.filter((l) => l !== suggested)].slice(0, Math.max(1, c.layouts.length)) : c.layouts;
-      return { ...c, angle: th.suggest.angle || c.angle, layouts, style: { ...c.style, theme: th.key, background: (th.suggest.background || "auto") as BackgroundKey, lighting: (th.suggest.lighting || "soft") as LightKey } };
-    });
-    if (th.suggest.layout) setPreviewLayout(th.suggest.layout as LayoutKey);
+    const layouts = themeLayouts(th.key);
+    setCfg((c) => ({ ...c, layouts, style: { ...c.style, theme: th.key, background: (th.suggest.background || "auto") as BackgroundKey, lighting: (th.suggest.lighting || "soft") as LightKey } }));
+    setPreviewLayout(layouts[0]);
   };
 
   // live preview (redrawn a moment after typing stops)
@@ -207,9 +163,10 @@ export function CreateCard({ onDone, onCancel, from, regen }: { onDone: (groupId
   const toggleLayout = (l: LayoutKey) => setCfg((c) => {
     const has = c.layouts.includes(l);
     if (has && c.layouts.length === 1) return c;
-    return { ...c, layouts: has ? c.layouts.filter((x) => x !== l) : [...c.layouts, l].slice(-8) };
+    const order = themeLayouts(c.style.theme);
+    return { ...c, layouts: has ? c.layouts.filter((x) => x !== l) : order.filter((x) => x === l || c.layouts.includes(x)) };
   });
-  const cardsCount = Math.min(12, cfg.layouts.reduce((n, l) => n + (l === "multiAngle" || !aiPhoto ? 1 : cfg.variations), 0));
+  const cardsCount = cfg.layouts.length;
 
   const ready = Boolean(photo?.uploadId && input.name.length >= 2 && cfg.layouts.length > 0 && user?.emailVerified && prefilled);
   const setStep = (key: string, p: Partial<Step>) => setSteps((s) => s?.map((x) => (x.key === key ? { ...x, ...p } : x)) ?? null);
@@ -223,7 +180,7 @@ export function CreateCard({ onDone, onCancel, from, regen }: { onDone: (groupId
     const transparent = wantsTransparent(cfg);
     setSteps([
       { key: "texts", label: textAi ? t("The AI is writing the texts") : t("Preparing your texts"), state: "run" },
-      ...(aiPhoto ? [{ key: "photos", label: t("The AI is making the product photos"), state: "run" as const, note: `0/${cfg.variations}` }] : []),
+      ...(aiPhoto ? [{ key: "photos", label: t("The AI is making the product photo"), state: "run" as const }] : []),
       { key: "design", label: t("Drawing the designs"), state: "wait" },
       { key: "save", label: t("Saving"), state: "wait" },
     ]);
@@ -236,9 +193,9 @@ export function CreateCard({ onDone, onCancel, from, regen }: { onDone: (groupId
       const photosP = aiPhoto ? (async () => {
         try {
           const r = await post<{ generations: Generation[]; referenceStyle: string | null; limitMessage: string | null }>("/cards/photos", {
-            uploadId: photo.uploadId, productName: input.name, platform: f.marketplace, theme: cfg.style.theme, angle: cfg.angle, background: cfg.style.background,
-            lighting: cfg.style.lighting, shadow: Math.round(cfg.style.shadow), ratio: cfg.ratio, count: cfg.variations, transparent,
-            colors: cfg.style.colors?.main ? cfg.style.colors : undefined, referenceUploadId: reference?.uploadId ?? undefined,
+            uploadId: photo.uploadId, productName: input.name, platform: f.marketplace, theme: cfg.style.theme, angle: "auto", background: cfg.style.background,
+            lighting: cfg.style.lighting, shadow: Math.round(cfg.style.shadow), ratio: cfg.ratio, count: 1, transparent,
+            colors: cfg.style.colors?.main ? cfg.style.colors : undefined,
           });
           referenceStyle = r.referenceStyle;
           if (r.limitMessage) warnings.push(r.limitMessage);
@@ -275,7 +232,7 @@ export function CreateCard({ onDone, onCancel, from, regen }: { onDone: (groupId
       const docs = picked.map((j) => buildCard(j.layout, { copy, input, photo: j.photo, photos: { before: original, extra: j.extra }, style: cfg.style }, size));
       const thumbs = await Promise.all(docs.map(thumbOf));
       setStep("design", { state: "done" }); setStep("save", { state: "run" });
-      const config: GenConfig = { ...cfg, size, referenceUploadId: reference?.uploadId ?? null, referenceStyle };
+      const config: GenConfig = { ...cfg, angle: "auto", variations: 1, size, referenceUploadId: null, referenceStyle };
       const r = await post<{ cards: Full[] }>("/cards", {
         cards: docs.map((doc, i) => ({
           name: `${input.name} · ${t(LAYOUT_LABEL[picked[i].layout])}${photos.length > 1 && picked[i].layout !== "multiAngle" ? ` ${photos.indexOf(picked[i].photo) + 1}` : ""}`,
@@ -313,7 +270,7 @@ export function CreateCard({ onDone, onCancel, from, regen }: { onDone: (groupId
           {/* 1. photo */}
           <Section n={1} title={t("Product photo")}>
             <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={(e) => void pick(e.target.files?.[0])} data-testid="card-photo-input" />
-            <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_170px]">
+            <div>
               <div role="button" tabIndex={0} onClick={() => fileRef.current?.click()} onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && fileRef.current?.click()}
                 onDragOver={(e) => { e.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={(e) => { e.preventDefault(); setDragging(false); void pick(e.dataTransfer.files?.[0]); }}
                 className={cx("flex min-h-48 cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed p-4 text-center transition", dragging ? "border-brand-500 bg-brand-50 dark:bg-brand-500/10" : "border-slate-300 hover:border-brand-400 dark:border-slate-700")} data-testid="card-photo">
@@ -329,26 +286,6 @@ export function CreateCard({ onDone, onCancel, from, regen }: { onDone: (groupId
                     <p className="text-xs muted">{t("A photo on a plain (white) background works best: the background is removed automatically.")}</p>
                   </>
                 )}
-              </div>
-              {/* reference image */}
-              <div className="flex flex-col gap-2 rounded-xl border border-slate-200 p-3 text-xs dark:border-slate-700" data-testid="reference">
-                <p className="font-semibold">{t("Style reference (optional)")}</p>
-                <input ref={refRef} type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={(e) => void pickReference(e.target.files?.[0])} data-testid="reference-input" />
-                {reference ? (
-                  <>
-                    <div className="relative"><img src={reference.preview} alt="" className="h-24 w-full rounded-lg object-cover" />
-                      <button type="button" onClick={() => setReference(null)} aria-label={t("Remove")} className="absolute right-1 top-1 rounded-full bg-black/60 p-0.5 text-white"><X className="h-3.5 w-3.5" /></button></div>
-                    {reference.busy ? <span className="flex items-center gap-1 muted"><Loader2 className="h-3 w-3 animate-spin" />{t("Uploading securely…")}</span> : reference.colors.length > 0 && (
-                      <button type="button" className="flex items-center gap-1.5 text-brand-600 hover:underline dark:text-brand-400" data-testid="reference-colors"
-                        onClick={() => { setCustomColors(true); setStyle({ colors: { main: reference.colors[0], second: reference.colors[1] ?? reference.colors[0] } }); }}>
-                        {reference.colors.map((c) => <span key={c} className="h-3.5 w-3.5 rounded-full ring-1 ring-black/10" style={{ background: c }} />)}{t("Use these colours")}
-                      </button>
-                    )}
-                  </>
-                ) : (
-                  <Button size="sm" variant="secondary" icon={<ImageIcon className="h-4 w-4" />} onClick={() => refRef.current?.click()}>{t("Upload reference")}</Button>
-                )}
-                <p className="text-[11px] muted">{t("A picture whose look you like: the AI copies its style into the photo, and you can take its colours.")}</p>
               </div>
             </div>
             {photo?.file && !photo.busy && photo.cutout && (
@@ -393,7 +330,7 @@ export function CreateCard({ onDone, onCancel, from, regen }: { onDone: (groupId
             <p className="flex items-center gap-2 text-xs muted"><span className="h-3 w-3 rounded" style={{ background: brandOf(f.marketplace).primary }} />{t("Image size")}: <b className="text-current" data-testid="size-label">{size.w}×{size.h}</b> · {t("adapted to the platform's requirements")}</p>
           </Section>
 
-          {/* 4. theme */}
+          {/* 4. theme: every theme is a folder of five designs */}
           <Section n={4} title={t("Design theme")} testId="theme-section" right={<Button size="sm" icon={<PaletteIcon className="h-4 w-4" />} onClick={() => setGallery(true)} data-testid="explore-designs">{t("Explore all designs")}</Button>}>
             <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_220px] sm:items-end">
               <Field label={t("Theme")}>
@@ -402,45 +339,33 @@ export function CreateCard({ onDone, onCancel, from, regen }: { onDone: (groupId
               </Field>
               <p className="text-xs muted">{t(theme?.description ?? "")}</p>
             </div>
-            <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:thin]">
-              {THEMES.slice(0, 21).map((th) => (
-                <button key={th.key} type="button" onClick={() => applyTheme(th)} title={t(th.name)} data-theme-chip={th.key}
-                  className={cx("w-20 shrink-0 overflow-hidden rounded-lg border-2 text-left transition", cfg.style.theme === th.key ? "border-brand-500 ring-2 ring-brand-500/20" : "border-slate-200 hover:border-brand-300 dark:border-slate-700")}>
-                  <DocPreview doc={buildCard((th.suggest.layout || "hero") as LayoutKey, { ...layoutSample, style: { ...defaultStyle(f.marketplace), theme: th.key } }, thumbSize)} width={110} />
-                  <span className="block truncate px-1 py-0.5 text-[9px] font-semibold">{t(th.name)}</span>
-                </button>
-              ))}
+            <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:thin]" data-testid="theme-folders">
+              {THEMES.map((th) => <ThemeFolder key={th.key} th={th} sample={layoutSample} size={thumbSize} mp={f.marketplace} selected={cfg.style.theme === th.key} onClick={() => applyTheme(th)} small />)}
+            </div>
+            <div className="rounded-xl border border-slate-200 p-3 dark:border-slate-700" data-testid="theme-designs">
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <p className="flex items-center gap-1.5 text-sm font-semibold"><Folder className="h-4 w-4 text-brand-600" />{t(theme?.name ?? "")} · {t("{n} designs", { n: themeLayouts(cfg.style.theme).length })}</p>
+                <span className="text-xs muted">{t("{n} selected — one card is made for each", { n: cfg.layouts.length })}</span>
+              </div>
+              <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+                {themeLayouts(cfg.style.theme).map((l) => {
+                  const on = cfg.layouts.includes(l);
+                  return (
+                    <button key={l} type="button" aria-pressed={on} data-layout={l} onClick={() => { toggleLayout(l); setPreviewLayout(l); }}
+                      className={cx("relative overflow-hidden rounded-lg border-2 text-left transition", on ? "border-brand-500 ring-2 ring-brand-500/20" : "border-slate-200 opacity-60 hover:opacity-100 dark:border-slate-700")}>
+                      <DocPreview doc={buildCard(l, layoutSample, thumbSize)} width={170} />
+                      <span className={cx("absolute right-1 top-1 grid h-5 w-5 place-items-center rounded-full text-white shadow", on ? "bg-brand-600" : "bg-slate-900/40")}>{on && <Check className="h-3.5 w-3.5" />}</span>
+                      <span className="block truncate px-1.5 py-1 text-[10px] font-semibold">{t(LAYOUT_LABEL[l])}</span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </Section>
 
-          {/* 5. camera angle */}
-          <Section n={5} title={t("Camera angle")} testId="angle-section">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Field label={t("Angle")}>
-                <Select value={cfg.angle} onChange={(e) => setCfg({ ...cfg, angle: e.target.value })} disabled={!aiPhoto} data-testid="angle-select"
-                  options={ANGLE_OPTIONS.map(([k, l]) => ({ value: k, label: t(l) }))} />
-              </Field>
-              <p className="self-end text-xs muted">{aiPhoto ? (cfg.angle === "multiple" ? t("Each variation is shot from another angle (front, 45°, side, detail).") : t("The AI re-shoots your product from this angle; the product itself stays the same.")) : t("Camera angles need the AI product photo (turn it on below).")}</p>
-            </div>
-          </Section>
-
-          {/* 6. composition + background */}
-          <Section n={6} title={t("Layout and background")} testId="layout-section" right={<span className="text-xs muted">{t("{n} selected", { n: cfg.layouts.length })}</span>}>
-            <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 xl:grid-cols-6">
-              {layoutsFor(f.marketplace).map((l) => {
-                const on = cfg.layouts.includes(l);
-                return (
-                  <button key={l} type="button" aria-pressed={on} data-layout={l} onClick={() => { toggleLayout(l); setPreviewLayout(l); }}
-                    className={cx("relative overflow-hidden rounded-lg border-2 text-left transition", on ? "border-brand-500 ring-2 ring-brand-500/20" : "border-slate-200 opacity-75 hover:opacity-100 dark:border-slate-700")}>
-                    <DocPreview doc={buildCard(l, layoutSample, thumbSize)} width={150} />
-                    <span className={cx("absolute right-1 top-1 grid h-5 w-5 place-items-center rounded-full text-white shadow", on ? "bg-brand-600" : "bg-slate-900/40")}>{on && <Check className="h-3.5 w-3.5" />}</span>
-                    <span className="block truncate px-1.5 py-1 text-[10px] font-semibold">{t(LAYOUT_LABEL[l])}</span>
-                  </button>
-                );
-              })}
-            </div>
+          {/* 5. background */}
+          <Section n={5} title={t("Background")} testId="layout-section">
             <div>
-              <p className="mb-2 text-sm font-semibold">{t("Background")}</p>
               <div className="flex flex-wrap gap-2" role="radiogroup" data-testid="background-picker">
                 {BG_OPTIONS.map((b) => (
                   <button key={b.key} type="button" role="radio" aria-checked={cfg.style.background === b.key} onClick={() => setStyle({ background: b.key })} data-bg={b.key}
@@ -458,7 +383,7 @@ export function CreateCard({ onDone, onCancel, from, regen }: { onDone: (groupId
           {/* 7. customisation */}
           <Card className="p-5" data-testid="custom-section">
             <button type="button" onClick={() => setMore((v) => !v)} aria-expanded={more} className="flex w-full items-center justify-between">
-              <span className="font-semibold">7. {t("Colours, text and light")}</span><ChevronDown className={cx("h-4 w-4 transition", more && "rotate-180")} />
+              <span className="font-semibold">6. {t("Colours, text and light")}</span><ChevronDown className={cx("h-4 w-4 transition", more && "rotate-180")} />
             </button>
             {more && (
               <div className="mt-4 grid gap-4 sm:grid-cols-2">
@@ -490,7 +415,7 @@ export function CreateCard({ onDone, onCancel, from, regen }: { onDone: (groupId
               <div className="flex flex-wrap gap-1">{cfg.layouts.map((l) => <button key={l} type="button" onClick={() => setPreviewLayout(l)} className={cx("rounded-full border px-2 py-0.5 text-[10px] font-semibold", l === shownLayout ? "border-brand-500 text-brand-600" : "border-slate-200 muted dark:border-slate-700")}>{t(LAYOUT_LABEL[l])}</button>)}</div>
             )}
             <div className="flex flex-wrap gap-1 text-[10px]">
-              {[t(theme?.name ?? ""), t(BG_OPTIONS.find((b) => b.key === cfg.style.background)?.label ?? ""), aiPhoto ? t(ANGLE_OPTIONS.find(([k]) => k === cfg.angle)?.[1] ?? "") : null, t(LIGHT_OPTIONS.find(([k]) => k === cfg.style.lighting)?.[1] ?? "")].filter(Boolean).map((x, i) => <span key={i} className="rounded-full bg-slate-100 px-2 py-0.5 dark:bg-slate-800">{x}</span>)}
+              {[t(theme?.name ?? ""), t(BG_OPTIONS.find((b) => b.key === cfg.style.background)?.label ?? ""), t(LIGHT_OPTIONS.find(([k]) => k === cfg.style.lighting)?.[1] ?? "")].filter(Boolean).map((x, i) => <span key={i} className="rounded-full bg-slate-100 px-2 py-0.5 dark:bg-slate-800">{x}</span>)}
             </div>
             <p className="text-[11px] muted">{t("The preview shows sample texts. Your card gets the texts written by the AI from your product data.")}</p>
           </Card>
@@ -500,14 +425,9 @@ export function CreateCard({ onDone, onCancel, from, regen }: { onDone: (groupId
               <input type="checkbox" checked={aiPhoto} disabled={!imageAi} onChange={(e) => setCfg({ ...cfg, aiPhoto: e.target.checked })} className="mt-1" data-testid="ai-photo-toggle" />
               <span>
                 <span className="block text-sm font-semibold">{t("AI product photo")}</span>
-                <span className="block text-xs muted">{imageAi ? t("The AI re-shoots your product in the chosen theme, angle, background and light. The product's shape, colours and details stay exactly as they are.") : t("AI image generation is not connected on this server: your own photo is used.")}</span>
+                <span className="block text-xs muted">{imageAi ? t("The AI re-shoots your product in the chosen theme, background and light and picks the best angle itself. The product's shape, colours and details stay exactly as they are. Uses one AI image from your limit.") : t("AI image generation is not connected on this server: your own photo is used.")}</span>
               </span>
             </label>
-            {aiPhoto && (
-              <Field label={t("Number of variations")}>
-                <Select value={String(cfg.variations)} onChange={(e) => setCfg({ ...cfg, variations: Number(e.target.value) })} data-testid="variations-select" options={[1, 2, 3, 4].map((n) => ({ value: String(n), label: t("{n} photo(s) · {n} AI image(s) from your limit", { n }) }))} />
-              </Field>
-            )}
             {error != null && <ErrorAlert error={error} />}
             {steps ? (
               <ul className="space-y-1.5 text-sm" data-testid="gen-steps">

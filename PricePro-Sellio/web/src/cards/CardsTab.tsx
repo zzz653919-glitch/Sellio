@@ -5,7 +5,7 @@
  * duplicated, deleted, compared and downloaded, and its settings reused.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, CheckSquare, Columns3, Copy, Download, LayoutGrid, Loader2, PencilLine, Plus, RefreshCw, Settings2, Sparkles, Square, Trash2, Wand2, ArrowLeft } from "lucide-react";
+import { Check, CheckSquare, Columns3, Folder, Copy, Download, LayoutGrid, Loader2, PencilLine, Plus, RefreshCw, Settings2, Sparkles, Square, Trash2, Wand2, ArrowLeft } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { ErrorAlert } from "../components/shared";
@@ -20,6 +20,7 @@ import { cardData, CopyPanel, DocPreview, downloadZip, MP_ORDER, slug, storeImag
 import { CreateCard } from "./CreateCard";
 import { brandOf, buildCard, LAYOUT_LABEL, layoutsFor, MARKETPLACE_LAYOUTS, type LayoutKey, type MarketplaceKey } from "./layouts";
 import type { ExportType } from "../studio/render";
+import { THEME_BY_KEY, type ThemeKey } from "./themes";
 
 const PALETTES = new Proxy({} as Record<MarketplaceKey, { primary: string }>, { get: (_t, k: string) => brandOf(k as MarketplaceKey) });
 
@@ -116,7 +117,7 @@ function CardTile({ c, selected, onSelect, onOpen, onRename, onDelete, actions, 
 }
 
 /** One creation = one session: the designs made for one product together. */
-type Session = { id: string; product: string; marketplace: MarketplaceKey; cards: Summary[]; updatedAt: string; w: number | null; h: number | null };
+type Session = { id: string; product: string; theme: string | null; marketplace: MarketplaceKey; cards: Summary[]; updatedAt: string; w: number | null; h: number | null };
 function sessionsOf(cards: Summary[]): Session[] {
   const by = new Map<string, Summary[]>();
   for (const c of cards) { const g = by.get(c.groupId); if (g) g.push(c); else by.set(c.groupId, [c]); }
@@ -124,7 +125,7 @@ function sessionsOf(cards: Summary[]): Session[] {
     const sorted = [...list].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
     const first = sorted[0];
     return {
-      id, cards: sorted, marketplace: first.marketplace, w: first.w, h: first.h,
+      id, cards: sorted, marketplace: first.marketplace, w: first.w, h: first.h, theme: first.theme ?? null,
       product: first.product || first.name.replace(/ · [^·]+$/, ""),
       updatedAt: sorted.reduce((m, c) => (c.updatedAt > m ? c.updatedAt : m), first.updatedAt),
     };
@@ -151,7 +152,7 @@ function SessionTile({ s, mpLabel, onOpen, onDelete }: { s: Session; mpLabel: st
       <div className="flex items-center gap-2 p-3">
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-bold" title={s.product}>{s.product}</p>
-          <p className="truncate text-[11px] muted">{t("{n} designs", { n: s.cards.length })}{s.w ? ` · ${s.w}×${s.h}` : ""} · {timeAgo(s.updatedAt)}</p>
+          <p className="flex items-center gap-1 truncate text-[11px] muted">{s.theme && THEME_BY_KEY[s.theme as ThemeKey] && <><Folder className="h-3 w-3 shrink-0 text-brand-600" /><span className="font-semibold text-brand-700 dark:text-brand-300">{t(THEME_BY_KEY[s.theme as ThemeKey].name)}</span> ·</>} {t("{n} designs", { n: s.cards.length })}{s.w ? ` · ${s.w}×${s.h}` : ""} · {timeAgo(s.updatedAt)}</p>
         </div>
         <Button size="sm" variant="secondary" onClick={onOpen}>{t("Open")}</Button>
         <button type="button" title={t("Delete")} aria-label={t("Delete")} onClick={onDelete} className="rounded-lg p-2 muted hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-500/10" data-testid="session-delete"><Trash2 className="h-4 w-4" /></button>

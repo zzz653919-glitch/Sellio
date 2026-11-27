@@ -2501,4 +2501,8 @@ export const UZ: Record<string, string> = {
   "Lifestyle scene": "Hayotiy sahna",
   "Premium advertising poster": "Premium reklama posteri",
   "Universal product design": "Universal dizayn",
+  "The AI is making the product photo": "AI mahsulot rasmini yaratmoqda",
+  "The AI re-shoots your product in the chosen theme, background and light and picks the best angle itself. The product's shape, colours and details stay exactly as they are. Uses one AI image from your limit.": "AI mahsulotingizni tanlangan mavzu, fon va yorug'likda qayta suratga oladi va eng yaxshi burchakni o'zi tanlaydi. Mahsulotning shakli, ranglari va detallari aynan o'zgarishsiz qoladi. Limitingizdan bitta AI rasm sarflanadi.",
+  "All themes": "Barcha mavzular",
+  "Choose this theme": "Shu mavzuni tanlash",
 };

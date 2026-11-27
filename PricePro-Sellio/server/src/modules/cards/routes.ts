@@ -173,9 +173,9 @@ type CardRow = {
 
 /** Preview images are served as files (cached by the browser), not inside the JSON. */
 const thumbUrl = (id: string, updatedAt: string, has: boolean) => (has ? `/api/cards/${id}/thumb?v=${encodeURIComponent(updatedAt)}` : null);
-type ListRow = Pick<CardRow, "id" | "group_id" | "name" | "marketplace" | "layout" | "created_at" | "updated_at"> & { w: number | null; h: number | null; has_thumb: number; product?: string | null };
+type ListRow = Pick<CardRow, "id" | "group_id" | "name" | "marketplace" | "layout" | "created_at" | "updated_at"> & { w: number | null; h: number | null; has_thumb: number; product?: string | null; theme?: string | null };
 const summary = (r: ListRow) => ({
-  id: r.id, groupId: r.group_id, name: r.name, product: r.product ?? null, marketplace: r.marketplace, layout: r.layout,
+  id: r.id, groupId: r.group_id, name: r.name, product: r.product ?? null, theme: r.theme ?? null, marketplace: r.marketplace, layout: r.layout,
   w: r.w == null ? null : Number(r.w), h: r.h == null ? null : Number(r.h), thumb: thumbUrl(r.id, r.updated_at, Boolean(r.has_thumb)), createdAt: r.created_at, updatedAt: r.updated_at,
 });
 const full = (r: CardRow) => {
@@ -197,7 +197,7 @@ cardsRouter.get("/", async (req, res) => {
   const rows = await all<ListRow>(
     `SELECT id, group_id, name, marketplace, layout, created_at, updated_at,
             json_extract(doc_json, '$.w') AS w, json_extract(doc_json, '$.h') AS h, (thumb IS NOT NULL) AS has_thumb,
-            json_extract(input_json, '$.name') AS product
+            json_extract(input_json, '$.name') AS product, json_extract(input_json, '$.config.style.theme') AS theme
        FROM product_cards WHERE user_id = ? ORDER BY updated_at DESC LIMIT 300`,
     currentUser(req).id,
   );

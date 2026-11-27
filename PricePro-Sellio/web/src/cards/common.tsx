@@ -16,7 +16,7 @@ import { makeZip } from "./zip";
 
 export type Platform = { label: string; ratio: Ratio; base: number; sizes: { w: number; h: number }[] };
 export type Options = { textAi: boolean; imageAi: boolean; marketplaces: Record<MarketplaceKey, Platform>; icons: string[] };
-export type Summary = { id: string; groupId: string; name: string; product?: string | null; marketplace: MarketplaceKey; layout: LayoutKey; w: number | null; h: number | null; thumb: string | null; createdAt: string; updatedAt: string };
+export type Summary = { id: string; groupId: string; name: string; product?: string | null; theme?: string | null; marketplace: MarketplaceKey; layout: LayoutKey; w: number | null; h: number | null; thumb: string | null; createdAt: string; updatedAt: string };
 /** Everything chosen in the generator; saved with every card of a session so it can be reused. */
 export type GenConfig = {
   style: StyleConfig; layouts: LayoutKey[]; angle: string; aiPhoto: boolean; variations: number; ratio: Ratio; size: { w: number; h: number };
