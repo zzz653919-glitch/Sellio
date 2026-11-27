@@ -3,12 +3,12 @@
  * the seller), the product photo and the price, in the marketplace's own colours; the result is an ordinary
  * editor document, so everything on it can be changed afterwards.
  */
-import { circle, glow, img, lin, pill, rad, rect, text, dots, type Part } from "../studio/templates/compose";
+import { arch, circle, dots, frame, glow, img, lin, pill, rad, rect, ring, stripes, text, type Part } from "../studio/templates/compose";
 import { iconSrc } from "../studio/icons";
 import type { Doc, El } from "../studio/types";
 
 export type MarketplaceKey = "uzum" | "wildberries" | "ozon" | "yandex" | "other";
-export type LayoutKey = "bold" | "hero" | "split" | "specs" | "minimal" | "dark";
+export type LayoutKey = "bold" | "hero" | "split" | "specs" | "minimal" | "dark" | "diagonal" | "frame" | "sale" | "circle" | "editorial" | "glass";
 
 export type CardCopy = {
   title: string; subtitle: string; badge: string;
@@ -39,7 +39,11 @@ export const MARKETPLACE_LAYOUTS: Record<MarketplaceKey, LayoutKey[]> = {
 };
 export const LAYOUT_LABEL: Record<LayoutKey, string> = {
   bold: "Bright", hero: "Product in focus", split: "Infographic callouts", specs: "Characteristics", minimal: "Minimal", dark: "Dark premium",
+  diagonal: "Diagonal", frame: "Frame", sale: "Sale", circle: "Circle", editorial: "Editorial", glass: "Glass gradient",
 };
+/** Every design; the marketplace's four recommended ones come first. */
+export const ALL_LAYOUTS: LayoutKey[] = ["bold", "hero", "split", "specs", "minimal", "dark", "diagonal", "frame", "sale", "circle", "editorial", "glass"];
+export const layoutsFor = (mp: MarketplaceKey): LayoutKey[] => [...MARKETPLACE_LAYOUTS[mp], ...ALL_LAYOUTS.filter((l) => !MARKETPLACE_LAYOUTS[mp].includes(l))];
 
 const HEAD = "Montserrat";
 const BODY = "Inter";
@@ -79,6 +83,17 @@ function price(c: Ctx, x: number, y: number, w: number, o: { color: string; bg?:
   out.push(text(c.input.price, x, y, w, 0.07, { role: "price", font: HEAD, size: o.size ?? 56, weight: 800, color: o.color, align: o.align ?? "left", valign: "middle", ...(o.bg ? { bg: pill(o.bg, 28, 12) } : {}) }));
   return out;
 }
+/** Discount in per cent from the two prices (only when both are numbers and the old one is higher). */
+function discountPct(c: Ctx): number | null {
+  const num = (s?: string) => { const d = (s ?? "").replace(/[^\d]/g, ""); return d ? Number(d) : NaN; };
+  const p = num(c.input.price), o = num(c.input.oldPrice);
+  if (!(p > 0 && o > p)) return null;
+  const pct = Math.round((1 - p / o) * 100);
+  return pct >= 1 && pct <= 95 ? pct : null;
+}
+/** Text colour that reads on the marketplace colour (black on Yandex yellow). */
+const onP = (p: Palette) => p.onPrimary;
+
 const badgeOf = (c: Ctx, x: number, y: number, bg: string, color: string): Part[] =>
   c.copy.badge ? [text(c.copy.badge, x, y, 0.34, 0.045, { role: "label", name: "Badge", font: HEAD, size: 28, weight: 800, upper: true, spacing: 0.04, color, valign: "middle", bg: pill(bg, 24, 10) })] : [];
 
@@ -251,6 +266,178 @@ const LAYOUTS: Record<LayoutKey, (c: Ctx) => { bg: Doc["bg"]; parts: Part[] }> =
         ...price(c, 0.25, 0.71, 0.5, { color: p.onAccent, bg: p.primary === "#FFCC00" ? p.primary : p.accent, align: "center", oldColor: "#FFFFFF" }),
         rect(0.06, 0.785, 0.88, 0.002, "rgba(255,255,255,0.15)"),
         ...cols,
+      ],
+    };
+  },
+
+  /** White card cut by a diagonal band in the marketplace colour; benefits as chips; price in a round badge. */
+  diagonal: (c) => {
+    const { p } = c;
+    const b = benefitsOf(c, 3);
+    const chips = b.flatMap((x, i) => {
+      const y = 0.745 + i * 0.07;
+      return [
+        text(x.title, 0.06, y, 0.56, 0.055, { font: BODY, size: 26, weight: 700, color: p.ink, valign: "middle", bg: pill("#FFFFFF", 66, 12) }),
+        icon(x.icon, p.primary === "#FFCC00" ? p.ink : p.primary, 0.098, y + 0.0275, 0.038),
+      ];
+    });
+    const has = Boolean(c.input.price);
+    return {
+      bg: "#FFFFFF",
+      parts: [
+        rect(-0.3, 0.46, 1.6, 0.8, lin(90, p.primary, p.grad2), 0, { rot: -14 }),
+        rect(-0.3, 0.435, 1.6, 0.014, p.accent, 0, { rot: -14 }),
+        dots(0.74, 0.03, 0.22, 0.12, p.primary, 0.25),
+        ...badgeOf(c, 0.06, 0.045, p.ink, "#FFFFFF"),
+        text(c.copy.title, 0.06, c.copy.badge ? 0.1 : 0.055, 0.84, 0.13, { role: "headline", font: HEAD, size: 80, weight: 800, color: p.ink, lineHeight: 1.03 }),
+        ...(c.copy.subtitle ? [text(c.copy.subtitle, 0.06, c.copy.badge ? 0.23 : 0.185, 0.8, 0.045, { role: "subline", font: BODY, size: 30, weight: 500, color: "#4B5563" })] : []),
+        product(c, 0.2, 0.25, 0.74, 0.47),
+        ...chips,
+        ...(has && c.input.oldPrice ? [text(c.input.oldPrice, 0.66, 0.705, 0.28, 0.035, { role: "oldPrice", font: BODY, size: 26, weight: 500, color: onP(p), strike: true, align: "center", opacity: 0.85 })] : []),
+        ...(has ? [text(c.input.price!, 0.665, 0.745, 0.27, 0.2, { role: "price", font: HEAD, size: 44, weight: 800, color: p.onAccent, align: "center", valign: "middle", lineHeight: 1.05, bg: { fill: p.accent, shape: "circle", padX: 16, padY: 16 } })] : []),
+      ],
+    };
+  },
+
+  /** Soft background in a coloured frame, product under an arch, elegant serif title. */
+  frame: (c) => {
+    const { p } = c;
+    const b = benefitsOf(c, 3);
+    const cw = b.length ? 0.8 / b.length : 0;
+    const cols = b.flatMap((x, i) => {
+      const cx = 0.1 + i * cw + cw / 2;
+      return [
+        icon(x.icon, p.primary === "#FFCC00" ? p.ink : p.primary, cx, 0.785, 0.05),
+        text(x.title, cx - cw / 2 + 0.01, 0.81, cw - 0.02, 0.04, { font: BODY, size: 22, weight: 700, color: p.ink, align: "center", valign: "middle" }),
+      ];
+    });
+    return {
+      bg: lin(180, p.soft, "#FFFFFF"),
+      parts: [
+        frame(0.035, 0.026, 0.93, 0.948, p.primary === "#FFCC00" ? p.ink : p.primary, 8, 36),
+        arch(0.18, 0.07, 0.64, 0.56, "#FFFFFF"),
+        product(c, 0.21, 0.11, 0.58, 0.48),
+        ...badgeOf(c, 0.08, 0.055, p.primary, p.onPrimary),
+        text(c.copy.title, 0.08, 0.635, 0.84, 0.08, { role: "headline", font: "Playfair Display", size: 62, weight: 700, color: p.ink, align: "center", lineHeight: 1.05 }),
+        ...(c.copy.subtitle ? [text(c.copy.subtitle, 0.1, 0.715, 0.8, 0.04, { role: "subline", font: BODY, size: 26, weight: 500, color: "#6B7280", align: "center" })] : []),
+        ...cols,
+        ...price(c, 0.22, 0.865, 0.56, { color: p.onPrimary, bg: p.primary, oldColor: p.ink, inline: true, align: "center" }),
+      ],
+    };
+  },
+
+  /** Bright sale card: stripes, a big discount star (from the two prices), price on a white band. */
+  sale: (c) => {
+    const { p } = c;
+    const pct = discountPct(c);
+    const star = pct ? `−${pct}%` : c.copy.badge;
+    const b = benefitsOf(c, 3);
+    const rows = b.flatMap((x, i) => {
+      const y = 0.805 + i * 0.055;
+      return [
+        icon(x.icon, p.primary === "#FFCC00" ? p.ink : p.primary, 0.64, y + 0.022, 0.034),
+        text(x.title, 0.67, y, 0.3, 0.045, { font: BODY, size: 22, weight: 700, color: p.ink, valign: "middle" }),
+      ];
+    });
+    return {
+      bg: lin(160, p.primary, p.grad2),
+      parts: [
+        stripes(0, 0, 1, 0.78, onP(p), 0.07),
+        ...(star ? [text(star, 0.62, 0.04, 0.33, 0.33 * 0.75, { role: "discount", font: HEAD, size: pct ? 70 : 40, weight: 900, color: p.onAccent, align: "center", valign: "middle", lineHeight: 1, bg: { fill: p.accent, shape: "burst", padX: 20, padY: 20 } })] : []),
+        text(c.copy.title, 0.06, 0.06, star ? 0.54 : 0.88, 0.17, { role: "headline", font: HEAD, size: 76, weight: 900, color: onP(p), lineHeight: 1.02, upper: true }),
+        ...(c.copy.subtitle ? [text(c.copy.subtitle, 0.06, 0.235, star ? 0.54 : 0.88, 0.05, { role: "subline", font: BODY, size: 28, weight: 500, color: onP(p), opacity: 0.9 })] : []),
+        glow(0.1, 0.25, 0.8, "rgba(255,255,255,0.35)"),
+        product(c, 0.1, 0.3, 0.8, 0.46),
+        rect(0, 0.78, 1, 0.22, "#FFFFFF"),
+        ...price(c, 0.06, 0.845, 0.54, { color: p.primary === "#FFCC00" ? p.ink : p.primary, size: 72, oldColor: "#6B7280" }),
+        ...rows,
+      ],
+    };
+  },
+
+  /** Product in a big circle, four benefits around it. */
+  circle: (c) => {
+    const { p } = c;
+    const b = benefitsOf(c, 4);
+    const spots = [[0.02, 0.3], [0.76, 0.3], [0.02, 0.56], [0.76, 0.56]];
+    const around = b.flatMap((x, i) => {
+      const [x0, y0] = spots[i];
+      const cx = x0 + 0.11;
+      return [
+        circle(cx - 0.04, y0, 0.08, p.primary),
+        icon(x.icon, p.onPrimary, cx, y0 + 0.04, 0.044),
+        text(x.title, x0, y0 + 0.085, 0.22, 0.04, { font: HEAD, size: 24, weight: 800, color: p.ink, align: "center", valign: "middle" }),
+        ...(x.text ? [text(x.text, x0, y0 + 0.125, 0.22, 0.05, { font: BODY, size: 18, weight: 500, color: "#5B6472", align: "center", lineHeight: 1.15 })] : []),
+      ];
+    });
+    return {
+      bg: rad(0.5, 0.48, 0.75, "#FFFFFF", p.soft),
+      parts: [
+        text(c.copy.title, 0.06, 0.04, 0.88, 0.1, { role: "headline", font: HEAD, size: 70, weight: 800, color: p.ink, align: "center", lineHeight: 1.03 }),
+        ...(c.copy.subtitle ? [text(c.copy.subtitle, 0.1, 0.14, 0.8, 0.04, { role: "subline", font: BODY, size: 28, weight: 500, color: "#4B5563", align: "center" })] : []),
+        ...badgeOf(c, 0.33, 0.19, p.accent, p.onAccent),
+        circle(0.25, 0.25, 0.5, p.primary, { opacity: 0.14 }),
+        ring(0.22, 0.23, 0.56, p.primary === "#FFCC00" ? p.ink : p.primary, 3, { opacity: 0.5 }),
+        product(c, 0.27, 0.3, 0.46, 0.4),
+        ...around,
+        ...price(c, 0.2, 0.86, 0.6, { color: p.onPrimary, bg: p.primary, oldColor: p.ink, inline: true, align: "center" }),
+      ],
+    };
+  },
+
+  /** Magazine style: serif headline, a thin rule, numbered benefits beside a large product. */
+  editorial: (c) => {
+    const { p } = c;
+    const b = benefitsOf(c, 3);
+    const accent = p.primary === "#FFCC00" ? "#B88A00" : p.primary;
+    const list = b.flatMap((x, i) => {
+      const y = 0.37 + i * 0.16;
+      return [
+        text(`0${i + 1}`, 0.06, y, 0.2, 0.05, { font: HEAD, size: 44, weight: 800, color: accent }),
+        text(x.title, 0.06, y + 0.055, 0.28, 0.04, { font: BODY, size: 24, weight: 700, color: p.ink }),
+        ...(x.text ? [text(x.text, 0.06, y + 0.095, 0.28, 0.05, { font: BODY, size: 18, weight: 500, color: "#6B7280", lineHeight: 1.2 })] : []),
+      ];
+    });
+    return {
+      bg: "#F7F4EF",
+      parts: [
+        ...(c.copy.subtitle ? [text(c.copy.subtitle, 0.06, 0.045, 0.88, 0.035, { role: "subline", font: BODY, size: 22, weight: 600, color: accent, upper: true, spacing: 0.12 })] : []),
+        text(c.copy.title, 0.06, 0.085, 0.88, 0.17, { role: "headline", font: "Playfair Display", size: 90, weight: 700, color: p.ink, lineHeight: 1.0 }),
+        rect(0.06, 0.29, 0.88, 0.003, p.ink),
+        ...badgeOf(c, 0.06, 0.305, p.ink, "#FFFFFF"),
+        product(c, 0.34, 0.31, 0.62, 0.53),
+        ...list,
+        rect(0, 0.87, 1, 0.13, p.ink),
+        ...price(c, 0.06, 0.9, 0.6, { color: p.accent === "#FFD23F" || p.primary === "#FFCC00" ? "#FFD23F" : "#FFFFFF", oldColor: "#9CA3AF", inline: true }),
+      ],
+    };
+  },
+
+  /** Colour gradient with soft lights and a frosted-glass panel for the benefits. */
+  glass: (c) => {
+    const { p } = c;
+    const b = benefitsOf(c, 3);
+    const cw = b.length ? 0.84 / b.length : 0;
+    const cols = b.flatMap((x, i) => {
+      const cx = 0.08 + i * cw + cw / 2;
+      return [
+        icon(x.icon, onP(p), cx, 0.735, 0.048),
+        text(x.title, cx - cw / 2 + 0.01, 0.765, cw - 0.02, 0.04, { font: HEAD, size: 24, weight: 800, color: onP(p), align: "center", valign: "middle" }),
+        ...(x.text ? [text(x.text, cx - cw / 2 + 0.01, 0.805, cw - 0.02, 0.045, { font: BODY, size: 18, weight: 500, color: onP(p), align: "center", opacity: 0.85, lineHeight: 1.15 })] : []),
+      ];
+    });
+    return {
+      bg: lin(135, p.primary, p.grad2),
+      parts: [
+        glow(-0.25, -0.15, 0.9, `${p.accent}99`),
+        glow(0.45, 0.35, 0.9, "rgba(255,255,255,0.28)"),
+        ...badgeOf(c, 0.06, 0.04, "#FFFFFF", p.primary === "#FFCC00" ? p.ink : p.primary),
+        text(c.copy.title, 0.06, c.copy.badge ? 0.095 : 0.05, 0.88, 0.12, { role: "headline", font: HEAD, size: 78, weight: 800, color: onP(p), lineHeight: 1.03 }),
+        ...(c.copy.subtitle ? [text(c.copy.subtitle, 0.06, c.copy.badge ? 0.215 : 0.17, 0.85, 0.045, { role: "subline", font: BODY, size: 30, weight: 500, color: onP(p), opacity: 0.9 })] : []),
+        product(c, 0.14, 0.23, 0.72, 0.45),
+        rect(0.06, 0.7, 0.88, 0.17, "rgba(255,255,255,0.16)", 36, { stroke: "rgba(255,255,255,0.4)", strokeW: 2 }),
+        ...cols,
+        ...price(c, 0.22, 0.895, 0.56, { color: p.primary === "#FFCC00" ? p.ink : p.primary, bg: "#FFFFFF", oldColor: onP(p), inline: true, align: "center" }),
       ],
     };
   },

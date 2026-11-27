@@ -398,6 +398,8 @@ export type CardMode = {
   fileName: string;
   /** Extra tab in the side panel (the AI texts). */
   extra?: { label: string; content: ReactNode };
+  /** Extra tools for a selected picture (AI change of the words in it); `apply` puts a new picture in its place. */
+  imageTool?: (el: ImageEl, apply: (src: string) => Promise<void>) => ReactNode;
   status?: ReactNode;
 };
 
@@ -642,6 +644,11 @@ export default function Editor({ templateId = "", photo, onBack, favorite = fals
                 {productImage && !productImage.src.startsWith("art:") && (
                   <Button className="w-full" variant="secondary" loading={busy === "cut"} onClick={() => void removeBg(productImage)}>{t("Remove background")}</Button>
                 )}
+                {card?.imageTool && productImage && !productImage.src.startsWith("art:") && (
+                  <Button className="w-full" variant="secondary" icon={<Type className="h-4 w-4" />} onClick={() => { setSelected(productImage.id); setTab("element"); }} data-testid="ai-picture-open">
+                    {t("Change the words in the picture with AI")}
+                  </Button>
+                )}
                 <p className="text-[11px] muted">{t("Your photo goes exactly where the sample picture was. A plain background is removed automatically; a photo with a real background takes the template's frame (a circle stays a circle).")}</p>
                 <p className="text-[11px] muted">{t("Tip: drag a photo onto the design, or double-click the picture to replace it.")}</p>
                 <p className="text-[11px] muted">{t("Don't need something? Click it on the design and press Delete, or remove it in Layers.")}</p>
@@ -680,6 +687,7 @@ export default function Editor({ templateId = "", photo, onBack, favorite = fals
               )}
               {sel?.type === "text" && <TextProps e={sel} upd={(p, m) => upd(sel.id, p, m)} focusRef={textRef} />}
               {sel?.type === "image" && parseIcon(sel.src) && <IconProps e={sel} upd={(p, m) => upd(sel.id, p, m)} />}
+              {sel?.type === "image" && !parseIcon(sel.src) && card?.imageTool?.(sel, async (src) => { await loadSource(src); upd(sel.id, { src }); })}
               {sel?.type === "image" && !parseIcon(sel.src) && <ImageProps e={sel} upd={(p, m) => upd(sel.id, p, m)} onUpload={() => pickFile(sel.id)} onCutOut={() => void removeBg(sel)} cutting={busy === "cut"} />}
               {sel?.type === "shape" && <ShapeProps e={sel} upd={(p, m) => upd(sel.id, p, m)} />}
               {sel && (

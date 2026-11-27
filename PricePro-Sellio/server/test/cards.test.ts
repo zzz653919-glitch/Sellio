@@ -132,3 +132,27 @@ test("saved cards: created together, listed, renamed, autosaved, duplicated, del
   assert.equal((await client.get(`/api/cards/${one}`)).status, 404);
   assert.equal((await client.get("/api/cards")).data.items.length, 3);
 });
+
+test("words inside a card picture can be changed with AI (an AI image request; cut-outs stay transparent)", async () => {
+  const { setImageProviderForTests } = await import("../src/modules/studio/provider.js");
+  const calls: { prompt: string; transparent?: boolean }[] = [];
+  setImageProviderForTests({ name: "test", model: "m", edit: async (r: { prompt: string; transparent?: boolean }) => { calls.push(r); return makePng(300, 400); } } as never);
+  try {
+    const { client } = await newUser();
+    const id = await upload(client);
+    assert.equal((await client.post("/api/cards/edit-image", { uploadId: id, instructions: "x" })).status, 400);
+    const other = await newUser();
+    assert.equal((await other.client.post("/api/cards/edit-image", { uploadId: id, instructions: "yozuvni olib tashla" })).status, 404);
+    const r = await client.post("/api/cards/edit-image", { uploadId: id, instructions: "OVERSIZED FIT yozuvini olib tashla", transparent: true });
+    assert.equal(r.status, 202, JSON.stringify(r.data));
+    let g = r.data.generation;
+    for (let i = 0; i < 50 && !["succeeded", "failed"].includes(g.status); i++) { await new Promise((ok) => setTimeout(ok, 40)); g = (await client.get(`/api/studio/generations/${g.id}`)).data.generation; }
+    assert.equal(g.status, "succeeded");
+    assert.match(g.resultUrl, /^\/api\/files\//);
+    assert.match(calls[0].prompt, /Edit this advertising image/);
+    assert.match(calls[0].prompt, /OVERSIZED FIT yozuvini olib tashla/);
+    assert.equal(calls[0].transparent, true, "a cut-out picture is edited with a transparent background");
+    const sub = (await client.get("/api/subscription")).data;
+    assert.equal(sub.usage.metrics.requests.used, 1, "counted as one AI image");
+  } finally { setImageProviderForTests(null); }
+});

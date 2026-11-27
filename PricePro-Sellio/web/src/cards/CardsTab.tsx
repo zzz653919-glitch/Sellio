@@ -20,9 +20,10 @@ import { ensureFonts } from "../studio/fonts";
 import { readPhoto } from "../studio/photo";
 import { exportDoc, loadDocImages, renderTo, type ExportType } from "../studio/render";
 import { docFonts } from "../studio/thumbs";
-import type { Doc } from "../studio/types";
+import type { Doc, ImageEl } from "../studio/types";
+import type { Generation } from "../lib/types";
 import {
-  buildCard, LAYOUT_LABEL, MARKETPLACE_LAYOUTS, manualCopy, PALETTES, SAMPLE_COPY,
+  buildCard, LAYOUT_LABEL, layoutsFor, MARKETPLACE_LAYOUTS, manualCopy, PALETTES, SAMPLE_COPY,
   type CardCopy, type CardInput, type CardPhoto, type LayoutKey, type MarketplaceKey,
 } from "./layouts";
 import { makeZip } from "./zip";
@@ -102,7 +103,7 @@ function useDebounced<T>(value: T, ms: number): T {
 }
 
 /** A design drawn live (previews before saving). */
-function DocPreview({ doc, className }: { doc: Doc; className?: string }) {
+function DocPreview({ doc, className, width = 420 }: { doc: Doc; className?: string; width?: number }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const key = JSON.stringify(doc);
   useEffect(() => {
@@ -110,7 +111,7 @@ function DocPreview({ doc, className }: { doc: Doc; className?: string }) {
     void (async () => {
       await ensureFonts(docFonts(doc));
       await loadDocImages(doc);
-      if (alive && ref.current) renderTo(ref.current, doc, 420);
+      if (alive && ref.current) renderTo(ref.current, doc, width);
     })();
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -181,8 +182,9 @@ function CreateCard({ onDone, onCancel }: { onDone: (groupId: string) => void; o
   const sizes = opts.data?.marketplaces[f.marketplace]?.sizes ?? [{ w: 1080, h: 1440 }];
   const [size, setSize] = useState("");
   const sizeKey = sizes.some((z) => `${z.w}x${z.h}` === size) ? size : `${sizes[0].w}x${sizes[0].h}`;
-  const layouts = MARKETPLACE_LAYOUTS[f.marketplace];
-  const [chosen, setChosen] = useState<Set<LayoutKey>>(new Set(layouts));
+  // all twelve designs; the marketplace's four recommended ones come first and are picked by default
+  const layouts = layoutsFor(f.marketplace);
+  const [chosen, setChosen] = useState<Set<LayoutKey>>(new Set(MARKETPLACE_LAYOUTS[f.marketplace]));
   useEffect(() => { setChosen(new Set(MARKETPLACE_LAYOUTS[f.marketplace])); }, [f.marketplace]);
   const [step, setStep] = useState<string | null>(null);
   const [error, setError] = useState<unknown>(null);
@@ -337,7 +339,7 @@ function CreateCard({ onDone, onCancel }: { onDone: (groupId: string) => void; o
                   <button key={l} type="button" aria-pressed={on} data-layout={l}
                     onClick={() => setChosen((s) => { const n = new Set(s); if (n.has(l)) n.delete(l); else n.add(l); return n; })}
                     className={cx("group relative overflow-hidden rounded-xl border-2 text-left transition", on ? "border-brand-500 ring-4 ring-brand-500/15" : "border-slate-200 opacity-70 hover:opacity-100 dark:border-slate-800")}>
-                    <DocPreview doc={doc} />
+                    <DocPreview doc={doc} width={300} />
                     <span className={cx("absolute right-2 top-2 grid h-6 w-6 place-items-center rounded-full text-white shadow", on ? "bg-brand-600" : "bg-slate-900/40")}>{on && <Check className="h-4 w-4" />}</span>
                     <span className="block px-2 py-1.5 text-xs font-semibold">{t(LAYOUT_LABEL[l])}</span>
                   </button>
@@ -575,6 +577,92 @@ function GroupView({ groupId, open, onBack, onNew }: { groupId: string; open: (i
 }
 
 // ------------------------------------------------------------------ edit one card
+/** Everything a design is built from, as saved with the card. */
+function cardData(c: Full) {
+  const input = { name: c.input.name ?? c.name, features: c.input.features ?? [], benefits: c.input.benefits ?? [], price: c.input.price, oldPrice: c.input.oldPrice, marketplace: c.marketplace, language: c.input.language ?? "uz" } as CardInput;
+  const copy = { ...manualCopy(input), ...c.copy } as CardCopy;
+  const photo = c.photoUploadId ? { src: `/api/files/${c.photoUploadId}`, cutout: c.input.photoCutout ?? true } : null;
+  return { copy, input, photo };
+}
+
+/** Choose another design for a card (the texts and photo stay). */
+function DesignPicker({ c, current, size, onPick, busy }: { c: Full; current: string; size: { w: number; h: number }; onPick: (l: LayoutKey) => void; busy: boolean }) {
+  const { t } = useI18n();
+  const data = useMemo(() => cardData(c), [c]);
+  return (
+    <div className="space-y-2" data-testid="design-picker">
+      <p className="text-xs font-bold uppercase tracking-wide muted">{t("Change the design")}</p>
+      <div className="grid grid-cols-3 gap-2">
+        {layoutsFor(c.marketplace).map((l) => (
+          <button key={l} type="button" disabled={busy} onClick={() => l !== current && onPick(l)} data-design={l} title={t(LAYOUT_LABEL[l])}
+            className={cx("overflow-hidden rounded-lg border-2 text-left transition disabled:opacity-60", l === current ? "border-brand-500 ring-2 ring-brand-500/20" : "border-slate-200 hover:border-brand-300 dark:border-slate-700")}>
+            <DocPreview doc={buildCard(l, data, size)} width={150} />
+            <span className="block truncate px-1.5 py-1 text-[10px] font-semibold">{t(LAYOUT_LABEL[l])}</span>
+          </button>
+        ))}
+      </div>
+      <p className="text-[11px] muted">{t("The texts, price and photo stay; your manual changes on this card are replaced by the new design.")}</p>
+    </div>
+  );
+}
+
+const PICTURE_IDEAS = ["Remove all words from the picture", "Change the words in the picture to \"NEW\"", "Remove the logo from the picture", "Make the words in the picture bigger and clearer"];
+
+/**
+ * Change the words inside a picture (they are part of the photo, not editable text) with the AI image
+ * editor. One AI image from the plan's limit; the new picture replaces the old one on the card.
+ */
+function AiPictureEdit({ el, apply }: { el: ImageEl; apply: (src: string) => Promise<void> }) {
+  const { t } = useI18n();
+  const toast = useToast();
+  const qc = useQueryClient();
+  const [text, setText] = useState("");
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
+  const uploadId = /^\/api\/files\/([0-9a-f-]{36})/.exec(el.src)?.[1];
+  const run = async () => {
+    if (!uploadId) return;
+    setError(null); setBusy(t("Sending to the AI…"));
+    try {
+      // a cut-out product (no frame) is edited with a transparent background, so it stays cut out
+      const transparent = el.fit === "contain" && (el.mask ?? "none") === "none";
+      const r = await post<{ generation: Generation }>("/cards/edit-image", { uploadId, instructions: text.trim(), transparent });
+      setBusy(t("The AI is changing the picture… (up to a minute)"));
+      let g = r.generation;
+      const until = Date.now() + 4 * 60_000;
+      while (g.status !== "succeeded" && g.status !== "failed") {
+        if (Date.now() > until) throw new Error(t("The AI is taking too long. The result will appear in the AI Product Studio history."));
+        await new Promise((ok) => setTimeout(ok, 2000));
+        g = (await get<{ generation: Generation }>(`/studio/generations/${g.id}`)).generation;
+      }
+      qc.invalidateQueries({ queryKey: ["subscription"] });
+      qc.invalidateQueries({ queryKey: ["generations"] });
+      if (g.status === "failed" || !g.resultUrl) throw new Error(g.error ?? t("Generation failed"));
+      await apply(g.resultUrl);
+      setText("");
+      toast("success", t("The picture was changed."));
+    } catch (e) { setError(e); } finally { setBusy(null); }
+  };
+  return (
+    <div className="space-y-2 rounded-xl border border-brand-200 bg-brand-50/50 p-3 dark:border-brand-500/30 dark:bg-brand-500/5" data-testid="ai-picture">
+      <p className="flex items-center gap-1.5 text-sm font-semibold"><Wand2 className="h-4 w-4 text-brand-600" />{t("Change the words in the picture with AI")}</p>
+      <p className="text-[11px] muted">{t("Words that are part of the photo (printed on the product or on the background) cannot be typed over. Write what to do with them, the AI redraws the picture. Uses one AI image from your limit.")}</p>
+      {!uploadId ? <p className="text-xs muted">{t("Upload your product photo first.")}</p> : (
+        <>
+          <div className="flex flex-wrap gap-1">
+            {PICTURE_IDEAS.map((x) => <button key={x} type="button" onClick={() => setText(t(x))} className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[11px] hover:border-brand-400 dark:border-slate-700 dark:bg-slate-900">{t(x)}</button>)}
+          </div>
+          <textarea className="input min-h-16 text-sm" maxLength={500} value={text} onChange={(e) => setText(e.target.value)} placeholder={t("e.g. remove the words OVERSIZED FIT")} data-testid="ai-picture-input" />
+          {error != null && <ErrorAlert error={error} />}
+          <Button size="sm" className="w-full" disabled={text.trim().length < 3 || busy !== null} loading={busy !== null} onClick={() => void run()} icon={<Sparkles className="h-4 w-4" />} data-testid="ai-picture-apply">
+            {busy ?? t("Change the picture")}
+          </Button>
+        </>
+      )}
+    </div>
+  );
+}
+
 function CardEditor({ id, onBack }: { id: string; onBack: () => void }) {
   const { t } = useI18n();
   const toast = useToast();
@@ -584,6 +672,10 @@ function CardEditor({ id, onBack }: { id: string; onBack: () => void }) {
   const [status, setStatus] = useState<"saved" | "pending" | "saving" | "error">("saved");
   const pending = useRef<Doc | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastDoc = useRef<Doc | null>(null);
+  const [ver, setVer] = useState(0);
+  const [switching, setSwitching] = useState<LayoutKey | null>(null);
+  const [confirmLayout, setConfirmLayout] = useState<LayoutKey | null>(null);
   const flush = useCallback(async () => {
     if (timer.current) { clearTimeout(timer.current); timer.current = null; }
     const doc = pending.current;
@@ -603,6 +695,7 @@ function CardEditor({ id, onBack }: { id: string; onBack: () => void }) {
   }, [id, qc, toast]);
   const onChange = useCallback((doc: Doc) => {
     pending.current = doc;
+    lastDoc.current = doc;
     setStatus("pending");
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => void flush(), 1200);
@@ -615,11 +708,28 @@ function CardEditor({ id, onBack }: { id: string; onBack: () => void }) {
   const c = q.data;
   const original = useMemo(() => {
     if (!c) return null;
-    const input = { name: c.input.name ?? c.name, features: c.input.features ?? [], benefits: c.input.benefits ?? [], price: c.input.price, oldPrice: c.input.oldPrice, marketplace: c.marketplace, language: c.input.language ?? "uz" } as CardInput;
-    const copy = { ...manualCopy(input), ...c.copy } as CardCopy;
-    const photo = c.photoUploadId ? { src: `/api/files/${c.photoUploadId}`, cutout: c.input.photoCutout ?? true } : null;
-    return MARKETPLACE_LAYOUTS[c.marketplace] && LAYOUT_LABEL[c.layout] ? buildCard(c.layout, { copy, input, photo }, { w: c.doc.w, h: c.doc.h }) : c.doc;
+    return MARKETPLACE_LAYOUTS[c.marketplace] && LAYOUT_LABEL[c.layout] ? buildCard(c.layout, cardData(c), { w: c.doc.w, h: c.doc.h }) : c.doc;
   }, [c]);
+  /** Put another design on the card (saved at once; the editor starts again from it). */
+  const switchDesign = async (layout: LayoutKey) => {
+    if (!c) return;
+    setSwitching(layout);
+    try {
+      await flush();
+      const cur = lastDoc.current ?? c.doc;
+      const doc = buildCard(layout, cardData(c), { w: cur.w, h: cur.h });
+      const thumb = await thumbOf(doc);
+      // "Bag · Bright" becomes "Bag · Frame" (a name the user typed is kept)
+      const oldSuffix = ` · ${t(LAYOUT_LABEL[c.layout as LayoutKey] ?? c.layout)}`;
+      const name = c.name.endsWith(oldSuffix) ? `${c.name.slice(0, -oldSuffix.length)} · ${t(LAYOUT_LABEL[layout])}`.slice(0, 120) : undefined;
+      const r = await patch<{ card: Full }>(`/cards/${id}`, { layout, doc, thumb, ...(name ? { name } : {}) });
+      lastDoc.current = null;
+      qc.setQueryData(["card", id], r.card);
+      qc.invalidateQueries({ queryKey: ["cards"] });
+      setVer((v) => v + 1);
+      toast("success", t("Design changed"));
+    } catch (e) { toast("error", errorMessage(e)); } finally { setSwitching(null); }
+  };
   if (q.isLoading) return <Card className="grid h-64 place-items-center"><Loader2 className="h-6 w-6 animate-spin text-brand-600" /></Card>;
   if (q.error || !c || !original) return <div className="space-y-3"><ErrorAlert error={q.error} /><Button variant="ghost" onClick={onBack}>{t("My cards")}</Button></div>;
   const mpLabel = t(opts.data?.marketplaces[c.marketplace]?.label ?? c.marketplace);
@@ -629,15 +739,30 @@ function CardEditor({ id, onBack }: { id: string; onBack: () => void }) {
     </span>
   );
   return (
+    <>
     <Editor
+      key={`${c.layout}:${ver}`}
       onBack={() => { void flush().then(onBack); }}
       card={{
         doc: c.doc, original, title: c.name, subtitle: `${mpLabel} · ${t(LAYOUT_LABEL[c.layout] ?? c.layout)}`, backLabel: t("My cards"),
         sizes: opts.data?.marketplaces[c.marketplace]?.sizes ?? [{ w: c.doc.w, h: c.doc.h }],
         onChange, storeImage: (u) => storeImage(u), fileName: slug(c.name), status: statusEl,
-        extra: { label: t("AI texts"), content: <CopyPanel copy={c.copy} compact /> },
+        extra: {
+          label: t("Design and texts"),
+          content: (
+            <div className="space-y-5">
+              <DesignPicker c={c} current={c.layout} size={{ w: (lastDoc.current ?? c.doc).w, h: (lastDoc.current ?? c.doc).h }} onPick={setConfirmLayout} busy={switching !== null} />
+              <div className="space-y-2"><p className="text-xs font-bold uppercase tracking-wide muted">{t("AI texts")}</p><CopyPanel copy={c.copy} compact /></div>
+            </div>
+          ),
+        },
+        imageTool: (el, apply) => <AiPictureEdit key={el.id} el={el} apply={apply} />,
       }}
     />
+    <ConfirmDialog open={Boolean(confirmLayout)} title={t("Change the design?")} text={t("The card gets the new design with the same texts, price and photo. Changes you made by hand on this card are replaced.")}
+      confirmLabel={t("Change")} loading={switching !== null} onClose={() => setConfirmLayout(null)}
+      onConfirm={() => { const l = confirmLayout; setConfirmLayout(null); if (l) void switchDesign(l); }} />
+    </>
   );
 }
 

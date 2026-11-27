@@ -16,6 +16,7 @@ import { logActivity } from "../../services/activity.js";
 import { completeJson, LANGUAGE_NAME } from "../../services/llm.js";
 import { assertWithinLimit, recordAiRequest } from "../../services/plans.js";
 import { getOwnedUpload, readUpload } from "../../services/storage.js";
+import { createGeneration, understandEditRequest } from "../studio/service.js";
 
 export const cardsRouter = Router();
 cardsRouter.use(requireAuth);
@@ -219,7 +220,7 @@ const newCardSchema = z.object({
 /** Save the design variants made for one product (all at once, so they belong together). */
 cardsRouter.post("/", requireVerified, async (req, res) => {
   const user = currentUser(req);
-  const b = parseBody(req, z.object({ cards: z.array(newCardSchema).min(1).max(6) }));
+  const b = parseBody(req, z.object({ cards: z.array(newCardSchema).min(1).max(12) }));
   const photos = new Set(b.cards.map((c) => c.photoUploadId).filter((x): x is string => Boolean(x)));
   for (const p of photos) await getOwnedUpload(user.id, p);
   const count = (await get<{ n: number }>("SELECT COUNT(*) AS n FROM product_cards WHERE user_id = ?", user.id))?.n ?? 0;
@@ -245,10 +246,10 @@ cardsRouter.post("/", requireVerified, async (req, res) => {
 cardsRouter.patch("/:id", async (req, res) => {
   const user = currentUser(req);
   const r = await owned(user.id, param(req, "id"));
-  const b = parseBody(req, z.object({ name: z.string().trim().min(1).max(120).optional(), doc: docSchema.optional(), thumb: thumbSchema.optional(), copy: copySchema.optional() }));
+  const b = parseBody(req, z.object({ name: z.string().trim().min(1).max(120).optional(), layout: z.string().trim().min(1).max(40).optional(), doc: docSchema.optional(), thumb: thumbSchema.optional(), copy: copySchema.optional() }));
   await run(
-    "UPDATE product_cards SET name = ?, doc_json = ?, thumb = ?, copy_json = ?, updated_at = ? WHERE id = ? AND user_id = ?",
-    b.name ?? r.name, b.doc ? JSON.stringify(b.doc) : r.doc_json, b.thumb ?? r.thumb, b.copy ? JSON.stringify(b.copy) : r.copy_json, nowIso(), r.id, user.id,
+    "UPDATE product_cards SET name = ?, layout = ?, doc_json = ?, thumb = ?, copy_json = ?, updated_at = ? WHERE id = ? AND user_id = ?",
+    b.name ?? r.name, b.layout ?? r.layout, b.doc ? JSON.stringify(b.doc) : r.doc_json, b.thumb ?? r.thumb, b.copy ? JSON.stringify(b.copy) : r.copy_json, nowIso(), r.id, user.id,
   );
   res.json({ card: full(await owned(user.id, r.id)) });
 });
@@ -272,6 +273,26 @@ cardsRouter.delete("/:id", async (req, res) => {
   const r = await run("DELETE FROM product_cards WHERE id = ? AND user_id = ?", param(req, "id"), user.id);
   if (!r.changes) throw notFound("Card not found");
   res.json({ ok: true });
+});
+
+/**
+ * Change a picture used on a card with AI — for example the words printed in it ("remove the OVERSIZED FIT
+ * text", "change the text to NEW"). Runs as an AI image request (counted in the plan's AI image limit); the
+ * browser follows it like any AI Product Studio generation and puts the result on the card.
+ */
+cardsRouter.post("/edit-image", requireVerified, serviceLimiter, async (req, res) => {
+  const user = currentUser(req);
+  const b = parseBody(req, z.object({ uploadId: z.uuid(), instructions: z.string().trim().min(3, "Describe the change").max(500), transparent: z.boolean().default(false) }));
+  const up = await getOwnedUpload(user.id, b.uploadId);
+  const ratio = (up.width ?? 1) / Math.max(1, up.height ?? 1);
+  const size = ratio > 1.2 ? "landscape" : ratio < 0.83 ? "portrait" : "square";
+  const understood = await understandEditRequest(b.instructions);
+  const generation = await createGeneration(user.id, {
+    uploadId: up.id, productName: (up.original_name ?? "Card picture").replace(/\.[a-z0-9]+$/i, "").slice(0, 120) || "Card picture", category: "Other",
+    style: "auto", background: b.transparent ? "transparent" : "auto",
+    settings: { size, quality: "medium", lighting: "soft", instructions: b.instructions, edit: true, ...understood },
+  });
+  res.status(202).json({ generation });
 });
 
 /** How many saved cards use an uploaded picture (so it is not deleted by accident). */
