@@ -35,6 +35,8 @@ export type GenerationInput = {
     changesProduct?: boolean;
     /** Whether it asks to show the product differently: on a hanger, on a mannequin or model, folded, in a hand… */
     changesPresentation?: boolean;
+    /** A prompt written by the server itself (product-card photos); never taken from a request body. */
+    customPrompt?: string;
   };
 };
 
@@ -181,7 +183,7 @@ export async function createGeneration(userId: string, input: GenerationInput, r
   // One request is reserved now; it is counted when the image is ready and given back if generation fails.
   await reserveRequest(userId, "generation", id);
   const now = nowIso();
-  const prompt = isEdit ? buildEditPrompt(input.settings.promptInstructions ?? input.settings.instructions ?? "", input.settings.changesProduct, input.settings.changesPresentation) : buildPrompt({
+  const prompt = input.settings.customPrompt ? input.settings.customPrompt : isEdit ? buildEditPrompt(input.settings.promptInstructions ?? input.settings.instructions ?? "", input.settings.changesProduct, input.settings.changesPresentation) : buildPrompt({
     productName: input.settings.nameFromFile ? "" : input.productName,
     category: input.category,
     style: input.style,

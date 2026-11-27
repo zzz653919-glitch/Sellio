@@ -772,4 +772,28 @@ CREATE TABLE product_cards (
 CREATE INDEX idx_cards_user ON product_cards(user_id, updated_at);
 `,
   },
+  {
+    // My Projects: product-card sessions can be kept there too.
+    version: 20,
+    sql: `
+CREATE TABLE projects_v20 (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  type TEXT NOT NULL CHECK (type IN ('advertisement','forecast','price_comparison','card_session')),
+  ref_id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  UNIQUE (user_id, type, ref_id)
+);
+INSERT INTO projects_v20 (id, user_id, type, ref_id, title, created_at, updated_at)
+  SELECT id, user_id, type, ref_id, title, created_at, updated_at FROM projects;
+DROP TABLE projects;
+ALTER TABLE projects_v20 RENAME TO projects;
+CREATE INDEX idx_projects_user ON projects(user_id, created_at);
+INSERT OR IGNORE INTO projects (id, user_id, type, ref_id, title, created_at, updated_at)
+  SELECT lower(hex(randomblob(16))), user_id, 'card_session', group_id, 'Cards — ' || COALESCE(json_extract(input_json, '$.name'), name), MIN(created_at), MAX(updated_at)
+    FROM product_cards GROUP BY user_id, group_id;
+`,
+  },
 ];

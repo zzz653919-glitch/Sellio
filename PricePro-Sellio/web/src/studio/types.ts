@@ -64,6 +64,8 @@ export type ImageEl = Base & {
   zoom?: number; dx?: number; dy?: number;
   flip?: boolean;
   shadow?: boolean;
+  /** Shadow strength (1 = normal, 0 = none, up to 2 = strong). */
+  shadowK?: number;
   /** Border in units around masked images. */
   border?: { color: string; width: number };
 };

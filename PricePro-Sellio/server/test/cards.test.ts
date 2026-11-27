@@ -35,7 +35,7 @@ const thumb = `data:image/jpeg;base64,${makePng(20, 20).toString("base64")}`;
 test("card texts: the AI writes them from the seller's facts and the photo; limits and checks apply", async () => {
   const { client } = await newUser();
   const opts = (await client.get("/api/cards/options")).data;
-  assert.deepEqual(Object.keys(opts.marketplaces), ["uzum", "wildberries", "ozon", "yandex", "other"]);
+  assert.deepEqual(Object.keys(opts.marketplaces), ["uzum", "wildberries", "ozon", "yandex", "amazon", "alibaba", "etsy", "shopify", "instagram", "tiktok", "universal", "other"]);
   assert.deepEqual(opts.marketplaces.uzum.sizes, [{ w: 1080, h: 1440 }]);
   const body = { name: "Charm sumka", features: ["Haqiqiy charm", "30×20 sm"], benefits: ["Uzoq xizmat qiladi"], price: "350 000 so'm", marketplace: "uzum", language: "uz" };
   // not configured: an honest error, nothing invented
@@ -65,6 +65,7 @@ test("card texts: the AI writes them from the seller's facts and the photo; limi
   assert.equal(c.extra, undefined);
   assert.match(sent, /inlineData|inline_data/, "the photo is sent to the AI");
   assert.match(sent, /Uzbek/);
+  assert.doesNotMatch(sent, /sellers in Uzbekistan/, "not only for Uzbek marketplaces");
   assert.match(sent, /Never invent/);
   // the request is counted as one AI text request
   const sub = (await client.get("/api/subscription")).data;
@@ -74,7 +75,7 @@ test("card texts: the AI writes them from the seller's facts and the photo; limi
   assert.equal((await other.client.post("/api/cards/copy", { ...body, uploadId: id })).status, 404);
   // validation
   assert.equal((await client.post("/api/cards/copy", { ...body, name: "" })).status, 400);
-  assert.equal((await client.post("/api/cards/copy", { ...body, marketplace: "amazon" })).status, 400);
+  assert.equal((await client.post("/api/cards/copy", { ...body, marketplace: "ebay-xyz" })).status, 400);
   disableAi();
 });
 
@@ -92,6 +93,13 @@ test("saved cards: created together, listed, renamed, autosaved, duplicated, del
   // embedded pictures (data: URLs) and foreign links are refused
   assert.equal((await client.post("/api/cards", { cards: [{ ...card("x"), doc: doc("data:image/png;base64,AAAA") }] })).status, 400);
   assert.equal((await client.post("/api/cards", { cards: [{ ...card("x"), doc: doc("https://evil.example/x.png") }] })).status, 400);
+  // built-in decorations (marble, flowers… drawn in the browser) are allowed
+  const deco = doc(src); deco.els.push({ id: "m", type: "image", src: "pattern:marble|a=#F4F3F1|b=#8C8C8C", x: 0, y: 0, w: 1, h: 1, fit: "cover" });
+  const dc = await client.post("/api/cards", { cards: [{ ...card("deco"), doc: deco }] });
+  assert.equal(dc.status, 201);
+  assert.equal((await client.del(`/api/cards/groups/${dc.data.cards[0].groupId}`)).status, 200);
+  const bad = doc(src); bad.els.push({ id: "m", type: "image", src: "pattern:marble|a=javascript:x", x: 0, y: 0, w: 1, h: 1, fit: "cover" });
+  assert.equal((await client.post("/api/cards", { cards: [{ ...card("bad"), doc: bad }] })).status, 400);
   assert.equal((await client.post("/api/cards", { cards: [{ ...card("x"), thumb: "javascript:alert(1)" }] })).status, 400);
 
   const list = (await client.get("/api/cards")).data.items;
@@ -164,4 +172,70 @@ test("words inside a card picture can be changed with AI (an AI image request; c
     const sub = (await client.get("/api/subscription")).data;
     assert.equal(sub.usage.metrics.requests.used, 1, "counted as one AI image");
   } finally { setImageProviderForTests(null); }
+});
+
+test("AI product photos follow the chosen theme, angles, background, light and shadow; the product must stay the same", async () => {
+  const { setImageProviderForTests } = await import("../src/modules/studio/provider.js");
+  const calls: { prompt: string; transparent?: boolean; size?: string }[] = [];
+  setImageProviderForTests({ name: "test", model: "m", edit: async (r: { prompt: string; transparent?: boolean; size?: string }) => { calls.push(r); return makePng(300, 300); } } as never);
+  try {
+    const { client } = await newUser();
+    const id = await upload(client);
+    const opts = (await client.get("/api/cards/options")).data;
+    assert.ok(["amazon", "alibaba", "etsy", "shopify", "instagram", "tiktok", "universal"].every((k) => opts.marketplaces[k]), "all platforms");
+    assert.equal(opts.marketplaces.instagram.ratio, "4:5");
+    assert.equal((await client.post("/api/cards/photos", { uploadId: id, platform: "amazon", theme: "not-a-theme" })).status, 400);
+    const r = await client.post("/api/cards/photos", { uploadId: id, productName: "Krossovka", platform: "instagram", theme: "dark-luxury", angle: "multiple", background: "marble", lighting: "dramatic", shadow: 80, ratio: "4:5", count: 3, colors: { main: "#111111", second: "#C9A227" } });
+    assert.equal(r.status, 202, JSON.stringify(r.data));
+    assert.equal(r.data.generations.length, 3);
+    for (const g of r.data.generations) {
+      let x = g;
+      for (let i = 0; i < 50 && !["succeeded", "failed"].includes(x.status); i++) { await new Promise((ok) => setTimeout(ok, 40)); x = (await client.get(`/api/studio/generations/${x.id}`)).data.generation; }
+      assert.equal(x.status, "succeeded");
+    }
+    assert.equal(calls.length, 3);
+    assert.match(calls[0].prompt, /THE PRODUCT MUST STAY EXACTLY THE SAME/);
+    assert.match(calls[0].prompt, /Instagram product card of "Krossovka"/);
+    assert.match(calls[0].prompt, /dark luxury/);
+    assert.match(calls[0].prompt, /marble/);
+    assert.match(calls[0].prompt, /dramatic directional light/);
+    assert.match(calls[0].prompt, /strong, defined shadow/);
+    assert.match(calls[0].prompt, /#111111 and #C9A227/);
+    assert.match(calls[0].prompt, /straight front view/);
+    assert.match(calls[1].prompt, /45-degree view/, "multiple angles: a different angle for each variation");
+    assert.match(calls[2].prompt, /side view/);
+    assert.equal(calls[0].size, "1024x1536", "portrait ratio");
+    // a plain background on the card: the product is made as a transparent cut-out
+    const t = await client.post("/api/cards/photos", { uploadId: id, platform: "amazon", theme: "light-minimal", angle: "front", background: "white", transparent: true, count: 1 });
+    assert.equal(t.status, 202);
+    await new Promise((ok) => setTimeout(ok, 300));
+    assert.equal(calls[3].transparent, true);
+    assert.match(calls[3].prompt, /transparent background/);
+    // every photo is one AI image
+    const sub = (await client.get("/api/subscription")).data;
+    assert.equal(sub.usage.metrics.requests.used, 4);
+    // the free limit (5) ends part way: the started photos are kept, the rest is reported
+    const l = await client.post("/api/cards/photos", { uploadId: id, platform: "amazon", theme: "pop", count: 3 });
+    assert.equal(l.status, 202, JSON.stringify(l.data));
+    assert.equal(l.data.generations.length, 1);
+    assert.ok(l.data.limitMessage);
+  } finally { setImageProviderForTests(null); }
+});
+
+test("a card session is kept in My Projects (and removed with it)", async () => {
+  const { client } = await newUser();
+  const photo = await upload(client);
+  const card = { name: "Krossovka · Bright", marketplace: "amazon", layout: "bold", photoUploadId: photo, input: { name: "Krossovka", config: { theme: "pop" } }, copy: { title: "Krossovka" }, doc: doc(`/api/files/${photo}`), thumb };
+  const c = await client.post("/api/cards", { cards: [card, { ...card, layout: "hero" }] });
+  assert.equal(c.status, 201);
+  const gid = c.data.cards[0].groupId;
+  assert.deepEqual(c.data.cards[0].input.config, { theme: "pop" }, "the settings are saved with the session");
+  const p = (await client.get("/api/projects?type=card_session")).data;
+  assert.equal(p.items.length, 1);
+  assert.equal(p.items[0].refId, gid);
+  assert.equal(p.items[0].title, "Cards — Krossovka");
+  assert.match(p.items[0].subtitle, /^2 designs/);
+  assert.match(p.items[0].thumbnailUrl, /\/api\/cards\/.+\/thumb/);
+  assert.equal((await client.del(`/api/cards/groups/${gid}`)).status, 200);
+  assert.equal((await client.get("/api/projects?type=card_session")).data.items.length, 0);
 });

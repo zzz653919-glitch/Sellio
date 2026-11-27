@@ -12,19 +12,35 @@ import { getGeneration } from "../studio/service.js";
 export const projectsRouter = Router();
 projectsRouter.use(requireAuth);
 
-export type ProjectType = "advertisement" | "forecast";
-const TYPES = ["advertisement", "forecast"] as const;
+export type ProjectType = "advertisement" | "forecast" | "card_session";
+const TYPES = ["advertisement", "forecast", "card_session"] as const;
+
+/** A product-card session (all designs made together for one product). */
+async function cardSession(userId: string, groupId: string) {
+  const rows = await all<{ id: string; name: string; marketplace: string; updated_at: string; has_thumb: number; product: string | null }>(
+    `SELECT id, name, marketplace, updated_at, (thumb IS NOT NULL) AS has_thumb, json_extract(input_json, '$.name') AS product
+       FROM product_cards WHERE user_id = ? AND group_id = ? ORDER BY created_at, rowid`, userId, groupId,
+  );
+  if (!rows.length) throw notFound("Cards not found");
+  return rows;
+}
 
 type ProjectRow = { id: string; user_id: string; type: ProjectType; ref_id: string; title: string; created_at: string; updated_at: string };
 
 /** Load the underlying record, enforcing ownership. Throws 404 when missing or foreign. */
 export async function loadItem(userId: string, type: ProjectType, refId: string) {
   if (type === "advertisement") return getGeneration(userId, refId);
+  if (type === "card_session") { const rows = await cardSession(userId, refId); return { productName: rows[0].product ?? rows[0].name, status: "succeeded" }; }
   return getMarketAnalysis(userId, refId);
 }
 
 async function summary(userId: string, p: ProjectRow) {
   try {
+    if (p.type === "card_session") {
+      const rows = await cardSession(userId, p.ref_id);
+      const first = rows.find((r) => r.has_thumb) ?? rows[0];
+      return { thumbnailUrl: first.has_thumb ? `/api/cards/${first.id}/thumb?v=${encodeURIComponent(first.updated_at)}` : null, subtitle: `${rows.length} designs · ${rows[0].marketplace}`, status: "succeeded", downloadUrl: null };
+    }
     if (p.type === "advertisement") {
       const g = await getGeneration(userId, p.ref_id);
       return { thumbnailUrl: g.resultUrl ?? g.originalUrl, subtitle: `${g.styleLabel} · ${g.category}`, status: g.status, downloadUrl: g.resultUrl ? `${g.resultUrl}?download=1` : null };
@@ -46,7 +62,7 @@ async function serialize(userId: string, p: ProjectRow) {
 
 const createSchema = z.object({
   type: z.enum(TYPES),
-  refId: z.uuid(),
+  refId: z.string().regex(/^[A-Za-z0-9-]{8,64}$/),
   title: z.string().trim().min(1).max(120).optional(),
 });
 
@@ -58,7 +74,7 @@ projectsRouter.post("/", async (req, res) => {
   const exists = await get("SELECT id FROM projects WHERE user_id = ? AND type = ? AND ref_id = ?", user.id, input.type, input.refId);
   if (exists) throw conflict("This item is already saved in My Projects.");
   const defaultTitle =
-    input.type === "advertisement" ? `Ad — ${item.productName}` : `Demand — ${item.query}`;
+    input.type === "advertisement" ? `Ad — ${item.productName}` : input.type === "card_session" ? `Cards — ${item.productName}` : `Demand — ${item.query}`;
   const id = newId();
   const now = nowIso();
   await run("INSERT INTO projects (id,user_id,type,ref_id,title,created_at,updated_at) VALUES (?,?,?,?,?,?,?)",
@@ -79,7 +95,7 @@ projectsRouter.get("/", async (req, res) => {
   const user = currentUser(req);
   const q = parseQuery(req, listSchema);
   // Only current item types (older price comparisons are no longer shown).
-  const where = ["user_id = ?", "type IN ('advertisement','forecast')"];
+  const where = ["user_id = ?", "type IN ('advertisement','forecast','card_session')"];
   const params: (string | number)[] = [user.id];
   if (q.type) { where.push("type = ?"); params.push(q.type); }
   if (q.q) { where.push("title LIKE ? ESCAPE '\\'"); params.push(likePattern(q.q)); }
@@ -87,7 +103,7 @@ projectsRouter.get("/", async (req, res) => {
   const [rows, totalRow, counts] = await Promise.all([
     all<ProjectRow>(`SELECT * FROM projects WHERE ${where.join(" AND ")} ORDER BY ${order} LIMIT ? OFFSET ?`, ...params, q.limit, q.offset),
     get<{ n: number }>(`SELECT COUNT(*) AS n FROM projects WHERE ${where.join(" AND ")}`, ...params),
-    all<{ type: string; n: number }>("SELECT type, COUNT(*) AS n FROM projects WHERE user_id = ? AND type IN ('advertisement','forecast') GROUP BY type", user.id),
+    all<{ type: string; n: number }>("SELECT type, COUNT(*) AS n FROM projects WHERE user_id = ? AND type IN ('advertisement','forecast','card_session') GROUP BY type", user.id),
   ]);
   const total = totalRow?.n ?? 0;
   res.json({ items: (await Promise.all(rows.map((p) => serialize(user.id, p)))), total, counts: Object.fromEntries(counts.map((c) => [c.type, c.n])) });

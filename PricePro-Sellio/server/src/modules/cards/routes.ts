@@ -17,17 +17,29 @@ import { completeJson, LANGUAGE_NAME } from "../../services/llm.js";
 import { assertWithinLimit, recordAiRequest } from "../../services/plans.js";
 import { getOwnedUpload, readUpload } from "../../services/storage.js";
 import { createGeneration, understandEditRequest } from "../studio/service.js";
+import { ANGLES, BACKGROUNDS, buildCardPhotoPrompt, LIGHTS, MULTI_ANGLES, THEMES, type AngleKey } from "./photos.js";
 
 export const cardsRouter = Router();
+const hexColor = z.string().regex(/^#[0-9a-fA-F]{6}$/, "Use a colour like #1F5BE0");
 cardsRouter.use(requireAuth);
 
-/** Marketplaces and the image sizes they accept (portrait 3:4 is the main card format on all of them). */
+/**
+ * Platforms and the image sizes they ask for. `ratio` is the recommended shape; `base` is the short side
+ * used when the user picks another ratio.
+ */
 export const MARKETPLACES = {
-  uzum: { label: "Uzum Market", sizes: [{ w: 1080, h: 1440 }] },
-  wildberries: { label: "Wildberries", sizes: [{ w: 900, h: 1200 }, { w: 1200, h: 1600 }] },
-  ozon: { label: "Ozon", sizes: [{ w: 900, h: 1200 }, { w: 1200, h: 1600 }, { w: 1200, h: 1200 }] },
-  yandex: { label: "Yandex Market", sizes: [{ w: 900, h: 1200 }, { w: 1000, h: 1000 }] },
-  other: { label: "Other marketplaces", sizes: [{ w: 1080, h: 1440 }, { w: 1080, h: 1080 }, { w: 1200, h: 1600 }] },
+  uzum: { label: "Uzum Market", ratio: "3:4", base: 1080, sizes: [{ w: 1080, h: 1440 }] },
+  wildberries: { label: "Wildberries", ratio: "3:4", base: 900, sizes: [{ w: 900, h: 1200 }, { w: 1200, h: 1600 }] },
+  ozon: { label: "Ozon", ratio: "3:4", base: 900, sizes: [{ w: 900, h: 1200 }, { w: 1200, h: 1600 }, { w: 1200, h: 1200 }] },
+  yandex: { label: "Yandex Market", ratio: "3:4", base: 900, sizes: [{ w: 900, h: 1200 }, { w: 1000, h: 1000 }] },
+  amazon: { label: "Amazon", ratio: "1:1", base: 2000, sizes: [{ w: 2000, h: 2000 }, { w: 1600, h: 1600 }] },
+  alibaba: { label: "Alibaba", ratio: "1:1", base: 1000, sizes: [{ w: 1000, h: 1000 }, { w: 800, h: 800 }] },
+  etsy: { label: "Etsy", ratio: "4:5", base: 2000, sizes: [{ w: 2000, h: 1600 }, { w: 2000, h: 2000 }, { w: 1600, h: 2000 }] },
+  shopify: { label: "Shopify", ratio: "1:1", base: 2048, sizes: [{ w: 2048, h: 2048 }, { w: 1600, h: 2000 }] },
+  instagram: { label: "Instagram", ratio: "4:5", base: 1080, sizes: [{ w: 1080, h: 1350 }, { w: 1080, h: 1080 }, { w: 1080, h: 1920 }] },
+  tiktok: { label: "TikTok Shop", ratio: "1:1", base: 1080, sizes: [{ w: 1080, h: 1080 }, { w: 1080, h: 1920 }] },
+  universal: { label: "Universal product design", ratio: "1:1", base: 1080, sizes: [{ w: 1080, h: 1080 }, { w: 1080, h: 1350 }, { w: 1080, h: 1440 }, { w: 1920, h: 1080 }, { w: 1080, h: 1920 }] },
+  other: { label: "Other marketplaces", ratio: "3:4", base: 1080, sizes: [{ w: 1080, h: 1440 }, { w: 1080, h: 1080 }, { w: 1200, h: 1600 }] },
 } as const;
 export type Marketplace = keyof typeof MARKETPLACES;
 const MP_KEYS = Object.keys(MARKETPLACES) as [Marketplace, ...Marketplace[]];
@@ -49,7 +61,7 @@ export type CardCopy = {
 };
 
 cardsRouter.get("/options", (_req, res) => {
-  res.json({ textAi: features.llm, marketplaces: MARKETPLACES, icons: CARD_ICONS });
+  res.json({ textAi: features.llm, imageAi: features.imageGeneration, marketplaces: MARKETPLACES, icons: CARD_ICONS });
 });
 
 // ---------- AI texts for a card ----------
@@ -109,7 +121,7 @@ cardsRouter.post("/copy", requireVerified, serviceLimiter, async (req, res) => {
   }
   const mp = MARKETPLACES[b.marketplace].label;
   const raw = await completeJson<Record<string, unknown>>({
-    system: `You write product cards for ${mp} sellers in Uzbekistan. Write every text in ${LANGUAGE_NAME[b.language]}.
+    system: `You write product cards for ${mp} sellers. Write every text in ${LANGUAGE_NAME[b.language]}.
 Rules: use only the facts the seller gives and what is clearly visible in the photo. Never invent specifications, materials, sizes, guarantees, certificates, awards, ratings, discounts or prices.
 Card texts must be short: they are printed on the picture. Benefits are for an infographic: a 1–3 word title and a short line.
 For each benefit choose the most fitting icon from this list: ${CARD_ICONS.join(", ")}.
@@ -133,7 +145,7 @@ Return JSON: {"title": "max 40 characters", "subtitle": "max 70 characters", "ba
 
 // ---------- saved cards ----------
 
-const ALLOWED_SRC = /^(art:|icon:|\/api\/files\/[0-9a-f-]{36}$)/;
+const ALLOWED_SRC = /^(art:|icon:|pattern:[a-z]+(\|[a-z]=(#[0-9a-fA-F]{3,8}|rgba?\([0-9., ]+\)))*$|\/api\/files\/[0-9a-f-]{36}$)/;
 const docSchema = z.object({
   v: z.literal(1),
   templateId: z.string().max(80),
@@ -239,6 +251,10 @@ cardsRouter.post("/", requireVerified, async (req, res) => {
     );
   }
   await logActivity(user.id, "cards_created", "studio", `Product cards created: ${b.cards[0].name}`, { refId: group });
+  // the session (with its settings) is kept in My Projects, to open and reuse later
+  const product = typeof b.cards[0].input.name === "string" && b.cards[0].input.name ? b.cards[0].input.name : b.cards[0].name;
+  await run("INSERT INTO projects (id,user_id,type,ref_id,title,created_at,updated_at) VALUES (?,?,?,?,?,?,?)",
+    newId(), user.id, "card_session", group, `Cards — ${String(product).slice(0, 100)}`, now, now);
   const rows = await all<CardRow>(`SELECT * FROM product_cards WHERE user_id = ? AND group_id = ? ORDER BY created_at, rowid`, user.id, group);
   res.status(201).json({ cards: rows.map(full) });
 });
@@ -274,6 +290,7 @@ cardsRouter.delete("/groups/:groupId", async (req, res) => {
   const user = currentUser(req);
   const r = await run("DELETE FROM product_cards WHERE group_id = ? AND user_id = ?", param(req, "groupId"), user.id);
   if (!r.changes) throw notFound("Cards not found");
+  await run("DELETE FROM projects WHERE user_id = ? AND type = 'card_session' AND ref_id = ?", user.id, param(req, "groupId"));
   res.json({ ok: true, deleted: r.changes });
 });
 
@@ -282,6 +299,68 @@ cardsRouter.delete("/:id", async (req, res) => {
   const r = await run("DELETE FROM product_cards WHERE id = ? AND user_id = ?", param(req, "id"), user.id);
   if (!r.changes) throw notFound("Card not found");
   res.json({ ok: true });
+});
+
+/**
+ * AI product photos in the chosen theme, camera angle, background and light (one AI image each). The
+ * browser follows the generations like any AI Product Studio generation and builds the cards from them.
+ */
+const photoSchema = z.object({
+  uploadId: z.uuid(),
+  productName: z.string().trim().max(120).optional(),
+  platform: z.enum(MP_KEYS),
+  theme: z.enum(Object.keys(THEMES) as [keyof typeof THEMES, ...(keyof typeof THEMES)[]]),
+  angle: z.enum([...Object.keys(ANGLES), "multiple"] as unknown as [AngleKey, ...AngleKey[]]).default("auto"),
+  background: z.enum(Object.keys(BACKGROUNDS) as [keyof typeof BACKGROUNDS, ...(keyof typeof BACKGROUNDS)[]]).default("auto"),
+  lighting: z.enum(Object.keys(LIGHTS) as [keyof typeof LIGHTS, ...(keyof typeof LIGHTS)[]]).default("soft"),
+  shadow: z.number().int().min(0).max(100).default(40),
+  ratio: z.enum(["1:1", "4:5", "3:4", "16:9", "9:16"]).default("1:1"),
+  count: z.number().int().min(1).max(4).default(1),
+  transparent: z.boolean().default(false),
+  colors: z.object({ main: hexColor.optional(), second: hexColor.optional() }).optional(),
+  referenceUploadId: z.uuid().optional(),
+});
+
+cardsRouter.post("/photos", requireVerified, serviceLimiter, async (req, res) => {
+  const user = currentUser(req);
+  const b = parseBody(req, photoSchema);
+  const up = await getOwnedUpload(user.id, b.uploadId);
+  // the look of a reference picture, put into words by the text AI (when it is available)
+  let referenceStyle: string | undefined;
+  if (b.referenceUploadId) {
+    const ref = await getOwnedUpload(user.id, b.referenceUploadId);
+    if (features.llm) {
+      try {
+        await assertWithinLimit(user.id, "ai");
+        const r = await completeJson<{ style?: unknown }>({
+          system: "Describe the visual style of this product photo or advertisement so a photographer can copy it: colours, background, surfaces, props, lighting, mood and composition. Do not describe the product itself. At most 50 words. Answer only with JSON: {\"style\": \"...\"}",
+          messages: [{ role: "user", content: "Describe the style.", images: [{ mime: ref.mime, data: await readUpload(ref) }] }],
+          maxTokens: 300,
+        });
+        if (typeof r.style === "string" && r.style.trim()) { referenceStyle = r.style.trim().slice(0, 400); await recordAiRequest(user.id, "card_reference"); }
+      } catch { /* the photos are made without it */ }
+    }
+  }
+  const size = b.ratio === "1:1" ? "square" : b.ratio === "16:9" ? "landscape" : "portrait";
+  const platform = MARKETPLACES[b.platform].label;
+  const generations = [];
+  let limitMessage: string | null = null;
+  for (let i = 0; i < b.count; i++) {
+    const angle = b.angle === "multiple" ? MULTI_ANGLES[i % MULTI_ANGLES.length] : b.angle;
+    const prompt = buildCardPhotoPrompt({ platform, theme: b.theme, angle, background: b.background, lighting: b.lighting, shadow: b.shadow, transparent: b.transparent, colors: b.colors, referenceStyle, productName: b.productName });
+    try {
+      generations.push(await createGeneration(user.id, {
+        uploadId: up.id, productName: b.productName || (up.original_name ?? "Product").replace(/\.[a-z0-9]+$/i, "").slice(0, 120) || "Product", category: "Other",
+        style: "auto", background: b.transparent ? "transparent" : "auto",
+        settings: { size, quality: "medium", lighting: "soft", customPrompt: prompt, instructions: `${b.theme} · ${angle} · ${b.background}` },
+      }));
+    } catch (err) {
+      // the plan's limit ends part way: keep what was started and say so
+      if (generations.length && err instanceof Error && "status" in err && (err as { status: number }).status === 429) { limitMessage = err.message; break; }
+      throw err;
+    }
+  }
+  res.status(202).json({ generations, referenceStyle: referenceStyle ?? null, limitMessage });
 });
 
 /**

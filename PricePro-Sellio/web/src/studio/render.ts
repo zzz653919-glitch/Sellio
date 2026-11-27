@@ -3,6 +3,7 @@
  * thumbnails and the exported file, so what you see is exactly what you download.
  */
 import { iconSvg, parseIcon } from "./icons";
+import { patternSvg } from "./patterns";
 import type { Doc, El, Fill, ImageEl, ShapeEl, TextEl } from "./types";
 
 type Ctx = CanvasRenderingContext2D;
@@ -25,6 +26,10 @@ export function sourceUrl(src: string): string | null {
     const o: Record<string, string> = {};
     for (const p of opts) { const i = p.indexOf("="); if (i > 0) o[p.slice(0, i)] = p.slice(i + 1); }
     const svg = artSvg(key, o);
+    return svg ? `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}` : null;
+  }
+  if (src.startsWith("pattern:")) {
+    const svg = patternSvg(src);
     return svg ? `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}` : null;
   }
   const icon = parseIcon(src);
@@ -299,7 +304,11 @@ function drawImage(ctx: Ctx, e: ImageEl, b: { x: number; y: number; w: number; h
     const s = (e.fit === "cover" ? Math.max(b.w / iw, b.h / ih) : Math.min(b.w / iw, b.h / ih)) * (e.zoom ?? 1);
     const dw = iw * s, dh = ih * s;
     const dx = b.x + (b.w - dw) / 2 + (e.dx ?? 0) * b.w, dy = b.y + (b.h - dh) / 2 + (e.dy ?? 0) * b.h;
-    if (e.shadow && mask === "none") { const k = ctx.getTransform().a; ctx.shadowColor = "rgba(15,23,42,0.28)"; ctx.shadowBlur = 36 * u * k; ctx.shadowOffsetY = 16 * u * k; }
+    if (e.shadow && mask === "none") {
+      // shadowK: shadow strength (1 = normal)
+      const k = ctx.getTransform().a, sk = Math.max(0, e.shadowK ?? 1);
+      ctx.shadowColor = `rgba(15,23,42,${Math.min(0.75, 0.28 * sk)})`; ctx.shadowBlur = 36 * u * k * Math.max(0.4, sk); ctx.shadowOffsetY = 16 * u * k * sk;
+    }
     if (e.flip) { ctx.translate(dx + dw / 2, 0); ctx.scale(-1, 1); ctx.translate(-(dx + dw / 2), 0); }
     ctx.drawImage(img, dx, dy, dw, dh);
   }
