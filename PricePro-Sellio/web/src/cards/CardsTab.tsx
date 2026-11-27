@@ -5,7 +5,7 @@
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  ArrowLeft, Check, CheckSquare, ClipboardCopy, Copy, Download, LayoutGrid, Loader2, PencilLine, Plus, Search, Sparkles, Square, Trash2, UploadCloud, Wand2,
+  ArrowLeft, Check, CheckSquare, ClipboardCopy, Copy, Download, LayoutGrid, Loader2, PencilLine, Plus, Sparkles, Square, Trash2, UploadCloud, Wand2,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -29,7 +29,7 @@ import {
 import { makeZip } from "./zip";
 
 type Options = { textAi: boolean; marketplaces: Record<MarketplaceKey, { label: string; sizes: { w: number; h: number }[] }>; icons: string[] };
-type Summary = { id: string; groupId: string; name: string; marketplace: MarketplaceKey; layout: LayoutKey; w: number | null; h: number | null; thumb: string | null; createdAt: string; updatedAt: string };
+type Summary = { id: string; groupId: string; name: string; product?: string | null; marketplace: MarketplaceKey; layout: LayoutKey; w: number | null; h: number | null; thumb: string | null; createdAt: string; updatedAt: string };
 type Full = Summary & { photoUploadId: string | null; input: Partial<CardInput> & { photoCutout?: boolean }; copy: Partial<CardCopy>; doc: Doc };
 
 const MP_ORDER: MarketplaceKey[] = ["uzum", "wildberries", "ozon", "yandex", "other"];
@@ -460,24 +460,71 @@ function CardTile({ c, selected, onSelect, onOpen, onRename, onDelete, actions, 
   );
 }
 
-function CardList({ onNew, open, openGroup }: { onNew: () => void; open: (id: string) => void; openGroup: (g: string) => void }) {
+/** One creation = one session: the designs made for one product together. */
+type Session = { id: string; product: string; marketplace: MarketplaceKey; cards: Summary[]; updatedAt: string; w: number | null; h: number | null };
+function sessionsOf(cards: Summary[]): Session[] {
+  const by = new Map<string, Summary[]>();
+  for (const c of cards) { const g = by.get(c.groupId); if (g) g.push(c); else by.set(c.groupId, [c]); }
+  return [...by.entries()].map(([id, list]) => {
+    const sorted = [...list].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    const first = sorted[0];
+    return {
+      id, cards: sorted, marketplace: first.marketplace, w: first.w, h: first.h,
+      product: first.product || first.name.replace(/ · [^·]+$/, ""),
+      updatedAt: sorted.reduce((m, c) => (c.updatedAt > m ? c.updatedAt : m), first.updatedAt),
+    };
+  }).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+}
+
+function SessionTile({ s, mpLabel, onOpen, onDelete }: { s: Session; mpLabel: string; onOpen: () => void; onDelete: () => void }) {
   const { t } = useI18n();
+  const covers = s.cards.slice(0, 3);
+  return (
+    <div className="card group overflow-hidden transition hover:-translate-y-0.5 hover:shadow-lg" data-session={s.id}>
+      <button type="button" onClick={onOpen} className="relative block w-full bg-slate-100 p-3 dark:bg-slate-800/60" aria-label={`${t("Open")}: ${s.product}`}>
+        {/* the session's designs, fanned out */}
+        <div className="relative mx-auto aspect-[4/2.9] w-full">
+          {covers.map((c, i) => {
+            const pos = covers.length === 1 ? ["left-[22%] w-[56%] z-[3]"] : covers.length === 2 ? ["left-[8%] w-[48%] z-[3]", "left-[44%] w-[48%] z-[2] rotate-3"] : ["left-[26%] w-[48%] z-[3]", "left-[2%] w-[42%] top-[6%] z-[2] -rotate-6", "right-[2%] w-[42%] top-[6%] z-[1] rotate-6"];
+            return c.thumb
+              ? <img key={c.id} src={c.thumb} alt="" loading="lazy" decoding="async" className={cx("absolute top-0 rounded-lg shadow-md ring-1 ring-black/5 transition group-hover:shadow-lg", pos[i])} />
+              : <div key={c.id} className={cx("absolute top-0 grid aspect-[3/4] place-items-center rounded-lg bg-white shadow-md dark:bg-slate-700", pos[i])}><LayoutGrid className="h-5 w-5 muted" /></div>;
+          })}
+        </div>
+        <span className="absolute right-2 top-2 z-10 rounded-md px-1.5 py-0.5 text-[10px] font-bold text-white shadow" style={{ background: PALETTES[s.marketplace]?.primary === "#FFCC00" ? "#1A1A1A" : PALETTES[s.marketplace]?.primary }}>{mpLabel}</span>
+      </button>
+      <div className="flex items-center gap-2 p-3">
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-bold" title={s.product}>{s.product}</p>
+          <p className="truncate text-[11px] muted">{t("{n} designs", { n: s.cards.length })}{s.w ? ` · ${s.w}×${s.h}` : ""} · {timeAgo(s.updatedAt)}</p>
+        </div>
+        <Button size="sm" variant="secondary" onClick={onOpen}>{t("Open")}</Button>
+        <button type="button" title={t("Delete")} aria-label={t("Delete")} onClick={onDelete} className="rounded-lg p-2 muted hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-500/10" data-testid="session-delete"><Trash2 className="h-4 w-4" /></button>
+      </div>
+    </div>
+  );
+}
+
+function CardList({ onNew, openGroup }: { onNew: () => void; openGroup: (g: string) => void }) {
+  const { t } = useI18n();
+  const toast = useToast();
+  const qc = useQueryClient();
   const opts = useOptions();
   const cards = useCards();
-  const actions = useCardActions();
   const [mp, setMp] = useState<"all" | MarketplaceKey>("all");
-  const [q, setQ] = useState("");
-  const [sel, setSel] = useState<Set<string>>(new Set());
-  const [rename, setRename] = useState<Summary | null>(null);
-  const [toDelete, setToDelete] = useState<Summary | null>(null);
-  const items = useMemo(() => (cards.data ?? []).filter((c) => (mp === "all" || c.marketplace === mp) && (!q.trim() || c.name.toLowerCase().includes(q.trim().toLowerCase()))), [cards.data, mp, q]);
+  const [toDelete, setToDelete] = useState<Session | null>(null);
+  const sessions = useMemo(() => sessionsOf(cards.data ?? []), [cards.data]);
+  const shown = sessions.filter((x) => mp === "all" || x.marketplace === mp);
   const label = (k: MarketplaceKey) => t(opts.data?.marketplaces[k]?.label ?? k);
-  const counts = useMemo(() => { const m: Record<string, number> = {}; for (const c of cards.data ?? []) m[c.marketplace] = (m[c.marketplace] ?? 0) + 1; return m; }, [cards.data]);
-  void openGroup;
+  const counts = useMemo(() => { const m: Record<string, number> = {}; for (const x of sessions) m[x.marketplace] = (m[x.marketplace] ?? 0) + 1; return m; }, [sessions]);
+  const removeSession = useMutation({
+    mutationFn: (id: string) => del(`/cards/groups/${id}`),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["cards"] }); setToDelete(null); toast("success", t("Deleted")); },
+    onError: (e) => toast("error", errorMessage(e)),
+  });
 
   if (cards.isLoading) return <Card className="grid h-64 place-items-center"><Loader2 className="h-6 w-6 animate-spin text-brand-600" /></Card>;
   if (cards.error) return <ErrorAlert error={cards.error} />;
-  const all = cards.data ?? [];
   return (
     <div className="space-y-4" data-testid="card-list">
       <Card className="relative overflow-hidden p-5 sm:p-6">
@@ -494,41 +541,26 @@ function CardList({ onNew, open, openGroup }: { onNew: () => void; open: (id: st
         </div>
       </Card>
 
-      {all.length === 0 ? (
+      {sessions.length === 0 ? (
         <Card className="p-6"><EmptyState icon={<LayoutGrid className="h-6 w-6" />} title={t("No product cards yet")} text={t("Create your first card: it takes about a minute.")} action={<Button icon={<Sparkles className="h-4 w-4" />} onClick={onNew}>{t("Create a card")}</Button>} /></Card>
       ) : (
         <>
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:thin]">
-              {(["all", ...MP_ORDER] as const).map((k) => (
-                <button key={k} type="button" onClick={() => setMp(k)} className={cx("inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition", mp === k ? "border-transparent bg-[var(--v-btn)] text-[var(--v-btn-text)]" : "border-[var(--v-line)] hover:bg-[var(--v-th)]")}>
-                  {k === "all" ? t("All") : label(k)}<span className="opacity-60">{k === "all" ? all.length : counts[k] ?? 0}</span>
-                </button>
-              ))}
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="relative min-w-0 flex-1 sm:w-56 sm:flex-none">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("Search cards")} className="pl-9" aria-label={t("Search cards")} />
-              </div>
-              <Button size="sm" variant="ghost" onClick={() => setSel(sel.size === items.length ? new Set() : new Set(items.map((c) => c.id)))}>{sel.size === items.length && items.length ? t("Clear selection") : t("Select all")}</Button>
-              <ZipButton ids={[...sel].filter((id) => all.some((c) => c.id === id))} actions={actions} label={t("Download {n} (ZIP)", { n: sel.size })} />
-            </div>
+          <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:thin]">
+            {(["all", ...MP_ORDER] as const).map((k) => (
+              <button key={k} type="button" onClick={() => setMp(k)} className={cx("inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition", mp === k ? "border-transparent bg-[var(--v-btn)] text-[var(--v-btn-text)]" : "border-[var(--v-line)] hover:bg-[var(--v-th)]")}>
+                {k === "all" ? t("All") : label(k)}<span className="opacity-60">{k === "all" ? sessions.length : counts[k] ?? 0}</span>
+              </button>
+            ))}
           </div>
-          {items.length === 0 ? <p className="py-10 text-center text-sm muted">{t("No cards found")}</p> : (
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 2xl:grid-cols-5">
-              {items.map((c) => (
-                <CardTile key={c.id} c={c} actions={actions} mpLabel={label(c.marketplace)} selected={sel.has(c.id)}
-                  onSelect={() => setSel((s) => { const n = new Set(s); if (n.has(c.id)) n.delete(c.id); else n.add(c.id); return n; })}
-                  onOpen={() => open(c.id)} onRename={() => setRename(c)} onDelete={() => setToDelete(c)} />
-              ))}
+          {shown.length === 0 ? <p className="py-10 text-center text-sm muted">{t("No cards found")}</p> : (
+            <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 sm:gap-4 lg:grid-cols-3 2xl:grid-cols-4">
+              {shown.map((x) => <SessionTile key={x.id} s={x} mpLabel={label(x.marketplace)} onOpen={() => openGroup(x.id)} onDelete={() => setToDelete(x)} />)}
             </div>
           )}
         </>
       )}
-      <RenameDialog card={rename} onClose={() => setRename(null)} />
-      <ConfirmDialog open={Boolean(toDelete)} title={t("Delete card?")} text={t("The card design will be permanently deleted.")} confirmLabel={t("Delete")} loading={actions.remove.isPending}
-        onClose={() => setToDelete(null)} onConfirm={() => toDelete && actions.remove.mutate(toDelete.id, { onSuccess: () => { setSel((s) => { const n = new Set(s); n.delete(toDelete.id); return n; }); setToDelete(null); } })} />
+      <ConfirmDialog open={Boolean(toDelete)} title={t("Delete these cards?")} text={toDelete ? t("All {n} designs made for \"{x}\" will be permanently deleted.", { n: toDelete.cards.length, x: toDelete.product }) : ""}
+        confirmLabel={t("Delete")} loading={removeSession.isPending} onClose={() => setToDelete(null)} onConfirm={() => toDelete && removeSession.mutate(toDelete.id)} />
     </div>
   );
 }
@@ -774,6 +806,6 @@ export default function CardsTab() {
   if (cardId) return <CardEditor key={cardId} id={cardId} onBack={() => (group ? go({ group }) : go({}))} />;
   if (isNew) return <CreateCard onDone={(g) => go({ group: g })} onCancel={() => go({})} />;
   if (group) return <GroupView groupId={group} open={(id) => go({ group, card: id })} onBack={() => go({})} onNew={() => go({ new: "1" })} />;
-  return <CardList onNew={() => go({ new: "1" })} open={(id) => go({ card: id })} openGroup={(g) => go({ group: g })} />;
+  return <CardList onNew={() => go({ new: "1" })} openGroup={(g) => go({ group: g })} />;
 }
 

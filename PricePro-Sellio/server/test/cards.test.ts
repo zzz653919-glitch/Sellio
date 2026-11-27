@@ -131,6 +131,15 @@ test("saved cards: created together, listed, renamed, autosaved, duplicated, del
   assert.equal((await client.del(`/api/cards/${one}`)).status, 200);
   assert.equal((await client.get(`/api/cards/${one}`)).status, 404);
   assert.equal((await client.get("/api/cards")).data.items.length, 3);
+  // one creation is one session: the list knows the product, and the whole session can be deleted
+  const items = (await client.get("/api/cards")).data.items;
+  assert.equal(items[0].product, "Charm sumka");
+  const gid = items[0].groupId;
+  assert.equal((await other.client.del(`/api/cards/groups/${gid}`)).status, 404);
+  const dg = await client.del(`/api/cards/groups/${gid}`);
+  assert.equal(dg.status, 200);
+  assert.equal(dg.data.deleted, 3);
+  assert.equal((await client.get("/api/cards")).data.items.length, 0);
 });
 
 test("words inside a card picture can be changed with AI (an AI image request; cut-outs stay transparent)", async () => {

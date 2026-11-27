@@ -161,9 +161,9 @@ type CardRow = {
 
 /** Preview images are served as files (cached by the browser), not inside the JSON. */
 const thumbUrl = (id: string, updatedAt: string, has: boolean) => (has ? `/api/cards/${id}/thumb?v=${encodeURIComponent(updatedAt)}` : null);
-type ListRow = Pick<CardRow, "id" | "group_id" | "name" | "marketplace" | "layout" | "created_at" | "updated_at"> & { w: number | null; h: number | null; has_thumb: number };
+type ListRow = Pick<CardRow, "id" | "group_id" | "name" | "marketplace" | "layout" | "created_at" | "updated_at"> & { w: number | null; h: number | null; has_thumb: number; product?: string | null };
 const summary = (r: ListRow) => ({
-  id: r.id, groupId: r.group_id, name: r.name, marketplace: r.marketplace, layout: r.layout,
+  id: r.id, groupId: r.group_id, name: r.name, product: r.product ?? null, marketplace: r.marketplace, layout: r.layout,
   w: r.w == null ? null : Number(r.w), h: r.h == null ? null : Number(r.h), thumb: thumbUrl(r.id, r.updated_at, Boolean(r.has_thumb)), createdAt: r.created_at, updatedAt: r.updated_at,
 });
 const full = (r: CardRow) => {
@@ -184,7 +184,8 @@ cardsRouter.get("/", async (req, res) => {
   // only what the list shows: the design itself and the preview image are not sent
   const rows = await all<ListRow>(
     `SELECT id, group_id, name, marketplace, layout, created_at, updated_at,
-            json_extract(doc_json, '$.w') AS w, json_extract(doc_json, '$.h') AS h, (thumb IS NOT NULL) AS has_thumb
+            json_extract(doc_json, '$.w') AS w, json_extract(doc_json, '$.h') AS h, (thumb IS NOT NULL) AS has_thumb,
+            json_extract(input_json, '$.name') AS product
        FROM product_cards WHERE user_id = ? ORDER BY updated_at DESC LIMIT 300`,
     currentUser(req).id,
   );
@@ -266,6 +267,14 @@ cardsRouter.post("/:id/duplicate", async (req, res) => {
     id, user.id, r.group_id, name, r.marketplace, r.layout, r.photo_upload_id, r.input_json, r.copy_json, r.doc_json, r.thumb, now, now,
   );
   res.status(201).json({ card: full(await owned(user.id, id)) });
+});
+
+/** Delete one creation session: every design made for that product together. */
+cardsRouter.delete("/groups/:groupId", async (req, res) => {
+  const user = currentUser(req);
+  const r = await run("DELETE FROM product_cards WHERE group_id = ? AND user_id = ?", param(req, "groupId"), user.id);
+  if (!r.changes) throw notFound("Cards not found");
+  res.json({ ok: true, deleted: r.changes });
 });
 
 cardsRouter.delete("/:id", async (req, res) => {

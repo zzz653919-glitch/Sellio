@@ -2271,4 +2271,7 @@ export const RU: Record<string, string> = {
   "Remove the logo from the picture": "Убери логотип с изображения",
   "Make the words in the picture bigger and clearer": "Сделай надпись на изображении крупнее и чётче",
   "Describe the change": "Опишите изменение",
+  "Delete these cards?": "Удалить эти карточки?",
+  "All {n} designs made for \"{x}\" will be permanently deleted.": "Все дизайны для «{x}» ({n}) будут удалены безвозвратно.",
+  "Cards not found": "Карточки не найдены",
 };

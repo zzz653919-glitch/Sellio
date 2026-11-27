@@ -2336,4 +2336,7 @@ export const UZ: Record<string, string> = {
   "Remove the logo from the picture": "Rasmdagi logotipni olib tashla",
   "Make the words in the picture bigger and clearer": "Rasmdagi yozuvni kattaroq va aniqroq qil",
   "Describe the change": "O'zgarishni yozing",
+  "Delete these cards?": "Bu kartochkalar o'chirilsinmi?",
+  "All {n} designs made for \"{x}\" will be permanently deleted.": "\"{x}\" uchun yaratilgan {n} ta dizaynning hammasi butunlay o'chiriladi.",
+  "Cards not found": "Kartochkalar topilmadi",
 };
