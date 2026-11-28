@@ -349,6 +349,7 @@ cardsRouter.post("/photos", requireVerified, serviceLimiter, async (req, res) =>
   const platform = MARKETPLACES[b.platform].label;
   const generations = [];
   let limitMessage: string | null = null;
+  let limitResetsAt: string | null = null;
   for (let i = 0; i < b.count; i++) {
     const angle = b.angle === "multiple" ? MULTI_ANGLES[i % MULTI_ANGLES.length] : b.angle;
     const prompt = buildCardPhotoPrompt({ platform, theme: b.theme, angle, background: b.background, lighting: b.lighting, shadow: b.shadow, transparent: b.transparent, colors: b.colors, referenceStyle, productName: b.productName });
@@ -360,11 +361,16 @@ cardsRouter.post("/photos", requireVerified, serviceLimiter, async (req, res) =>
       }));
     } catch (err) {
       // the plan's limit ends part way: keep what was started and say so
-      if (generations.length && err instanceof Error && "status" in err && (err as { status: number }).status === 429) { limitMessage = err.message; break; }
+      if (generations.length && err instanceof Error && "status" in err && (err as { status: number }).status === 429) {
+        limitMessage = err.message;
+        const d = (err as { details?: { resetsAt?: unknown } }).details;
+        limitResetsAt = typeof d?.resetsAt === "string" ? d.resetsAt : null;
+        break;
+      }
       throw err;
     }
   }
-  res.status(202).json({ generations, referenceStyle: referenceStyle ?? null, limitMessage });
+  res.status(202).json({ generations, referenceStyle: referenceStyle ?? null, limitMessage, limitResetsAt });
 });
 
 /**

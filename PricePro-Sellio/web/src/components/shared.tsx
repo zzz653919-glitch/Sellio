@@ -1,11 +1,12 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { BookmarkCheck, BookmarkPlus, Heart, MailWarning, PlugZap } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { ApiError, del, errorMessage, post } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { useI18n } from "../lib/i18n";
 import { fmtInZone } from "../lib/format";
+import { imageResetsAt, limitInfo, renewsText } from "../lib/limit";
 import { useQty } from "../lib/qty";
 import { PLAN_NAME, planTone, type FavoriteType, type ProjectType, type Usage } from "../lib/types";
 import { CodeForm, type CodeChallenge } from "./CodeForm";
@@ -60,14 +61,32 @@ export function VerifyEmailBanner() {
   );
 }
 
+/**
+ * Live "Renews: 28-noyabr, 16:35 (1 soat 20 daqiqa left)" for a used-up limit. Updates every 30 s and
+ * reloads the usage numbers once the time has come.
+ */
+export function LimitRenew({ resetsAt, timezone, className }: { resetsAt: string; timezone?: string; className?: string }) {
+  useI18n(); // re-render when the language changes
+  const qc = useQueryClient();
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(id);
+  }, []);
+  const passed = Date.parse(resetsAt) <= now;
+  useEffect(() => { if (passed) void qc.invalidateQueries({ queryKey: ["subscription"] }); }, [passed, qc]);
+  return <span className={className} data-testid="limit-renew">{renewsText(resetsAt, timezone, now)}</span>;
+}
+
 export function ErrorAlert({ error }: { error: unknown }) {
   const { t } = useI18n();
   if (!error) return null;
   const limit = error instanceof ApiError && error.code === "LIMIT_REACHED";
   const notVerified = error instanceof ApiError && error.code === "EMAIL_NOT_VERIFIED";
+  const info = limit ? limitInfo((error as ApiError).details) : null;
   return (
     <Alert tone={limit ? "warning" : "error"} title={limit ? t("Plan limit reached") : notVerified ? t("Email not verified") : t("Something went wrong")}>
-      {t(errorMessage(error))}
+      {info ? <>{info.what} <b><LimitRenew resetsAt={info.resetsAt} /></b></> : t(errorMessage(error))}
       {limit && <> <Link to="/subscription" className="font-semibold underline">{t("View plans")}</Link></>}
     </Alert>
   );
@@ -170,6 +189,12 @@ export function UsageMeter({ usage, compact }: { usage: Usage; compact?: boolean
         <Badge tone={planTone(usage.plan)}>{PLAN_NAME[usage.plan]}</Badge>
         <span className="text-sm muted">{r.period === "hours" ? t("Limits for every {h} hours", { h: r.windowHours ?? 1 }) : t(r.period === "day" ? "Daily limits" : "Monthly limits")}</span>
       </div>
+      {imageResetsAt(r) && (
+        <Alert tone="warning" title={t("AI image limit reached")}><LimitRenew resetsAt={imageResetsAt(r)!} timezone={usage.timezone} /></Alert>
+      )}
+      {fc && fc.remaining <= 0 && (
+        <Alert tone="warning" title={t("Forecast limit reached")}><LimitRenew resetsAt={fc.resetsAt} timezone={usage.timezone} /></Alert>
+      )}
       {block(t("AI advertisement images"), r)}
       {r.imagesToday && (
         <p className="text-sm">{t("AI images today")}: <b>{r.imagesToday.used}/{r.imagesToday.limit}</b> <span className="text-xs muted">({t("{n} remaining", { n: qty(r.imagesToday.remaining) })})</span></p>

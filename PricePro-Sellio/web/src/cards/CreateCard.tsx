@@ -8,6 +8,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Check, ChevronDown, GalleryHorizontal, Loader2, Palette as PaletteIcon, Sparkles, UploadCloud, Wand2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ErrorAlert } from "../components/shared";
+import { renewsText } from "../lib/limit";
 import { Button, Card, Field, Input, Select, cx, useToast } from "../components/ui";
 import { errorMessage, get, post, upload } from "../lib/api";
 import { useAuth } from "../lib/auth";
@@ -209,13 +210,13 @@ export function CreateCard({ onDone, onCancel, from, regen, preset, backLabel }:
       let referenceStyle: string | null = null;
       const photosP = aiPhoto ? (async () => {
         try {
-          const r = await post<{ generations: Generation[]; referenceStyle: string | null; limitMessage: string | null }>("/cards/photos", {
+          const r = await post<{ generations: Generation[]; referenceStyle: string | null; limitMessage: string | null; limitResetsAt?: string | null }>("/cards/photos", {
             uploadId: photo.uploadId, productName: input.name, platform: f.marketplace, theme: cfg.style.theme, angle: "auto", background: cfg.style.background,
             lighting: cfg.style.lighting, shadow: Math.round(cfg.style.shadow), ratio: cfg.ratio, count: 1, transparent,
             colors: cfg.style.colors?.main ? cfg.style.colors : undefined,
           });
           referenceStyle = r.referenceStyle;
-          if (r.limitMessage) warnings.push(r.limitMessage);
+          if (r.limitMessage) warnings.push(`${t("Only {n} AI photos were started: the plan limit is used up.", { n: r.generations.length })}${r.limitResetsAt ? ` ${renewsText(r.limitResetsAt)}` : ""}`);
           const until = Date.now() + 4 * 60_000;
           const gens = [...r.generations];
           let done = 0;

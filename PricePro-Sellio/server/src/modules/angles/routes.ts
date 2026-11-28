@@ -173,10 +173,12 @@ const genSchema = z.object({
 });
 
 /** Start one AI image for a view; returns the new item row id. */
-async function startImage(userId: string, s: SessionRow, angle: AngleKey, g: GenSettings) {
+/** Two images of the multi-angle generator use one request of the plan: each pair shares a quotaRef. */
+async function startImage(userId: string, s: SessionRow, angle: AngleKey, g: GenSettings, quotaRef: string) {
   const generation = await createGeneration(userId, {
     uploadId: s.upload_id, productName: s.name, category: "Other", style: "auto", background: "auto",
     settings: {
+      quotaRef,
       size: RATIOS[g.ratio], quality: g.quality, lighting: "soft", instructions: `${ANGLES[angle].label} · ${g.background} · ${g.lighting}`,
       customPrompt: buildAnglePrompt({ angle, background: g.background, color: g.color, lighting: g.lighting, productName: s.name, variant: g.variant, variants: g.variants }),
     },
@@ -196,10 +198,12 @@ anglesRouter.post("/sessions/:id/generate", requireVerified, serviceLimiter, asy
   const plan = Array.from({ length: b.count }, (_, i) => ({ angle: angles[i % angles.length], variant: Math.floor(i / angles.length), variants: Math.ceil(b.count / angles.length) }));
   const created: ItemRow[] = [];
   let limitMessage: string | null = null;
-  for (const p of plan) {
+  let limitResetsAt: string | null = null;
+  const batch = newId();
+  for (const [k, p] of plan.entries()) {
     const g: GenSettings = { background: b.background, color: b.color, lighting: b.lighting, quality: b.quality, ratio: b.ratio, variant: p.variant, variants: p.variants };
     try {
-      const generationId = await startImage(user.id, s, p.angle, g);
+      const generationId = await startImage(user.id, s, p.angle, g, `angles:${batch}:${Math.floor(k / 2)}`);
       const row: ItemRow = { id: newId(), session_id: s.id, user_id: user.id, generation_id: generationId, angle: p.angle, needs_check: ANGLES[p.angle].check ? 1 : 0, settings_json: JSON.stringify(g), created_at: nowIso() };
       await run("INSERT INTO angle_items (id,session_id,user_id,generation_id,angle,needs_check,settings_json,created_at) VALUES (?,?,?,?,?,?,?,?)",
         row.id, row.session_id, row.user_id, row.generation_id, row.angle, row.needs_check, row.settings_json, row.created_at);
@@ -209,6 +213,7 @@ anglesRouter.post("/sessions/:id/generate", requireVerified, serviceLimiter, asy
       if (err instanceof Error && "status" in err && (err as { status: number }).status === 429) {
         if (!created.length) throw err;
         limitMessage = err.message;
+        limitResetsAt = resetsAtOf(err);
         break;
       }
       throw err;
@@ -216,13 +221,38 @@ anglesRouter.post("/sessions/:id/generate", requireVerified, serviceLimiter, asy
   }
   const settings = { ...safeJson<Record<string, unknown>>(s.settings_json, {}), last: { angles, count: b.count, background: b.background, color: b.color, lighting: b.lighting, quality: b.quality, ratio: b.ratio } };
   await run("UPDATE angle_sessions SET settings_json = ?, updated_at = ? WHERE id = ?", JSON.stringify(settings), nowIso(), s.id);
-  res.status(202).json({ items: await Promise.all(created.map((i) => serializeItem(user.id, i))), limitMessage, planned: plan.length });
+  res.status(202).json({ items: await Promise.all(created.map((i) => serializeItem(user.id, i))), limitMessage, limitResetsAt, planned: plan.length });
 });
+
+/** When the plan's limit renews (from a LIMIT_REACHED error), so the app can show it. */
+function resetsAtOf(err: unknown): string | null {
+  const d = (err as { details?: { resetsAt?: unknown } }).details;
+  return typeof d?.resetsAt === "string" ? d.resetsAt : null;
+}
 
 async function ownedItem(userId: string, id: string) {
   const i = await get<ItemRow>("SELECT * FROM angle_items WHERE id = ? AND user_id = ?", id, userId);
   if (!i) throw notFound("Image not found");
   return i;
+}
+
+/**
+ * Regenerated images are paired too: the first one opens a request, the next one (within an hour) uses the
+ * same request. So two regenerated images also cost one request.
+ */
+async function regenRef(userId: string, sessionId: string) {
+  const s = await ownedSession(userId, sessionId);
+  const st = safeJson<Record<string, unknown>>(s.settings_json, {});
+  const open = typeof st.openRegen === "string" ? st.openRegen : null;
+  let ref: string | null = null;
+  if (open) {
+    const users = (await get<{ n: number }>("SELECT COUNT(*) AS n FROM generations WHERE user_id = ? AND json_extract(settings_json, '$.quotaRef') = ?", userId, open))?.n ?? 0;
+    const held = await get("SELECT 1 FROM usage_events WHERE user_id = ? AND service = 'generation' AND ref_id = ? AND created_at >= ?", userId, open, new Date(Date.now() - 3600_000).toISOString());
+    if (users === 1 && held) ref = open;
+  }
+  const next = ref ? null : `angles-regen:${newId()}`;
+  await run("UPDATE angle_sessions SET settings_json = ? WHERE id = ?", JSON.stringify({ ...st, openRegen: next }), s.id);
+  return ref ?? next!;
 }
 
 /** Make the same view again (one more AI image); the item then shows the new picture. */
@@ -231,7 +261,7 @@ anglesRouter.post("/items/:id/regenerate", requireVerified, serviceLimiter, asyn
   const i = await ownedItem(user.id, param(req, "id"));
   const s = await ownedSession(user.id, i.session_id);
   const g = safeJson<GenSettings>(i.settings_json, { background: "white", lighting: "studio", quality: "medium", ratio: "1:1", variant: 0, variants: 1 });
-  const generationId = await startImage(user.id, s, i.angle as AngleKey, g);
+  const generationId = await startImage(user.id, s, i.angle as AngleKey, g, await regenRef(user.id, s.id));
   await run("UPDATE angle_items SET generation_id = ?, created_at = ? WHERE id = ?", generationId, nowIso(), i.id);
   await run("UPDATE angle_sessions SET updated_at = ? WHERE id = ?", nowIso(), s.id);
   res.status(202).json({ item: await serializeItem(user.id, await ownedItem(user.id, i.id)) });

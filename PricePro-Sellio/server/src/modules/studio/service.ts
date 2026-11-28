@@ -37,6 +37,11 @@ export type GenerationInput = {
     changesPresentation?: boolean;
     /** A prompt written by the server itself (product-card photos); never taken from a request body. */
     customPrompt?: string;
+    /**
+     * Set by the server only: generations with the same quotaRef share one plan request (the multi-angle
+     * generator counts two images as one request). Without it every generation is one request.
+     */
+    quotaRef?: string;
   };
 };
 
@@ -108,15 +113,28 @@ function pump() {
   }
 }
 
+/**
+ * Give the request back after a failure, unless another generation that shares it (same quotaRef) is still
+ * running or has succeeded: then that one keeps it.
+ */
+async function releaseShared(ref: string, id: string) {
+  if (ref !== id) {
+    const partner = await get("SELECT 1 FROM generations WHERE id != ? AND json_extract(settings_json, '$.quotaRef') = ? AND status != 'failed' LIMIT 1", id, ref);
+    if (partner) return;
+  }
+  await releaseRequest("generation", ref);
+}
+
 async function processGeneration(id: string) {
   const g = await get<GenerationRow>("SELECT * FROM generations WHERE id = ?", id);
   if (!g || g.status !== "queued") return;
   const started = Date.now();
   await run("UPDATE generations SET status = 'processing', updated_at = ? WHERE id = ?", nowIso(), id);
+  const settings = safeJson<GenerationInput["settings"]>(g.settings_json, { size: "square", quality: "medium", lighting: "soft" });
+  const ref = settings.quotaRef ?? id;
   try {
     const provider = getImageProvider();
     const upload = await getOwnedUpload(g.user_id, g.upload_id);
-    const settings = safeJson<GenerationInput["settings"]>(g.settings_json, { size: "square", quality: "medium", lighting: "soft" });
     const output = await provider.edit({
       image: await readUpload(upload),
       mime: upload.mime,
@@ -133,14 +151,17 @@ async function processGeneration(id: string) {
       "UPDATE generations SET status = 'succeeded', result_upload_id = ?, error = NULL, updated_at = ?, completed_at = ? WHERE id = ?",
       saved.id, now, now, id,
     );
-    await consumeRequest("generation", id);
+    // A shared request may have been given back by its partner failing early: take it again (if the plan
+    // still allows) so the finished image is counted.
+    if (ref !== id) await reserveRequest(g.user_id, "generation", ref).catch(() => {});
+    await consumeRequest("generation", ref);
     await logActivity(g.user_id, "ad_created", "studio", `Advertisement created: ${g.product_name}`, { refId: id, durationMs: Date.now() - started });
     await notify(g.user_id, "generation", "Advertisement ready", `Your advertisement for "${g.product_name}" has been generated.`, `/studio?generation=${id}`);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Generation failed";
     const now = nowIso();
     await run("UPDATE generations SET status = 'failed', error = ?, updated_at = ?, completed_at = ? WHERE id = ?", message.slice(0, 500), now, now, id);
-    await releaseRequest("generation", id);
+    await releaseShared(ref, id);
     await logActivity(g.user_id, "ad_failed", "studio", `Advertisement failed: ${g.product_name}`, { refId: id, success: false, durationMs: Date.now() - started });
     await notify(g.user_id, "generation", "Advertisement failed", `Generation for "${g.product_name}" failed: ${message}`, `/studio?generation=${id}`);
   }
@@ -160,6 +181,12 @@ export async function recoverInterruptedGenerations(olderThanMs = 0) {
   );
   // Interrupted generations do not use up a request.
   await run("DELETE FROM usage_events WHERE service = 'generation' AND status = 'reserved' AND ref_id IN (SELECT id FROM generations WHERE status = 'failed')");
+  // Shared requests (quotaRef) are given back only when every generation sharing them failed.
+  await run(
+    `DELETE FROM usage_events WHERE service = 'generation' AND status = 'reserved'
+       AND ref_id IN (SELECT json_extract(settings_json, '$.quotaRef') FROM generations WHERE status = 'failed' AND json_extract(settings_json, '$.quotaRef') IS NOT NULL)
+       AND ref_id NOT IN (SELECT json_extract(settings_json, '$.quotaRef') FROM generations WHERE status != 'failed' AND json_extract(settings_json, '$.quotaRef') IS NOT NULL)`,
+  );
 }
 
 // ---------------------------------------------------------------- API
@@ -181,7 +208,9 @@ export async function createGeneration(userId: string, input: GenerationInput, r
   }
   const id = newId();
   // One request is reserved now; it is counted when the image is ready and given back if generation fails.
-  await reserveRequest(userId, "generation", id);
+  // Generations that share a quotaRef share that one request.
+  const ref = input.settings.quotaRef ?? id;
+  await reserveRequest(userId, "generation", ref);
   const now = nowIso();
   const prompt = input.settings.customPrompt ? input.settings.customPrompt : isEdit ? buildEditPrompt(input.settings.promptInstructions ?? input.settings.instructions ?? "", input.settings.changesProduct, input.settings.changesPresentation) : buildPrompt({
     productName: input.settings.nameFromFile ? "" : input.productName,
@@ -200,7 +229,7 @@ export async function createGeneration(userId: string, input: GenerationInput, r
       JSON.stringify(input.settings), prompt, provider.name, provider.model, retryOf ?? null, now, now,
     );
   } catch (err) {
-    await releaseRequest("generation", id);
+    await releaseShared(ref, id);
     throw err;
   }
   enqueue(id);
@@ -226,7 +255,8 @@ export async function retryGeneration(userId: string, id: string) {
       category: g.category,
       style: g.style as StyleKey,
       background: g.background as BackgroundKey,
-      settings: safeJson(g.settings_json, { size: "square", quality: "medium", lighting: "soft" }),
+      // A retry is a new request of its own (it never reuses a shared one).
+      settings: { ...safeJson<GenerationInput["settings"]>(g.settings_json, { size: "square", quality: "medium", lighting: "soft" }), quotaRef: undefined },
     },
     g.id,
   );

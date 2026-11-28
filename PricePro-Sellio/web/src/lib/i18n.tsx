@@ -10,6 +10,14 @@ export async function loadDict(l: Lang) {
 export type Lang = "en" | "uz" | "ru";
 type Vars = Record<string, string | number>;
 
+/** Translation outside React (error texts made in lib code): uses the language set on <html lang>. */
+export function translateNow(key: string, vars?: Vars) {
+  const l = document.documentElement.lang as Lang;
+  let s = (l === "uz" || l === "ru" ? DICTS[l]?.[key] : undefined) ?? key;
+  if (vars) for (const [k, v] of Object.entries(vars)) s = s.replaceAll(`{${k}}`, String(v));
+  return s;
+}
+
 const Ctx = createContext<{ lang: Lang; setLang: (l: Lang) => void; t: (key: string, vars?: Vars) => string; tr: (text: string) => string } | null>(null);
 
 /**

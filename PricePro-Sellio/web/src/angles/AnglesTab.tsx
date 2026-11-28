@@ -8,7 +8,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, ArrowLeft, Camera, Check, Download, Eye, ImagePlus, LayoutGrid, Loader2, Plus, RefreshCw, Trash2, UploadCloud, Wand2 } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { ErrorAlert, IntegrationNotice } from "../components/shared";
+import { ErrorAlert, IntegrationNotice, LimitRenew } from "../components/shared";
+import { imageResetsAt, renewsText } from "../lib/limit";
+import type { Usage } from "../lib/types";
 import { Alert, Button, Card, ConfirmDialog, EmptyState, Field, Select, Tabs, cx, useToast } from "../components/ui";
 import { del, errorMessage, get, patch, post, upload } from "../lib/api";
 import { timeAgo } from "../lib/format";
@@ -24,7 +26,7 @@ type Session = {
   settings: { last?: { angles: string[]; count: number; background: string; color?: string; lighting: string; quality: string; ratio: string }; cardGroups?: string[] };
   items?: Item[];
 };
-type Sub = { usage: { metrics: Record<string, { used: number; limit: number }> } };
+type Sub = { usage: Usage };
 
 const BG_LABEL: Record<string, string> = { white: "White", black: "Black", studio: "Studio", nature: "Nature", luxury: "Luxury", gradient: "Gradient", ai: "AI-generated background", custom: "Custom colour" };
 const LIGHT_LABEL: Record<string, string> = { soft: "Soft", studio: "Studio", cinematic: "Cinematic", natural: "Natural", dramatic: "Dramatic" };
@@ -107,6 +109,7 @@ export default function AnglesTab() {
 
   const requests = sub.data?.usage.metrics.requests;
   const left = requests ? Math.max(0, requests.limit - requests.used) : null;
+  const renews = imageResetsAt(requests);
   const items = s?.items ?? [];
   const done = items.filter((i) => !pending(i)).length;
   const running = items.some(pending);
@@ -118,10 +121,10 @@ export default function AnglesTab() {
     qc.invalidateQueries({ queryKey: ["projects"] });
   };
   const generate = useMutation({
-    mutationFn: () => post<{ items: Item[]; limitMessage: string | null }>(`/angles/sessions/${sessionId}/generate`, {
+    mutationFn: () => post<{ items: Item[]; limitMessage: string | null; limitResetsAt: string | null }>(`/angles/sessions/${sessionId}/generate`, {
       angles: cur.angles, count: cur.count, background: cur.bg, color: cur.bg === "custom" ? cur.color : undefined, lighting: cur.light, quality: cur.quality, ratio: cur.ratio,
     }),
-    onSuccess: (r) => { refresh(); if (r.limitMessage) toast("error", r.limitMessage); else toast("success", t("{n} images are being generated.", { n: r.items.length })); },
+    onSuccess: (r) => { refresh(); if (r.limitMessage) toast("error", `${t("Only {n} images were started: the plan limit is used up.", { n: r.items.length })}${r.limitResetsAt ? ` ${renewsText(r.limitResetsAt, sub.data?.usage.timezone)}` : ""}`); else toast("success", t("{n} images are being generated.", { n: r.items.length })); },
     onError: (e) => toast("error", errorMessage(e)),
   });
   const regenerate = useMutation({
@@ -286,9 +289,10 @@ export default function AnglesTab() {
             </div>
           )}
           <div className="rounded-xl bg-slate-50 p-2.5 text-xs dark:bg-slate-800/60">
-            {t("{n} images = {n} AI images from your plan.", { n: cur.count })} {left !== null && <b>{t("Left now: {n}", { n: left })}</b>}
+            {t("{n} images = {k} requests from your plan (2 images = 1 request).", { n: cur.count, k: Math.ceil(cur.count / 2) })} {left !== null && <b>{t("Left now: {n} ({m} images)", { n: renews ? 0 : left, m: renews ? 0 : left * 2 })}</b>}
+            {renews && <LimitRenew resetsAt={renews} timezone={sub.data?.usage.timezone} className="mt-1 block font-semibold text-amber-700 dark:text-amber-300" />}
           </div>
-          <Button size="lg" className="w-full" icon={<Wand2 className="h-5 w-5" />} loading={generate.isPending} disabled={running} onClick={() => generate.mutate()} data-testid="angles-generate">
+          <Button size="lg" className="w-full" icon={<Wand2 className="h-5 w-5" />} loading={generate.isPending} disabled={running || Boolean(renews)} onClick={() => generate.mutate()} data-testid="angles-generate">
             {running ? t("Generating… {done}/{total}", { done, total: items.length }) : t("Generate {n} images", { n: cur.count })}
           </Button>
           {generate.error != null && <ErrorAlert error={generate.error} />}

@@ -12,9 +12,10 @@ import { useI18n } from "../lib/i18n";
 import { useTheme } from "../lib/theme";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { LanguageSwitch } from "./LanguageSwitch";
-import { VerifyEmailBanner } from "./shared";
+import { LimitRenew, VerifyEmailBanner } from "./shared";
+import { imageResetsAt, setUserZone } from "../lib/limit";
 import { Badge, cx } from "./ui";
-import { PLAN_NAME, planTone } from "../lib/types";
+import { PLAN_NAME, planTone, type Usage } from "../lib/types";
 
 type NavItem = { to: string; label: string; icon: typeof LayoutDashboard; end?: boolean };
 export const NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
@@ -69,7 +70,7 @@ export function Avatar({ url, name, size = 36 }: { url: string | null; name: str
   );
 }
 
-type SubSummary = { plan: "free" | "pro" | "max"; usage: { metrics: Record<string, { used: number; limit: number; period: "hours" | "day" | "month"; windowHours?: number | null }> }; subscription: { currentPeriodEnd: string | null } | null };
+type SubSummary = { plan: "free" | "pro" | "max"; usage: Usage; subscription: { currentPeriodEnd: string | null } | null };
 
 function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const { t } = useI18n();
@@ -77,6 +78,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const unread = useUnread();
   // Refreshed every 20 s while the tab is open (and after every action), so the counter is always current.
   const sub = useQuery({ queryKey: ["subscription"], queryFn: () => get<SubSummary>("/subscription"), enabled: Boolean(user), staleTime: 10_000, refetchInterval: 20_000, refetchOnWindowFocus: true });
+  setUserZone(sub.data?.usage.timezone);
   const gen = sub.data?.usage.metrics.requests;
   const fc = sub.data?.usage.metrics.forecasts;
   return (
@@ -105,10 +107,11 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       {user && gen && (
         <Link to="/subscription" onClick={onNavigate} className="mb-2.5 mt-3 block rounded-[14px] border border-[var(--v-line-soft)] bg-[var(--v-glass-2)] p-3.5 shadow-[inset_0_1px_0_var(--v-hi)]">
           {[{ m: gen, key: "img", label: gen.period === "hours" ? t("AI images ({h} h)", { h: gen.windowHours ?? 1 }) : t(gen.period === "day" ? "AI ad images today" : "AI ad images this month") },
-            ...(fc ? [{ m: fc, key: "fc", label: fc.period === "hours" ? t("Forecasts ({h} h)", { h: fc.windowHours ?? 1 }) : t(fc.period === "day" ? "Forecasts today" : "Forecasts this month") }] : [])].map(({ m, key, label }) => (
+            ...(fc ? [{ m: fc, key: "fc", label: fc.period === "hours" ? t("Forecasts ({h} h)", { h: fc.windowHours ?? 1 }) : t(fc.period === "day" ? "Forecasts today" : "Forecasts this month") }] : [])].map(({ m, key, label }) => ({ m, key, label, reset: key === "img" ? imageResetsAt(m) : m.remaining <= 0 ? m.resetsAt : null })).map(({ m, key, label, reset }) => (
             <div key={key} className="mb-2">
               <div className="mb-1 flex justify-between text-[12.5px] muted"><span>{label}</span><b className="font-bold text-[var(--v-text)]">{m.used} / {m.limit}</b></div>
-              <div className="h-1.5 overflow-hidden rounded-full bg-[var(--v-track)]"><span className="block h-full rounded-full bg-[var(--v-sky)]" style={{ width: `${Math.min(100, (m.used / Math.max(1, m.limit)) * 100)}%` }} /></div>
+              <div className="h-1.5 overflow-hidden rounded-full bg-[var(--v-track)]"><span className={cx("block h-full rounded-full", reset ? "bg-amber-500" : "bg-[var(--v-sky)]")} style={{ width: `${Math.min(100, (m.used / Math.max(1, m.limit)) * 100)}%` }} /></div>
+              {reset && <LimitRenew resetsAt={reset} timezone={sub.data?.usage.timezone} className="mt-1 block text-[11.5px] font-semibold leading-snug text-amber-600 dark:text-amber-400" />}
             </div>
           ))}
           <div className="mt-2 flex justify-between text-[12.5px]"><span className="muted">{PLAN_NAME[user.plan]}</span><span className="font-semibold text-[var(--v-sky)]">{user.plan === "pro" ? t("Manage") : t("Upgrade")}</span></div>

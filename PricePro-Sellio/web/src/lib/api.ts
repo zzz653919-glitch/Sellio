@@ -1,3 +1,4 @@
+import { limitText } from "./limit";
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -45,6 +46,8 @@ export const upload = <T>(p: string, form: FormData) => api<T>(p, { method: "POS
 
 export function errorMessage(err: unknown) {
   if (err instanceof ApiError) {
+    // A used-up plan limit: say what ran out and when it renews, in the user's language.
+    if (err.code === "LIMIT_REACHED") return limitText(err.details) ?? err.message;
     const details = Array.isArray(err.details) ? (err.details as { message: string }[]).map((d) => d.message).join(" ") : "";
     return details && err.code === "BAD_REQUEST" ? details : err.message;
   }

@@ -121,11 +121,22 @@ export function fmtAmount(n: number, currency: string) {
   return `${fmtNumber(Math.round(n))} ${currency}`;
 }
 
+/** A length of time, rounded up to minutes: "2 soat 15 daqiqa" / "2 ч 15 мин" / "2 h 15 min". */
+export function fmtDuration(ms: number) {
+  const total = Math.max(1, Math.ceil(ms / 60000));
+  const d = Math.floor(total / 1440), h = Math.floor((total % 1440) / 60), m = total % 60;
+  const u = isUz() ? { d: "kun", h: "soat", m: "daqiqa" } : loc() === "ru" ? { d: "д", h: "ч", m: "мин" } : { d: "d", h: "h", m: "min" };
+  const out = d ? [[d, u.d], [h, u.h]] : h ? [[h, u.h], [m, u.m]] : [[m, u.m]];
+  return out.filter(([n], i) => i === 0 || n).map(([n, w]) => `${n} ${w}`).join(" ");
+}
+
 /** "1-dekabr, 00:00" / "1 December, 00:00" at an instant, shown in the given IANA time zone. */
 export function fmtInZone(iso: string, timeZone: string) {
   const p = Object.fromEntries(
     new Intl.DateTimeFormat("en-GB", { timeZone, day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
       .formatToParts(new Date(iso)).filter((x) => x.type !== "literal").map((x) => [x.type, x.value]),
   );
-  return `${p.day}${isUz() ? "-" : " "}${fmtMonthName(Number(p.month))}, ${p.hour}:${p.minute}`;
+  // Russian needs the month in the genitive ("28 ноября"), which Intl gives for a day + month date.
+  const dm = loc() === "ru" && !isUz() ? new Date(iso).toLocaleDateString("ru", { timeZone, day: "numeric", month: "long" }) : `${p.day}${isUz() ? "-" : " "}${fmtMonthName(Number(p.month))}`;
+  return `${dm}, ${p.hour}:${p.minute}`;
 }
