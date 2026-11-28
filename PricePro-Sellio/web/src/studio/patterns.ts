@@ -72,7 +72,59 @@ function bokeh(a: string, b: string) {
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600" width="1200" height="1200"><defs><filter id="b"><feGaussianBlur stdDeviation="6"/></filter></defs><g filter="url(#b)">${g}</g></svg>`;
 }
 
-const PATTERNS: Record<string, (a: string, b: string) => string> = { marble, flowers, leaves, grid: (a) => grid(a), snow: (a) => snow(a), bokeh };
+/** Poured concrete: grain, pores and soft stains. */
+function concrete(a: string, b: string) {
+  const r = rng(11);
+  let g = "";
+  for (let i = 0; i < 9; i++) g += `<ellipse cx="${f(r() * 600)}" cy="${f(r() * 600)}" rx="${f(60 + r() * 140)}" ry="${f(40 + r() * 100)}" fill="${b}" fill-opacity="${f(0.05 + r() * 0.08)}"/>`;
+  let pores = "";
+  for (let i = 0; i < 420; i++) pores += `<circle cx="${f(r() * 600)}" cy="${f(r() * 600)}" r="${f(0.4 + r() * 1.6)}" fill="${b}" fill-opacity="${f(0.15 + r() * 0.4)}"/>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600" width="1200" height="1200"><defs><filter id="s"><feGaussianBlur stdDeviation="30"/></filter><filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="4"/><feColorMatrix values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.18 0"/></filter></defs><rect width="600" height="600" fill="${a}"/><g filter="url(#s)">${g}</g><rect width="600" height="600" filter="url(#n)"/>${pores}</svg>`;
+}
+/** Retro sun rays from the centre. */
+function sunburst(a: string, b: string) {
+  let rays = "";
+  for (let i = 0; i < 24; i++) {
+    const a1 = (i / 24) * Math.PI * 2, a2 = ((i + 0.5) / 24) * Math.PI * 2;
+    rays += `<path d="M300 300L${f(300 + Math.cos(a1) * 900)} ${f(300 + Math.sin(a1) * 900)}L${f(300 + Math.cos(a2) * 900)} ${f(300 + Math.sin(a2) * 900)}Z" fill="${b}"/>`;
+  }
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600" width="1200" height="1200"><rect width="600" height="600" fill="${a}"/>${rays}</svg>`;
+}
+/** Halftone dots growing towards one corner (print look). */
+function halftone(a: string) {
+  let d = "";
+  for (let y = 0; y < 30; y++) for (let x = 0; x < 30; x++) {
+    const t = (x + y) / 58;
+    if (t < 0.25) continue;
+    d += `<circle cx="${x * 20 + (y % 2 ? 10 : 0)}" cy="${y * 20}" r="${f(1 + t * 7)}" fill="${a}"/>`;
+  }
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600" width="1200" height="1200">${d}</svg>`;
+}
+/** Iridescent holographic foil: soft rainbow bands and light streaks. */
+function holo(a: string, b: string) {
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600" width="1200" height="1200"><defs><linearGradient id="h" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#C7F9FF"/><stop offset="0.2" stop-color="${a}"/><stop offset="0.4" stop-color="#FDE2FF"/><stop offset="0.6" stop-color="${b}"/><stop offset="0.8" stop-color="#E0FFE9"/><stop offset="1" stop-color="#D9D2FF"/></linearGradient><filter id="w"><feTurbulence type="fractalNoise" baseFrequency="0.006 0.02" numOctaves="2" seed="8"/><feDisplacementMap in="SourceGraphic" scale="140"/></filter><filter id="bl"><feGaussianBlur stdDeviation="14"/></filter></defs><rect x="-80" y="-80" width="760" height="760" fill="url(#h)" filter="url(#w)"/><g filter="url(#bl)" fill="#FFFFFF" fill-opacity="0.55"><rect x="120" y="-100" width="40" height="800" transform="rotate(28 300 300)"/><rect x="330" y="-100" width="18" height="800" transform="rotate(28 300 300)"/></g></svg>`;
+}
+/** Thin horizontal scan lines (screens, cyberpunk). */
+function scanlines(a: string) {
+  let l = "";
+  for (let y = 0; y < 600; y += 6) l += `<rect y="${y}" width="600" height="1.4" fill="${a}"/>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600" width="1200" height="1200">${l}</svg>`;
+}
+/** Terrazzo / speckled stone chips. */
+function terrazzo(a: string, b: string) {
+  const r = rng(21);
+  let g = "";
+  for (let i = 0; i < 90; i++) {
+    const x = r() * 600, y = r() * 600, s = 3 + r() * 11, rot = r() * 180;
+    g += `<path d="M${f(-s)} 0L0 ${f(-s * 0.7)}L${f(s * 0.9)} ${f(-s * 0.2)}L${f(s * 0.4)} ${f(s * 0.8)}L${f(-s * 0.6)} ${f(s * 0.5)}Z" transform="translate(${f(x)} ${f(y)}) rotate(${f(rot)})" fill="${i % 3 ? a : b}" fill-opacity="${f(0.35 + r() * 0.5)}"/>`;
+  }
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600" width="1200" height="1200">${g}</svg>`;
+}
+
+const PATTERNS: Record<string, (a: string, b: string) => string> = {
+  marble, flowers, leaves, grid: (a) => grid(a), snow: (a) => snow(a), bokeh,
+  concrete, sunburst, halftone: (a) => halftone(a), holo, scanlines: (a) => scanlines(a), terrazzo,
+};
 export const PATTERN_NAMES = Object.keys(PATTERNS);
 
 export const patternSrc = (name: string, a: string, b = a) => `pattern:${name}|a=${a}|b=${b}`;

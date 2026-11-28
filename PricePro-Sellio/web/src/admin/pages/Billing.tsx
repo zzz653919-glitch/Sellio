@@ -119,7 +119,7 @@ function Subscriptions() {
               <div className="h-56">
                 <ResponsiveContainer>
                   <BarChart data={summary.data.daily}><CartesianGrid stroke={ch.grid} strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="date" tick={{ fill: ch.axis, fontSize: 11 }} tickFormatter={(v: string) => v.slice(5)} minTickGap={16} /><YAxis tick={{ fill: ch.axis, fontSize: 11 }} allowDecimals={false} /><Tooltip {...ch.tooltip} />
+                    <XAxis dataKey="date" tick={{ fill: ch.axis, fontSize: 11 }} tickFormatter={(v: string) => v.slice(5)} minTickGap={16} /><YAxis tick={{ fill: ch.axis, fontSize: 11 }} allowDecimals={false} /><Tooltip cursor={{ fill: "rgba(148,163,184,0.14)" }} {...ch.tooltip} />
                     <Bar dataKey="generation" stackId="a" name={t("AI ads")} fill={SERIES_COLORS[1]} />
                     <Bar dataKey="forecast" stackId="a" name={t("Forecasts")} fill={SERIES_COLORS[0]} radius={[4, 4, 0, 0]} />
                   </BarChart>
@@ -184,7 +184,7 @@ function PaymentsPage() {
         <Section title={t("Daily revenue")}>
           <div className="h-64">
             <ResponsiveContainer>
-              <BarChart data={d.chart}><CartesianGrid stroke={ch.grid} strokeDasharray="3 3" vertical={false} /><XAxis dataKey="date" tick={{ fill: ch.axis, fontSize: 11 }} tickFormatter={(v: string) => v.slice(5)} minTickGap={16} /><YAxis tick={{ fill: ch.axis, fontSize: 11 }} /><Tooltip {...ch.tooltip} />
+              <BarChart data={d.chart}><CartesianGrid stroke={ch.grid} strokeDasharray="3 3" vertical={false} /><XAxis dataKey="date" tick={{ fill: ch.axis, fontSize: 11 }} tickFormatter={(v: string) => v.slice(5)} minTickGap={16} /><YAxis tick={{ fill: ch.axis, fontSize: 11 }} /><Tooltip cursor={{ fill: "rgba(148,163,184,0.14)" }} {...ch.tooltip} />
                 {d.currencies.map((c, i) => <Bar key={c} dataKey={c} name={c.toUpperCase()} fill={SERIES_COLORS[i % SERIES_COLORS.length]} radius={[4, 4, 0, 0]} />)}
               </BarChart>
             </ResponsiveContainer>

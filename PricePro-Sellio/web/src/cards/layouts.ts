@@ -7,7 +7,7 @@
  * Colours are semantic — paper (background), ink (text), panel (tiles), hero (colour areas) — so every
  * composition works with every theme and background.
  */
-import { arch, circle, dots, frame, glow, img, lin, pill, rad, rect, ring, sparkle, stripes, text, blob, tri, type Part } from "../studio/templates/compose";
+import { arch, circle, diamond, dots, frame, glow, img, lin, pill, plus, rad, rect, ring, shape, sparkle, star, stripes, text, blob, tri, wave, type Part } from "../studio/templates/compose";
 import { iconSrc } from "../studio/icons";
 import { patternSrc } from "../studio/patterns";
 import type { Doc, El, Fill, ImageEl, TextEl } from "../studio/types";
@@ -760,6 +760,120 @@ function decoParts(deco: Deco[], p: Palette): Part[] {
     if (d === "beam") out.push(named(rect(0.3, -0.3, 0.35, 1.6, lin(90, "rgba(255,255,255,0)", "rgba(255,255,255,0.10)", "rgba(255,255,255,0)"), 0, { rot: 24 }), "Light beam"));
     if (d === "pop") out.push(circle(-0.08, 0.78, 0.3, p.accent, { opacity: 0.9 }), tri(0.82, 0.04, 0.16, 0.12, p.primary, { opacity: 0.9, rot: 15 }), circle(0.85, 0.62, 0.1, p.grad2, { opacity: 0.9 }));
     if (d === "abstract") out.push(blob(-0.15, -0.08, 0.5, 0.3, p.primary, { opacity: 0.9 }), blob(0.7, 0.75, 0.45, 0.3, p.grad2, { opacity: 0.85 }), circle(0.82, 0.06, 0.12, p.accent, { opacity: 0.9 }));
+    // ---- the 20 newer designs
+    if (d === "cyber") out.push(
+      glow(-0.35, -0.25, 0.9, alpha(p.primary, 0.32)), glow(0.5, 0.5, 0.9, alpha(p.grad2, 0.28)),
+      named(img(patternSrc("scanlines", "#FFFFFF"), 0, 0, 1, 1, { fit: "cover", shadow: false, opacity: 0.05 }), "Scan lines"),
+      named(rect(-0.2, 0.9, 1.4, 0.007, p.primary, 0, { rot: -9, blur: 1 }), "Neon slash"), named(rect(-0.2, 0.93, 1.4, 0.0035, p.grad2, 0, { rot: -9 }), "Neon slash"),
+      named(rect(0.03, 0.022, 0.09, 0.004, p.grad2), "Corner"), named(rect(0.03, 0.022, 0.005, 0.07, p.grad2), "Corner"),
+      named(rect(0.88, 0.974, 0.09, 0.004, p.primary), "Corner"), named(rect(0.965, 0.908, 0.005, 0.07, p.primary), "Corner"));
+    if (d === "royal") out.push(
+      named(frame(0.03, 0.022, 0.94, 0.956, p.accent, 3), "Gold frame"), named(frame(0.046, 0.034, 0.908, 0.932, alpha(p.accent, 0.55), 1), "Inner frame"),
+      ...[[0.03, 0.022], [0.97, 0.022], [0.03, 0.978], [0.97, 0.978]].map(([x, y]) => named(diamond(x - 0.022, y - 0.016, 0.044, 0.032, p.accent), "Corner ornament")),
+      named(diamond(0.47, 0.012, 0.06, 0.022, p.accent), "Crest"), named(rect(0.36, 0.022, 0.1, 0.0025, p.accent), "Crest line"), named(rect(0.54, 0.022, 0.1, 0.0025, p.accent), "Crest line"));
+    if (d === "botanical") out.push(
+      named(img(patternSrc("leaves", "#2F6B3A", "#7FB069"), -0.3, -0.17, 0.62, 0.34, { fit: "cover", shadow: false, opacity: 0.9, rot: -8 }), "Leaves"),
+      named(img(patternSrc("leaves", "#4E8A4F", "#A3C585"), 0.6, 0.78, 0.66, 0.36, { fit: "cover", shadow: false, opacity: 0.95, rot: 10 }), "Leaves"),
+      named(img(patternSrc("flowers", lighter(p.accent, 0.2), "#F7D6E0"), 0.74, -0.1, 0.4, 0.2, { fit: "cover", shadow: false, opacity: 0.9 }), "Blossoms"),
+      named(img(patternSrc("flowers", "#F7D6E0", p.accent), -0.12, 0.84, 0.4, 0.22, { fit: "cover", shadow: false, opacity: 0.9 }), "Blossoms"));
+    if (d === "zen") out.push(
+      named(rect(0.06, 0.955, 0.4, 0.003, alpha(p.ink, 0.35)), "Brush line"),
+      named(rect(0.885, 0.885, 0.07, 0.07, p.primary, 6), "Seal"), named(frame(0.893, 0.893, 0.054, 0.054, "#FFFFFF", 2, 3), "Seal"));
+    if (d === "swiss") out.push(
+      ...[0.25, 0.5, 0.75].map((x) => named(rect(x, 0, 0.0015, 1, alpha(p.ink, 0.07)), "Grid line")),
+      named(rect(0, 0.33, 1, 0.0015, alpha(p.ink, 0.07)), "Grid line"), named(rect(0, 0.66, 1, 0.0015, alpha(p.ink, 0.07)), "Grid line"),
+      named(rect(0.88, 0.0, 0.12, 0.09, p.primary), "Red block"), named(rect(0.06, 0.028, 0.12, 0.008, p.ink), "Rule"));
+    if (d === "glassPanels") out.push(
+      glow(-0.3, -0.15, 0.8, alpha(p.grad2, 0.4)), glow(0.55, 0.55, 0.8, alpha(p.primary, 0.3)),
+      named(rect(0.58, 0.06, 0.52, 0.42, "rgba(255,255,255,0.07)", 40, { rot: 12, stroke: "rgba(255,255,255,0.28)", strokeW: 2 }), "Glass panel"),
+      named(rect(-0.14, 0.58, 0.5, 0.4, "rgba(255,255,255,0.06)", 40, { rot: -10, stroke: "rgba(255,255,255,0.22)", strokeW: 2 }), "Glass panel"),
+      named(rect(0.18, -0.25, 0.05, 1.5, lin(90, "rgba(255,255,255,0)", "rgba(255,255,255,0.14)", "rgba(255,255,255,0)"), 0, { rot: 22 }), "Reflection"));
+    if (d === "artdeco") out.push(
+      ...[0.34, 0.26, 0.18, 0.1].map((dd, k) => named(ring(-dd / 2, -dd / 2 * 0.75, dd, alpha(p.primary, 0.9 - k * 0.15), 2), "Art deco fan")),
+      ...[0.34, 0.26, 0.18, 0.1].map((dd, k) => named(ring(1 - dd / 2, 1 - dd / 2 * 0.75, dd, alpha(p.primary, 0.9 - k * 0.15), 2), "Art deco fan")),
+      named(frame(0.035, 0.026, 0.93, 0.948, alpha(p.primary, 0.7), 1), "Gold frame"),
+      named(rect(0.42, -0.3, 0.16, 1.6, lin(90, "rgba(212,175,55,0)", "rgba(212,175,55,0.10)", "rgba(212,175,55,0)"), 0, { rot: 18 }), "Gold light"));
+    if (d === "clouds") {
+      for (const [x, y, dd] of [[-0.12, 0.84, 0.3], [0.1, 0.88, 0.26], [0.32, 0.9, 0.22], [0.62, 0.86, 0.3], [0.84, 0.82, 0.26], [-0.06, 0.06, 0.18], [0.08, 0.03, 0.14]] as const)
+        out.push(named(circle(x, y, dd, "#FFFFFF", { opacity: 0.85, blur: 3 }), "Cloud"));
+      out.push(star(0.86, 0.07, 0.05, p.accent), sparkle(0.12, 0.3, 0.035, p.primary, { opacity: 0.8 }), star(0.9, 0.42, 0.03, p.grad2), sparkle(0.78, 0.2, 0.025, p.grad2));
+    }
+    if (d === "concrete") out.push(
+      named(img(patternSrc("concrete", "#C9C7C3", "#6E6C69"), 0, 0, 1, 1, { fit: "cover", shadow: false }), "Concrete"),
+      named(rect(0, 0, 1, 0.022, lin(180, "#4A4A4A", "#2A2A2A")), "Steel beam"), named(rect(0, 0.022, 1, 0.004, "#1A1A1A"), "Steel beam"),
+      named(stripes(0, 0.972, 1, 0.028, p.primary, 0.95), "Hazard tape"));
+    if (d === "floating") out.push(
+      named(rect(0, 0.66, 1, 0.34, lin(180, alpha(p.primary, 0), alpha(p.primary, 0.09))), "Floor"),
+      named(rect(0.05, 0.66, 0.9, 0.002, alpha(p.primary, 0.15)), "Horizon"));
+    if (d === "halo") out.push(glow(-0.25, -0.2, 0.8, alpha(p.grad2, 0.28)), glow(0.55, 0.6, 0.8, alpha(p.primary, 0.25)));
+    if (d === "fashion") out.push(
+      named(frame(0.04, 0.03, 0.92, 0.94, alpha(p.ink, 0.22), 1), "Hairline frame"),
+      named(rect(0.04, 0.075, 0.92, 0.0015, alpha(p.ink, 0.5)), "Masthead rule"),
+      named(circle(0.915, 0.042, 0.022, p.accent), "Red dot"));
+    if (d === "earth") out.push(
+      named(wave(0, 0.9, 1, 0.1, alpha(p.accent, 0.35)), "Sand dune"),
+      ...[[0.08, 0.93, 0.05, "#9C7B5B"], [0.14, 0.95, 0.035, "#C2A383"], [0.84, 0.94, 0.045, "#7E6A55"], [0.9, 0.925, 0.03, "#B79573"]].map(([x, y, dd, c]) => named(shape("circle", x as number, y as number, (dd as number) * 1.4, dd as number, c as string), "Pebble")),
+      named(circle(0.8, 0.06, 0.12, alpha(p.primary, 0.25)), "Sun"));
+    if (d === "holo") out.push(
+      named(img(patternSrc("holo", "#B9A6FF", "#9EF0FF"), 0, 0, 1, 1, { fit: "cover", shadow: false, opacity: 0.6 }), "Holographic foil"),
+      sparkle(0.84, 0.08, 0.05, "#FFFFFF"), sparkle(0.1, 0.55, 0.035, "#FFFFFF", { opacity: 0.9 }), named(ring(0.78, 0.7, 0.3, "rgba(255,255,255,0.6)", 2), "Chrome ring"));
+    if (d === "medical") out.push(
+      glow(0.55, -0.2, 0.7, alpha(p.primary, 0.12)),
+      named(plus(0.87, 0.05, 0.06, alpha(p.primary, 0.18)), "Cross"), named(plus(0.05, 0.86, 0.045, alpha(p.accent, 0.22)), "Cross"),
+      named(rect(0, 0, 1, 0.008, lin(90, p.primary, p.accent)), "Top line"));
+    if (d === "retro") out.push(
+      named(img(patternSrc("sunburst", "rgba(0,0,0,0)", alpha(p.accent, 0.22)), -0.25, -0.1, 1.5, 1.2, { fit: "cover", shadow: false }), "Sun rays"),
+      named(img(patternSrc("halftone", alpha(p.primary, 0.5)), 0.6, 0.62, 0.4, 0.38, { fit: "cover", shadow: false, opacity: 0.6 }), "Halftone"),
+      named(rect(0.05, 0.035, 0.16, 0.012, p.primary, 6), "Retro stripe"), named(rect(0.05, 0.053, 0.16, 0.012, p.accent, 6), "Retro stripe"), named(rect(0.05, 0.071, 0.16, 0.012, "#2F7F7A", 6), "Retro stripe"));
+    if (d === "motion") out.push(
+      named(rect(-0.25, 0.6, 1.5, 0.2, alpha(p.primary, 0.92), 0, { rot: -12 }), "Slanted block"),
+      named(rect(-0.25, 0.83, 1.5, 0.018, alpha(p.accent, 0.9), 0, { rot: -12 }), "Streak"),
+      ...[[0.02, 0.2, 0.22], [0.05, 0.24, 0.32], [0.01, 0.28, 0.16], [0.7, 0.12, 0.26], [0.76, 0.16, 0.2]].map(([x, y, w]) => named(rect(x, y, w, 0.006, alpha(p.ink, 0.18), 3, { rot: -12 }), "Speed line")));
+    if (d === "arches") out.push(
+      named(rect(0, 0.72, 1, 0.28, lin(180, darker(typeof p.soft === "string" && p.soft.startsWith("#") ? p.soft : "#E6DDD0", 0.94), darker(typeof p.soft === "string" && p.soft.startsWith("#") ? p.soft : "#E6DDD0", 0.84))), "Floor"),
+      named(rect(0, 0.718, 1, 0.004, alpha(p.ink, 0.12)), "Skirting"),
+      named(rect(0, 0, 0.035, 0.72, lin(90, alpha(p.ink, 0.10), alpha(p.ink, 0.02))), "Pilaster"), named(rect(0.965, 0, 0.035, 0.72, lin(90, alpha(p.ink, 0.02), alpha(p.ink, 0.10))), "Pilaster"));
+    if (d === "marbleFloor") out.push(
+      named(img(patternSrc("marble", "#F2F0EC", "#8E8A84"), 0, 0.68, 1, 0.32, { fit: "cover", shadow: false }), "Marble floor"),
+      named(rect(0, 0.678, 1, 0.003, alpha(p.accent, 0.8)), "Gold line"));
+    if (d === "geometry") out.push(glow(-0.2, -0.15, 0.6, alpha(p.primary, 0.12)), glow(0.6, 0.65, 0.6, alpha(p.accent, 0.12)));
+  }
+  return out;
+}
+
+/** Decorations that sit around the product itself (behind it): ensō, arch, halo, pedestal, 3D shapes… */
+function productDeco(deco: Deco[], prod: ImageEl, p: Palette): El[] {
+  const out: El[] = [];
+  const add = (x: Part, name: string) => out.push({ ...x, name, id: "" } as El);
+  const cx = prod.x + prod.w / 2, cy = prod.y + prod.h / 2, size = Math.min(prod.w, prod.h);
+  const clampX = (x: number, w: number) => Math.max(-0.05, Math.min(1.05 - w, x));
+  if (deco.includes("zen")) add(circle(Math.min(0.98 - size * 0.5, cx + size * 0.08), Math.max(0.02, prod.y - size * 0.06), size * 0.5, alpha(p.primary, 0.88)), "Red sun");
+  if (deco.includes("zen")) add(ring(cx - size * 0.52, cy - size * 0.52, size * 1.04, alpha(p.ink, 0.75), 9, { blur: 0.6, opacity: 0.85 }), "Ensō");
+  if (deco.includes("halo")) {
+    add(glow(cx - size * 0.7, cy - size * 0.7, size * 1.4, alpha(p.primary, 0.35)), "Halo glow");
+    add(ring(cx - size * 0.5, cy - size * 0.5, size, p.primary, 10, { blur: 3 }), "Light ring");
+    add(ring(cx - size * 0.5, cy - size * 0.5, size, "#FFFFFF", 3, { opacity: 0.9 }), "Light ring");
+  }
+  if (deco.includes("earth")) add(arch(cx - prod.w * 0.48, prod.y - prod.h * 0.04, prod.w * 0.96, prod.h * 1.04, alpha(p.primary, 0.82)), "Terracotta arch");
+  if (deco.includes("arches")) {
+    add(arch(cx - prod.w * 0.5, prod.y - prod.h * 0.1, prod.w, prod.h * 1.0, lin(180, "rgba(255,255,255,0.75)", "rgba(255,255,255,0.35)")), "Arched window");
+    add({ ...arch(cx - prod.w * 0.5, prod.y - prod.h * 0.1, prod.w, prod.h * 1.0, "rgba(0,0,0,0)"), stroke: alpha(p.ink, 0.18), strokeW: 3 } as Part, "Window frame");
+  }
+  if (deco.includes("floating")) {
+    add(shape("circle", cx - prod.w * 0.32, Math.min(0.95, prod.y + prod.h * 1.06), prod.w * 0.64, prod.h * 0.07, rad(0.5, 0.5, 0.5, "rgba(15,23,42,0.28)", "rgba(15,23,42,0)")), "Floating shadow");
+    add(circle(clampX(prod.x - size * 0.12, size * 0.12), prod.y + prod.h * 0.12, size * 0.12, rad(0.35, 0.3, 0.75, "#FFFFFF", p.primary)), "Sphere");
+    add(circle(clampX(prod.x + prod.w + size * 0.02, size * 0.07), prod.y + prod.h * 0.6, size * 0.07, rad(0.35, 0.3, 0.75, "#FFFFFF", p.accent)), "Sphere");
+  }
+  if (deco.includes("marbleFloor")) {
+    add(shape("circle", cx - prod.w * 0.42, prod.y + prod.h * 0.88, prod.w * 0.84, prod.h * 0.1, lin(180, "#FFFFFF", "#E4E0DA")), "Pedestal top");
+    add(rect(cx - prod.w * 0.42, prod.y + prod.h * 0.93, prod.w * 0.84, prod.h * 0.12, lin(180, "#EDEAE5", "#CFCAC2")), "Pedestal");
+    add(rect(cx - prod.w * 0.42, prod.y + prod.h * 0.93, prod.w * 0.84, 0.003, alpha(p.accent, 0.9)), "Gold rim");
+  }
+  if (deco.includes("geometry")) {
+    add(circle(clampX(prod.x - size * 0.14, size * 0.18), prod.y + prod.h * 0.05, size * 0.18, rad(0.35, 0.3, 0.8, lighter(p.primary, 0.5), p.primary)), "3D sphere");
+    add(tri(clampX(prod.x + prod.w - size * 0.06, size * 0.16), prod.y - size * 0.04, size * 0.16, size * 0.18, lin(90, lighter(p.accent, 0.3), darker(p.accent, 0.75))), "3D cone");
+    add(rect(clampX(prod.x + prod.w - size * 0.02, size * 0.11), prod.y + prod.h * 0.72, size * 0.11, size * 0.11, lin(135, lighter(p.grad2, 0.4), p.grad2), 6, { rot: 28 }), "3D cube");
+    add(ring(clampX(prod.x - size * 0.06, size * 0.12), prod.y + prod.h * 0.78, size * 0.12, p.accent, 7), "3D torus");
   }
   return out;
 }
@@ -779,6 +893,7 @@ function finish(els: El[], s: StyleConfig, p: Palette, deco: Deco[]): El[] {
     const lightGlow: Partial<Record<LightKey, string>> = { studio: "rgba(255,255,255,0.55)", natural: "rgba(255,226,170,0.45)", golden: "rgba(246,194,91,0.5)", neon: alpha(p.primary, 0.5) };
     if (lightGlow[s.lighting]) behind.push({ ...glow(cx - prod.w * 0.55, cy - prod.w * 0.55, prod.w * 1.1, lightGlow[s.lighting]!), id: "" } as El);
     if (s.lighting === "neon") behind.push({ ...glow(cx - prod.w * 0.2, cy - prod.w * 0.1, prod.w * 0.8, alpha(p.accent, 0.4)), id: "" } as El);
+    behind.push(...productDeco(deco, prod, p));
     if (deco.includes("podium") && (prod.mask ?? "none") === "none") {
       behind.push({ ...rect(prod.x + prod.w * 0.08, prod.y + prod.h * 0.86, prod.w * 0.84, prod.h * 0.14, p.dark ? lin(180, "#2A2A30", "#141418") : lin(180, "#FFFFFF", "#D9DCE1"), 999), name: "Podium", id: "" } as El);
     }

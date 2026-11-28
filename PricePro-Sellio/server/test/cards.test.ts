@@ -239,3 +239,18 @@ test("a card session is kept in My Projects (and removed with it)", async () => 
   assert.equal((await client.del(`/api/cards/groups/${gid}`)).status, 200);
   assert.equal((await client.get("/api/projects?type=card_session")).data.items.length, 0);
 });
+
+test("every design theme has its own AI photo direction (the 20 newer ones included)", async () => {
+  const { THEMES, buildCardPhotoPrompt } = await import("../src/modules/cards/photos.js");
+  const keys = ["cyberpunk", "royal", "botanical", "zen", "swiss", "glass-premium", "black-gold", "pastel-dream", "concrete", "floating",
+    "neon-gradient", "fashion", "earth", "holo", "medical", "retro", "motion", "architect", "marble-studio", "geometry"] as const;
+  assert.equal(Object.keys(THEMES).length, 41, "21 original + 20 new themes");
+  const texts = new Set<string>();
+  for (const k of keys) {
+    const prompt = buildCardPhotoPrompt({ platform: "Instagram", theme: k, angle: "front", background: "auto", lighting: "soft", shadow: 40, transparent: false, productName: "Test" } as never);
+    assert.ok(prompt.includes(THEMES[k]), k);
+    assert.match(prompt, /THE PRODUCT MUST STAY EXACTLY THE SAME/);
+    texts.add(THEMES[k]);
+  }
+  assert.equal(texts.size, keys.length, "no two designs share the same direction");
+});

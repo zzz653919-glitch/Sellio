@@ -61,7 +61,7 @@ export default function Analytics() {
         </LineChart></ResponsiveContainer></div>
       </Section>
       <Section title={t("AI and service usage")}>
-        <div className="h-64"><ResponsiveContainer><BarChart data={d.daily}><CartesianGrid stroke={ch.grid} strokeDasharray="3 3" vertical={false} />{xAxis}<YAxis {...axis} allowDecimals={false} /><Tooltip {...ch.tooltip} /><Legend />
+        <div className="h-64"><ResponsiveContainer><BarChart data={d.daily}><CartesianGrid stroke={ch.grid} strokeDasharray="3 3" vertical={false} />{xAxis}<YAxis {...axis} allowDecimals={false} /><Tooltip cursor={{ fill: "rgba(148,163,184,0.14)" }} {...ch.tooltip} /><Legend />
           <Bar dataKey="aiRequests" stackId="a" name={t("AI text requests")} fill={SERIES_COLORS[0]} />
           <Bar dataKey="aiAds" stackId="a" name={t("AI ad images")} fill={SERIES_COLORS[4]} />
           <Bar dataKey="templateBanners" stackId="a" name={t("Template banners")} fill={SERIES_COLORS[1]} />

@@ -101,7 +101,7 @@ export default function Analytics() {
                     <CartesianGrid stroke={grid} strokeDasharray="3 3" vertical={false} />
                     <XAxis dataKey="date" tick={{ fill: axis, fontSize: 11 }} tickFormatter={(d: string) => fmtAxis(d, "day")} minTickGap={16} />
                     <YAxis allowDecimals={false} tick={{ fill: axis, fontSize: 11 }} />
-                    <Tooltip contentStyle={{ background: resolved === "dark" ? "#0f172a" : "#fff", border: `1px solid ${grid}`, borderRadius: 12 }} />
+                    <Tooltip cursor={{ fill: "rgba(148,163,184,0.14)" }} contentStyle={{ background: resolved === "dark" ? "#0f172a" : "#fff", border: `1px solid ${grid}`, borderRadius: 12 }} />
                     <Legend />
                     {(["studio", "forecast", "projects"] as const).map((k) => (
                       <Bar key={k} dataKey={k} stackId="a" name={t(SERVICE_LABEL[k])} fill={COLORS[k]} radius={k === "projects" ? [4, 4, 0, 0] : 0} />
@@ -119,7 +119,7 @@ export default function Analytics() {
                       <Pie data={s.usageByService.map((u) => ({ name: t(SERVICE_LABEL[u.service] ?? u.service), value: u.n, key: u.service }))} dataKey="value" nameKey="name" innerRadius={55} outerRadius={90} paddingAngle={2}>
                         {s.usageByService.map((u) => <Cell key={u.service} fill={COLORS[u.service] ?? "#94a3b8"} />)}
                       </Pie>
-                      <Tooltip />
+                      <Tooltip contentStyle={{ background: resolved === "dark" ? "#0f172a" : "#fff", border: `1px solid ${grid}`, borderRadius: 12 }} itemStyle={{ color: resolved === "dark" ? "#e2e8f0" : "#0f172a" }} />
                       <Legend />
                     </PieChart>
                   </ResponsiveContainer>

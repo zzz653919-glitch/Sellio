@@ -3,7 +3,7 @@
  * ("Explore all designs") lists the folders with search and category filters; opening a folder shows its
  * five designs large, and "Choose this theme" applies the theme and its five designs.
  */
-import { ArrowLeft, Check, Folder, Search } from "lucide-react";
+import { ArrowLeft, Check, Eye, Folder, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Button, Input, Modal, cx } from "../components/ui";
 import { useI18n } from "../lib/i18n";
@@ -53,6 +53,7 @@ export function ThemeGallery({ open, onClose, current, onSelect, sample, size, m
   const [cat, setCat] = useState<ThemeCategory | "all">("all");
   const [folder, setFolder] = useState<ThemePreset | null>(null);
   const [viewing, setViewing] = useState<number | null>(null);
+  const [preview, setPreview] = useState<ThemePreset | null>(null);
   const list = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return THEMES.filter((x) => (cat === "all" || x.categories.includes(cat))
@@ -111,15 +112,31 @@ export function ThemeGallery({ open, onClose, current, onSelect, sample, size, m
           {list.length === 0 ? <p className="py-10 text-center text-sm muted">{t("No designs found")}</p> : (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
               {list.map((th) => (
-                <div key={th.key} data-theme={th.key} className="flex flex-col gap-1">
+                <div key={th.key} data-theme={th.key} className="flex flex-col gap-1.5">
                   <ThemeFolder th={th} sample={sample} size={previewSize} mp={mp} selected={th.key === current} onClick={() => setFolder(th)} />
-                  <p className="line-clamp-2 px-0.5 text-[11px] muted">{t(th.description)}</p>
+                  <p className="line-clamp-2 min-h-[2.2em] px-0.5 text-[11px] muted">{t(th.description)}</p>
+                  <div className="flex gap-1.5">
+                    <Button size="sm" variant="secondary" className="flex-1" icon={<Eye className="h-3.5 w-3.5" />} onClick={() => setPreview(th)} data-testid="theme-preview">{t("Preview")}</Button>
+                    <Button size="sm" className="flex-1" variant={th.key === current ? "secondary" : "primary"} onClick={() => pick(th)} data-testid="theme-select">{th.key === current ? t("Selected") : t("Select")}</Button>
+                  </div>
                 </div>
               ))}
             </div>
           )}
         </div>
       )}
+      {preview && (() => {
+        const style = { ...defaultStyle(mp), theme: preview.key, lighting: preview.suggest.lighting as never };
+        return (
+          <SlideViewer onClose={() => setPreview(null)}
+            slides={themeLayouts(preview.key).map((l, k) => ({
+              key: l, title: `${t(preview.name)} · ${k + 1}. ${t(LAYOUT_LABEL[l])}`,
+              render: (w) => <DocPreview doc={buildCard(l, { ...sample, style }, size)} width={w} />,
+              thumb: (w) => <DocPreview doc={buildCard(l, { ...sample, style }, previewSize)} width={w} />,
+            }))}
+            footer={() => <Button onClick={() => { const th = preview; setPreview(null); pick(th); }}>{preview.key === current ? t("Selected") : t("Choose this theme")}</Button>} />
+        );
+      })()}
     </Modal>
   );
 }

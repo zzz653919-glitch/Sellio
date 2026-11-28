@@ -195,7 +195,8 @@ export function SeasonPanel({ s, title }: { s: Seasonality; title: string }) {
     const fc = s.outlook.map((o) => ({ date: o.date, forecast: o.value, band: [o.lower, o.upper] as [number, number] }));
     return last ? [...hist.slice(0, -1), { ...last, forecast: last.actual, band: [last.actual, last.actual] as [number, number] }, ...fc] : fc;
   }, [s]);
-  const tip = { background: resolved === "dark" ? "#0f172a" : "#fff", border: `1px solid ${grid}`, borderRadius: 12 };
+  const tip = { background: resolved === "dark" ? "#0f172a" : "#fff", border: `1px solid ${grid}`, borderRadius: 12, color: resolved === "dark" ? "#e2e8f0" : "#0f172a" };
+  const tipItem = { color: resolved === "dark" ? "#e2e8f0" : "#0f172a" };
 
   return (
     <div className="space-y-5 rounded-2xl border border-brand-200 bg-brand-50/40 p-4 dark:border-brand-500/30 dark:bg-brand-500/5 sm:p-5">
@@ -239,7 +240,7 @@ export function SeasonPanel({ s, title }: { s: Seasonality; title: string }) {
                 <XAxis dataKey="name" tick={{ fill: axis, fontSize: 10 }} interval={0} angle={-40} textAnchor="end" height={42} />
                 <YAxis tick={{ fill: axis, fontSize: 11 }} tickFormatter={(v: number) => `${v}%`} />
                 <ReferenceLine y={0} stroke={axis} />
-                <Tooltip contentStyle={tip} formatter={(v: unknown, _n: unknown, item: { payload?: { consistency: number } }) => [`${fmtPct(Number(v))} · ${t("repeated {pct}% of years", { pct: Math.round((item.payload?.consistency ?? 0) * 100) })}`, t("Effect")]} />
+                <Tooltip cursor={{ fill: "rgba(148,163,184,0.14)" }} contentStyle={tip} itemStyle={tipItem} formatter={(v: unknown, _n: unknown, item: { payload?: { consistency: number } }) => [`${fmtPct(Number(v))} · ${t("repeated {pct}% of years", { pct: Math.round((item.payload?.consistency ?? 0) * 100) })}`, t("Effect")]} />
                 <Bar dataKey="effect" radius={[4, 4, 0, 0]}>
                   {monthsData.map((m) => (
                     <Cell key={m.month} fill={m.effect >= 0 ? "#10b981" : "#f43f5e"} fillOpacity={m.month === curMonth ? 1 : 0.65} stroke={m.month === curMonth ? (resolved === "dark" ? "#fff" : "#0f172a") : undefined} />

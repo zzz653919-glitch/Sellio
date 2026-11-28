@@ -192,7 +192,8 @@ function PeriodViews({ r, curMonth }: { r: WhenResult; curMonth: number }) {
   const years = useMemo(() => yearsOf(s.monthly).filter((y) => y.months.length >= 3), [s]);
   const grid = resolved === "dark" ? "#1e293b" : "#e2e8f0";
   const axis = resolved === "dark" ? "#94a3b8" : "#64748b";
-  const tip = { background: resolved === "dark" ? "#0f172a" : "#fff", border: `1px solid ${grid}`, borderRadius: 12 };
+  const tip = { background: resolved === "dark" ? "#0f172a" : "#fff", border: `1px solid ${grid}`, borderRadius: 12, color: resolved === "dark" ? "#e2e8f0" : "#0f172a" };
+  const tipItem = { color: resolved === "dark" ? "#e2e8f0" : "#0f172a" };
   const curSeason = seasons.find((x) => x.months.includes(curMonth))?.key;
   const range = (ms: number[]) => (ms.length >= 12 ? t("full year") : `${fmtMonthName(ms[0], true)}–${fmtMonthName(ms[ms.length - 1], true)}`);
 
@@ -249,7 +250,7 @@ function PeriodViews({ r, curMonth }: { r: WhenResult; curMonth: number }) {
                     <CartesianGrid stroke={grid} strokeDasharray="3 3" vertical={false} />
                     <XAxis dataKey="year" tick={{ fill: axis, fontSize: 11 }} />
                     <YAxis domain={[0, 100]} tick={{ fill: axis, fontSize: 11 }} tickFormatter={(v: number) => `${v}%`} />
-                    <Tooltip contentStyle={tip} formatter={(v: unknown) => [`${fmtNumber(Number(v), 1)}%`, t("Average search interest")]} />
+                    <Tooltip cursor={{ fill: "rgba(148,163,184,0.14)" }} contentStyle={tip} itemStyle={tipItem} formatter={(v: unknown) => [`${fmtNumber(Number(v), 1)}%`, t("Average search interest")]} />
                     <Bar dataKey="avg" radius={[4, 4, 0, 0]}>
                       {years.map((y) => <Cell key={y.year} fill={y.changePct == null ? "#94a3b8" : y.changePct >= 0 ? "#10b981" : "#f43f5e"} fillOpacity={y.partial ? 0.45 : 1} />)}
                     </Bar>
@@ -306,7 +307,7 @@ function PeriodViews({ r, curMonth }: { r: WhenResult; curMonth: number }) {
                       <CartesianGrid stroke={grid} strokeDasharray="3 3" vertical={false} />
                       <XAxis dataKey="date" tick={{ fill: axis, fontSize: 10 }} tickFormatter={(d: string) => dayMonth(d)} minTickGap={10} />
                       <YAxis domain={[0, 100]} tick={{ fill: axis, fontSize: 11 }} tickFormatter={(v: number) => `${v}%`} />
-                      <Tooltip contentStyle={tip} labelFormatter={(d) => t("Week of {date}", { date: dayMonth(String(d)) })} formatter={(v: unknown) => [`${fmtNumber(Number(v), 0)}%`, t("Search interest")]} />
+                      <Tooltip cursor={{ fill: "rgba(148,163,184,0.14)" }} contentStyle={tip} labelFormatter={(d) => t("Week of {date}", { date: dayMonth(String(d)) })} formatter={(v: unknown) => [`${fmtNumber(Number(v), 0)}%`, t("Search interest")]} />
                       <Bar dataKey="v" fill="#6366f1" radius={[3, 3, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
