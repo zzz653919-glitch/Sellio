@@ -90,6 +90,14 @@ test("saved cards: created together, listed, renamed, autosaved, duplicated, del
   assert.equal(cards.length, 3);
   assert.equal(new Set(cards.map((x: { groupId: string }) => x.groupId)).size, 1, "variants of one product belong together");
   assert.deepEqual(cards.map((x: { layout: string }) => x.layout), ["bold", "hero", "split"]);
+  // a big set is sent in parts: later parts join the same set and do not add another project
+  const projectsBefore = (await client.get("/api/projects")).data.items?.length;
+  const more = await client.post("/api/cards", { cards: [card("minimal")], groupId: cards[0].groupId });
+  assert.equal(more.status, 201, JSON.stringify(more.data));
+  assert.deepEqual(more.data.cards.map((x: { layout: string }) => x.layout), ["bold", "hero", "split", "minimal"]);
+  assert.equal((await client.get("/api/projects")).data.items?.length, projectsBefore);
+  assert.equal((await client.post("/api/cards", { cards: [card("x")], groupId: "00000000-0000-4000-8000-000000000000" })).status, 404);
+  assert.equal((await client.del(`/api/cards/${more.data.cards[3].id}`)).status, 200);
   // embedded pictures (data: URLs) and foreign links are refused
   assert.equal((await client.post("/api/cards", { cards: [{ ...card("x"), doc: doc("data:image/png;base64,AAAA") }] })).status, 400);
   assert.equal((await client.post("/api/cards", { cards: [{ ...card("x"), doc: doc("https://evil.example/x.png") }] })).status, 400);

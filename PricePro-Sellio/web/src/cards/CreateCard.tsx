@@ -48,28 +48,44 @@ const wantsTransparent = (cfg: Pick<GenConfig, "style" | "layouts">) =>
 type PhotoState = { file?: File; preview: string; cutout: boolean; uploadId: string | null; busy: boolean };
 type Step = { key: string; label: string; state: "wait" | "run" | "done" | "warn"; note?: string };
 
-function Section({ n, title, children, right, testId }: { n: number; title: string; children: ReactNode; right?: ReactNode; testId?: string }) {
+function Section({ n, title, children, right, testId }: { n?: number; title: string; children: ReactNode; right?: ReactNode; testId?: string }) {
   return (
     <Card className="space-y-4 p-5" data-testid={testId}>
-      <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-semibold">{n}. {title}</h3>{right}</div>
+      <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-semibold">{n != null && `${n}. `}{title}</h3>{right}</div>
       {children}
     </Card>
   );
 }
 
-export function CreateCard({ onDone, onCancel, from, regen }: { onDone: (groupId: string) => void; onCancel: () => void; from?: string | null; regen?: boolean }) {
+/** Card layouts offered when the photos come from the Multi-Angle Generator. */
+export const PRESET_LAYOUTS: { key: LayoutKey; label: string }[] = [
+  { key: "hero", label: "Main product card" }, { key: "multiAngle", label: "Multi-angle showcase" }, { key: "bold", label: "Feature infographic" },
+  { key: "specs", label: "Product specifications" }, { key: "circle", label: "Benefits showcase" }, { key: "lifestyle", label: "Lifestyle product card" },
+  { key: "poster", label: "Premium advertising card" }, { key: "beforeAfter", label: "Comparison card" }, { key: "minimal", label: "Minimal product card" },
+  { key: "frame", label: "Luxury product card" },
+];
+export type PresetPhotos = { photos: { src: string; uploadId: string }[]; name?: string };
+
+export function CreateCard({ onDone, onCancel, from, regen, preset, backLabel }: {
+  onDone: (groupId: string) => void; onCancel: () => void; from?: string | null; regen?: boolean;
+  /** Photos chosen in the Multi-Angle Generator: used as they are (no new AI photo), with a layout picker. */
+  preset?: PresetPhotos; backLabel?: string;
+}) {
   const { t, lang } = useI18n();
   const { user } = useAuth();
   const toast = useToast();
   const qc = useQueryClient();
   const opts = useOptions();
   const fileRef = useRef<HTMLInputElement>(null);
-  const [photo, setPhoto] = useState<PhotoState | null>(null);
+  const [photo, setPhoto] = useState<PhotoState | null>(() => (preset?.photos[0] ? { preview: preset.photos[0].src, cutout: false, uploadId: preset.photos[0].uploadId, busy: false } : null));
   const [photoError, setPhotoError] = useState<unknown>(null);
   const [dragging, setDragging] = useState(false);
-  const [f, setF] = useState({ name: "", features: "", benefits: "", price: "", oldPrice: "", marketplace: "uzum" as MarketplaceKey, language: (["uz", "ru", "en"].includes(lang) ? lang : "uz") as CardInput["language"] });
+  const [f, setF] = useState({ name: preset?.name ?? "", features: "", benefits: "", price: "", oldPrice: "", marketplace: "uzum" as MarketplaceKey, language: (["uz", "ru", "en"].includes(lang) ? lang : "uz") as CardInput["language"] });
   // a theme is a folder of five designs; the camera angle is left to the AI
-  const [cfg, setCfg] = useState<Omit<GenConfig, "size">>({ style: defaultStyle("uzum"), layouts: themeLayouts(defaultStyle("uzum").theme), angle: "auto", aiPhoto: true, variations: 1, ratio: "3:4" });
+  const [cfg, setCfg] = useState<Omit<GenConfig, "size">>({
+    style: defaultStyle("uzum"), angle: "auto", variations: 1, ratio: "3:4", aiPhoto: !preset,
+    layouts: preset ? (preset.photos.length > 1 ? ["hero", "multiAngle", "bold", "specs", "poster"] : ["hero", "bold", "specs", "poster", "minimal"]) : themeLayouts(defaultStyle("uzum").theme),
+  });
   const [customColors, setCustomColors] = useState(false);
   const [more, setMore] = useState(true);
   const [gallery, setGallery] = useState(false);
@@ -149,7 +165,8 @@ export function CreateCard({ onDone, onCancel, from, regen }: { onDone: (groupId
   };
   /** Open a theme's folder: its five designs, its background and light. */
   const applyTheme = (th: ThemePreset) => {
-    const layouts = themeLayouts(th.key);
+    // with photos from the Multi-Angle Generator the user picks the layouts themselves
+    const layouts = preset ? cfg.layouts : themeLayouts(th.key);
     setCfg((c) => ({ ...c, layouts, style: { ...c.style, theme: th.key, background: (th.suggest.background || "auto") as BackgroundKey, lighting: (th.suggest.lighting || "soft") as LightKey } }));
     setPreviewLayout(layouts[0]);
   };
@@ -161,7 +178,10 @@ export function CreateCard({ onDone, onCancel, from, regen }: { onDone: (groupId
   const sample = { copy: sampleCopy, input: { ...input, marketplace: live.mp, price: live.price ?? "199 000", oldPrice: live.oldPrice }, photo: previewPhoto, photos: { before: previewPhoto }, style: live.style };
   const shownLayout = previewLayout && cfg.layouts.includes(previewLayout) ? previewLayout : cfg.layouts[0] ?? "hero";
   const previewDoc = buildCard(shownLayout, sample, live.size);
-  const cardsCount = cfg.layouts.length;
+  // With several preset photos every layout is made with each photo (the multi-angle showcase once).
+  const cardsCount = preset && preset.photos.length > 1
+    ? Math.min(24, cfg.layouts.reduce((n, l) => n + (l === "multiAngle" ? 1 : preset.photos.length), 0))
+    : cfg.layouts.length;
 
   const ready = Boolean(photo?.uploadId && input.name.length >= 2 && cfg.layouts.length > 0 && user?.emailVerified && prefilled);
   // "Generate with this design" from the gallery: once the theme is applied, start right away (or say what is missing)
@@ -219,24 +239,25 @@ export function CreateCard({ onDone, onCancel, from, regen }: { onDone: (groupId
       })() : Promise.resolve();
       const [copy] = await Promise.all([textsP, photosP]);
       setStep("design", { state: "run" });
-      const photos = aiPhotos.length ? aiPhotos : [original];
+      const photos = preset ? preset.photos.map((x) => ({ src: x.src, cutout: false })) : aiPhotos.length ? aiPhotos : [original];
       const jobs: { layout: LayoutKey; photo: CardPhoto; extra: CardPhoto[] }[] = [];
       for (const l of cfg.layouts) {
         if (l === "multiAngle" || photos.length === 1) jobs.push({ layout: l, photo: photos[0], extra: photos.slice(1) });
         else for (const ph of photos) jobs.push({ layout: l, photo: ph, extra: photos.filter((x) => x !== ph) });
       }
-      const picked = jobs.slice(0, 12);
+      const picked = jobs.slice(0, preset ? 24 : 12);
       const docs = picked.map((j) => buildCard(j.layout, { copy, input, photo: j.photo, photos: { before: original, extra: j.extra }, style: cfg.style }, size));
       const thumbs = await Promise.all(docs.map(thumbOf));
       setStep("design", { state: "done" }); setStep("save", { state: "run" });
       const config: GenConfig = { ...cfg, angle: "auto", variations: 1, size, referenceUploadId: null, referenceStyle };
-      const r = await post<{ cards: Full[] }>("/cards", {
-        cards: docs.map((doc, i) => ({
+      const all = docs.map((doc, i) => ({
           name: `${input.name} · ${t(LAYOUT_LABEL[picked[i].layout])}${photos.length > 1 && picked[i].layout !== "multiAngle" ? ` ${photos.indexOf(picked[i].photo) + 1}` : ""}`,
           marketplace: f.marketplace, layout: picked[i].layout, photoUploadId: photo.uploadId,
           input: { ...input, photoCutout: photo.cutout, config, aiPhotos, originalUploadId: photo.uploadId }, copy, doc, thumb: thumbs[i],
-        })),
-      });
+        }));
+      // Saved in parts of 8 (request size limit); every part joins the set the first one made.
+      let r = await post<{ cards: Full[] }>("/cards", { cards: all.slice(0, 8) });
+      for (let k = 8; k < all.length; k += 8) r = await post<{ cards: Full[] }>("/cards", { cards: all.slice(k, k + 8), groupId: r.cards[0].groupId });
       setStep("save", { state: "done" });
       qc.invalidateQueries({ queryKey: ["cards"] });
       qc.invalidateQueries({ queryKey: ["projects"] });
@@ -266,13 +287,26 @@ export function CreateCard({ onDone, onCancel, from, regen }: { onDone: (groupId
   return (
     <div className="space-y-5" data-testid="card-create">
       <div className="flex flex-wrap items-center gap-2">
-        <Button variant="ghost" size="sm" icon={<ArrowLeft className="h-4 w-4" />} onClick={onCancel}>{t("My cards")}</Button>
+        <Button variant="ghost" size="sm" icon={<ArrowLeft className="h-4 w-4" />} onClick={onCancel}>{backLabel ?? t("My cards")}</Button>
         <h2 className="text-lg font-bold">{t("New product card")}</h2>
         <span className="ml-auto hidden text-xs muted sm:inline">{t("Universal AI product card studio")}</span>
       </div>
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_380px] xl:grid-cols-[minmax(0,1fr)_420px]">
         <div className="space-y-5">
           {/* 1. photo */}
+          {preset ? (
+            <Section n={1} title={t("Product photos")}>
+              <div className="grid grid-cols-3 gap-2 sm:grid-cols-4" data-testid="preset-photos">
+                {preset.photos.map((x, k) => (
+                  <div key={x.uploadId} className="relative overflow-hidden rounded-lg border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800">
+                    <img src={x.src} alt="" className="aspect-square w-full object-contain" />
+                    {k === 0 && <span className="absolute left-1 top-1 rounded bg-brand-600 px-1.5 py-0.5 text-[10px] font-bold text-white">{t("Main")}</span>}
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs muted">{t("Images chosen in the Multi-Angle Generator. Every chosen layout is made with each image; the multi-angle showcase uses all of them.")}</p>
+            </Section>
+          ) : (
           <Section n={1} title={t("Product photo")}>
             <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={(e) => void pick(e.target.files?.[0])} data-testid="card-photo-input" />
             <div>
@@ -301,6 +335,7 @@ export function CreateCard({ onDone, onCancel, from, regen }: { onDone: (groupId
             )}
             {photoError != null && <ErrorAlert error={photoError} />}
           </Section>
+          )}
 
           {/* 2. product */}
           <Section n={2} title={t("About the product")}>
@@ -320,6 +355,23 @@ export function CreateCard({ onDone, onCancel, from, regen }: { onDone: (groupId
           </Section>
 
           {/* 3. platform */}
+          {preset && (
+            <Section title={t("Card layouts")}>
+              <div className="flex flex-wrap gap-2" data-testid="preset-layouts">
+                {PRESET_LAYOUTS.map((l) => {
+                  const on = cfg.layouts.includes(l.key);
+                  return (
+                    <button key={l.key} type="button" aria-pressed={on} data-layout={l.key}
+                      onClick={() => setCfg((c) => ({ ...c, layouts: on ? (c.layouts.length > 1 ? c.layouts.filter((x) => x !== l.key) : c.layouts) : [...c.layouts, l.key] }))}
+                      className={cx("inline-flex items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-semibold transition", on ? "border-brand-500 bg-brand-600 text-white" : "border-slate-200 hover:border-brand-300 dark:border-slate-700")}>
+                      {on && <Check className="h-3 w-3" />}{t(l.label)}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-xs muted">{t("{n} cards will be made (at most 24).", { n: cardsCount })}</p>
+            </Section>
+          )}
           <Section n={3} title={t("Marketplace or platform")} testId="platform-section">
             <div className="grid gap-3 sm:grid-cols-3">
               <Field label={t("Platform")}>
@@ -417,13 +469,13 @@ export function CreateCard({ onDone, onCancel, from, regen }: { onDone: (groupId
           </Card>
 
           <Card className="space-y-3 p-4" data-testid="ai-photo-section">
-            <label className={cx("flex items-start gap-3", !imageAi && "opacity-60")}>
+            {!preset && <label className={cx("flex items-start gap-3", !imageAi && "opacity-60")}>
               <input type="checkbox" checked={aiPhoto} disabled={!imageAi} onChange={(e) => setCfg({ ...cfg, aiPhoto: e.target.checked })} className="mt-1" data-testid="ai-photo-toggle" />
               <span>
                 <span className="block text-sm font-semibold">{t("AI product photo")}</span>
                 <span className="block text-xs muted">{imageAi ? t("The AI re-shoots your product in the chosen theme, background and light and picks the best angle itself. The product's shape, colours and details stay exactly as they are. Uses one AI image from your limit.") : t("AI image generation is not connected on this server: your own photo is used.")}</span>
               </span>
-            </label>
+            </label>}
             {error != null && <ErrorAlert error={error} />}
             {steps ? (
               <ul className="space-y-1.5 text-sm" data-testid="gen-steps">

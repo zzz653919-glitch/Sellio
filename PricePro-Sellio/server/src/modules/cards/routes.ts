@@ -233,12 +233,14 @@ const newCardSchema = z.object({
 /** Save the design variants made for one product (all at once, so they belong together). */
 cardsRouter.post("/", requireVerified, async (req, res) => {
   const user = currentUser(req);
-  const b = parseBody(req, z.object({ cards: z.array(newCardSchema).min(1).max(12) }));
+  // groupId: add more cards to a set saved a moment ago (big sets are sent in parts).
+  const b = parseBody(req, z.object({ cards: z.array(newCardSchema).min(1).max(12), groupId: z.uuid().optional() }));
+  if (b.groupId && !(await get("SELECT 1 FROM product_cards WHERE user_id = ? AND group_id = ? LIMIT 1", user.id, b.groupId))) throw notFound("Card set not found");
   const photos = new Set(b.cards.map((c) => c.photoUploadId).filter((x): x is string => Boolean(x)));
   for (const p of photos) await getOwnedUpload(user.id, p);
   const count = (await get<{ n: number }>("SELECT COUNT(*) AS n FROM product_cards WHERE user_id = ?", user.id))?.n ?? 0;
   if (count + b.cards.length > 500) throw badRequest("You can keep up to 500 cards. Delete some old ones first.");
-  const group = newId();
+  const group = b.groupId ?? newId();
   const now = nowIso();
   const ids: string[] = [];
   for (const c of b.cards) {
@@ -250,11 +252,13 @@ cardsRouter.post("/", requireVerified, async (req, res) => {
       id, user.id, group, c.name, c.marketplace, c.layout, c.photoUploadId ?? null, JSON.stringify(c.input), JSON.stringify(c.copy), JSON.stringify(c.doc), c.thumb ?? null, now, now,
     );
   }
-  await logActivity(user.id, "cards_created", "studio", `Product cards created: ${b.cards[0].name}`, { refId: group });
-  // the session (with its settings) is kept in My Projects, to open and reuse later
-  const product = typeof b.cards[0].input.name === "string" && b.cards[0].input.name ? b.cards[0].input.name : b.cards[0].name;
-  await run("INSERT INTO projects (id,user_id,type,ref_id,title,created_at,updated_at) VALUES (?,?,?,?,?,?,?)",
-    newId(), user.id, "card_session", group, `Cards — ${String(product).slice(0, 100)}`, now, now);
+  if (!b.groupId) {
+    await logActivity(user.id, "cards_created", "studio", `Product cards created: ${b.cards[0].name}`, { refId: group });
+    // the session (with its settings) is kept in My Projects, to open and reuse later
+    const product = typeof b.cards[0].input.name === "string" && b.cards[0].input.name ? b.cards[0].input.name : b.cards[0].name;
+    await run("INSERT INTO projects (id,user_id,type,ref_id,title,created_at,updated_at) VALUES (?,?,?,?,?,?,?)",
+      newId(), user.id, "card_session", group, `Cards — ${String(product).slice(0, 100)}`, now, now);
+  }
   const rows = await all<CardRow>(`SELECT * FROM product_cards WHERE user_id = ? AND group_id = ? ORDER BY created_at, rowid`, user.id, group);
   res.status(201).json({ cards: rows.map(full) });
 });

@@ -24,6 +24,7 @@ import { studioRouter } from "./modules/studio/routes.js";
 import { adsRouter } from "./modules/ads/routes.js";
 import { campaignsRouter } from "./modules/campaigns/routes.js";
 import { cardsRouter } from "./modules/cards/routes.js";
+import { anglesRouter } from "./modules/angles/routes.js";
 import { adminRouter } from "./modules/admin/routes.js";
 import { supportRouter } from "./modules/support/routes.js";
 import { topDemand } from "./modules/forecast/topDemand.js";
@@ -163,6 +164,7 @@ export function createApp() {
   app.use("/api/ads", adsRouter);
   app.use("/api/campaigns", campaignsRouter);
   app.use("/api/cards", cardsRouter);
+  app.use("/api/angles", anglesRouter);
   app.use("/api/payments", paymentsRouter);
   app.use("/api/support", supportRouter);
   app.use("/api/admin", adminRouter);

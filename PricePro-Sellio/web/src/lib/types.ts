@@ -67,7 +67,7 @@ export type StudioOptions = {
 };
 
 export type Granularity = "day" | "week" | "month";
-export type ProjectType = "advertisement" | "forecast" | "card_session";
+export type ProjectType = "advertisement" | "forecast" | "card_session" | "angle_session";
 export type Project = {
   id: string;
   type: ProjectType;

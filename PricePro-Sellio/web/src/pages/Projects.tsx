@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Download, ExternalLink, FolderKanban, ImageIcon, LayoutGrid, LineChart, Pencil, Search, Trash2, X } from "lucide-react";
+import { Camera, Check, Download, ExternalLink, FolderKanban, ImageIcon, LayoutGrid, LineChart, Pencil, Search, Trash2, X } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { ErrorAlert, FavoriteButton } from "../components/shared";
@@ -15,6 +15,7 @@ const TYPE_META: Record<ProjectType, { label: string; icon: typeof ImageIcon; ro
   advertisement: { label: "Advertisement", icon: ImageIcon, route: (id) => `/studio?generation=${id}` },
   forecast: { label: "Forecast", icon: LineChart, route: (id) => `/forecast?market=${id}` },
   card_session: { label: "Product cards", icon: LayoutGrid, route: (id) => `/studio?tab=cards&group=${id}` },
+  angle_session: { label: "Multi-angle photos", icon: Camera, route: (id) => `/studio?tab=angles&session=${id}` },
 };
 
 function ProjectCard({ p, onDelete }: { p: Project; onDelete: (p: Project) => void }) {
@@ -59,7 +60,7 @@ function ProjectCard({ p, onDelete }: { p: Project; onDelete: (p: Project) => vo
           <div className="flex-1" />
           {p.downloadUrl && <a href={p.downloadUrl} title={t("Download")} className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"><Download className="h-4 w-4" /></a>}
           <button onClick={() => setEditing(true)} title={t("Rename")} aria-label={t("Rename")} className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"><Pencil className="h-4 w-4" /></button>
-          {!missing && p.type !== "card_session" && <FavoriteButton compact itemType={p.type} refId={p.refId} favoriteId={p.favoriteId} invalidate={["projects"]} />}
+          {!missing && p.type !== "card_session" && p.type !== "angle_session" && <FavoriteButton compact itemType={p.type} refId={p.refId} favoriteId={p.favoriteId} invalidate={["projects"]} />}
           <button onClick={() => onDelete(p)} title={t("Delete")} aria-label={t("Delete")} className="rounded-lg p-1.5 text-slate-500 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-500/10"><Trash2 className="h-4 w-4" /></button>
         </div>
       </div>
@@ -155,6 +156,7 @@ export default function Projects() {
           { value: "advertisement", label: t("Advertisements"), count: counts.advertisement ?? 0 },
           { value: "forecast", label: t("Forecasts"), count: counts.forecast ?? 0 },
           { value: "card_session", label: t("Product cards"), count: counts.card_session ?? 0 },
+          { value: "angle_session", label: t("Multi-angle photos"), count: counts.angle_session ?? 0 },
           { value: "uploads", label: t("Uploaded images") },
         ]} />
         {tab !== "uploads" && (

@@ -796,4 +796,46 @@ INSERT OR IGNORE INTO projects (id, user_id, type, ref_id, title, created_at, up
     FROM product_cards GROUP BY user_id, group_id;
 `,
   },
+  {
+    // Multi-Angle Generator: sessions (original photo + settings) and their AI images; kept in My Projects.
+    version: 21,
+    sql: `
+CREATE TABLE angle_sessions (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  upload_id TEXT NOT NULL,
+  settings_json TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX idx_angle_sessions_user ON angle_sessions(user_id, updated_at);
+CREATE TABLE angle_items (
+  id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL REFERENCES angle_sessions(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  generation_id TEXT NOT NULL,
+  angle TEXT NOT NULL,
+  needs_check INTEGER NOT NULL DEFAULT 0,
+  settings_json TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL
+);
+CREATE INDEX idx_angle_items_session ON angle_items(session_id, created_at);
+CREATE TABLE projects_v21 (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  type TEXT NOT NULL CHECK (type IN ('advertisement','forecast','price_comparison','card_session','angle_session')),
+  ref_id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  UNIQUE (user_id, type, ref_id)
+);
+INSERT INTO projects_v21 (id, user_id, type, ref_id, title, created_at, updated_at)
+  SELECT id, user_id, type, ref_id, title, created_at, updated_at FROM projects;
+DROP TABLE projects;
+ALTER TABLE projects_v21 RENAME TO projects;
+CREATE INDEX idx_projects_user ON projects(user_id, created_at);
+`,
+  },
 ];

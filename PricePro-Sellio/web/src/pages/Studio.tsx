@@ -15,6 +15,7 @@ import type { Generation, StudioOptions, Upload } from "../lib/types";
 const EDIT_IDEAS = ["Make the background darker", "Put it on a wooden table", "Make the light warmer", "Add a little more space around the product", "Make it look more premium", "Make the product black", "Hang it on a hanger", "Put it on a mannequin"];
 
 const CardsTab = lazy(() => import("../cards/CardsTab"));
+const AnglesTab = lazy(() => import("../angles/AnglesTab"));
 
 function statusTone(s: Generation["status"]) {
   return s === "succeeded" ? "green" : s === "failed" ? "red" : "brand";
@@ -175,7 +176,7 @@ export default function Studio() {
   const qc = useQueryClient();
   const [params, setParams] = useSearchParams();
   const currentId = params.get("generation");
-  const tab = params.get("tab") === "cards" ? "cards" : "ads";
+  const tab = params.get("tab") === "cards" ? "cards" : params.get("tab") === "angles" ? "angles" : "ads";
 
   const onAds = tab === "ads";
   const options = useQuery({ queryKey: ["studio-options"], queryFn: () => get<StudioOptions>("/studio/options"), enabled: onAds });
@@ -266,9 +267,9 @@ export default function Studio() {
     <div>
       <PageHeader icon={<Sparkles className="h-6 w-6" />} title={t("AI Product Studio")} subtitle={t("Turn ordinary product photos into professional advertising images.")} />
       <div className="mb-6 overflow-x-auto" data-testid="studio-tabs">
-        <Tabs value={tab} onChange={(v) => setParams(v === "cards" ? { tab: "cards" } : {})} tabs={[{ value: "ads", label: t("AI advertisement") }, { value: "cards", label: t("Product cards") }]} />
+        <Tabs value={tab} onChange={(v) => setParams(v === "ads" ? {} : { tab: v })} tabs={[{ value: "ads", label: t("AI advertisement") }, { value: "cards", label: t("Product cards") }, { value: "angles", label: t("Multi-angle") }]} />
       </div>
-      {tab === "cards" ? <Suspense fallback={<div className="grid place-items-center py-16"><Spinner /></div>}><CardsTab /></Suspense> : (<>
+      {tab === "angles" ? <Suspense fallback={<div className="grid place-items-center py-16"><Spinner /></div>}><AnglesTab /></Suspense> : tab === "cards" ? <Suspense fallback={<div className="grid place-items-center py-16"><Spinner /></div>}><CardsTab /></Suspense> : (<>
       {opts && !opts.configured && <div className="mb-6"><IntegrationNotice service="imageGeneration" /></div>}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
