@@ -65,6 +65,13 @@ const lum = (c: string) => {
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 };
 const contrast = (a: string, b: string) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+/**
+ * Light behind the product on a dark scene. When the brand colour is as dark as the scene (black & white,
+ * dark luxury…) a glow in that colour is invisible and a dark product melts into the background, so a
+ * soft light in the text colour is used instead.
+ */
+const sceneGlow = (p: { primary: string; onHero: string }, scene: string, a: number) =>
+  contrast(p.primary, scene) < 1.8 ? alpha(p.onHero, Math.min(0.32, a * 0.7)) : alpha(p.primary, a);
 /** The colour a fill mostly looks like. */
 const fillColor = (f: Fill): string => (typeof f === "string" ? f : f.stops[Math.floor(f.stops.length / 2)]?.[1] ?? f.stops[0][1]);
 const readable = (bg: string, dark = "#111111", light = "#FFFFFF") => (contrast(bg, dark) >= contrast(bg, light) ? dark : light);
@@ -538,8 +545,8 @@ const LAYOUTS: Record<LayoutKey, Layout> = {
     return {
       bg: p.hero,
       parts: [
-        glow(0.05, 0.22, 0.9, alpha(p.primary, 0.45)),
-        glow(0.3, 0.45, 0.4, alpha(p.onHero, 0.12)),
+        glow(0.05, 0.22, 0.9, sceneGlow(p, typeof p.hero === "string" ? p.hero : "#000000", 0.45)),
+        glow(0.25, 0.4, 0.5, alpha(p.onHero, 0.14)),
         ...badgeOf(c, 0.62, 0.045, p.accent, p.onAccent),
         title(c, 0.06, 0.08, 0.88, 0.17, { size: 104, weight: 900, color: p.onHero, align: "center", upper: true, lineHeight: 0.98, spacing: 0.02 }),
         product(c, 0.1, 0.27, 0.8, 0.5),
@@ -568,7 +575,7 @@ const LAYOUTS: Record<LayoutKey, Layout> = {
     return {
       bg: night,
       parts: [
-        glow(0.05, 0.18, 0.9, alpha(p.primary, 0.4)),
+        glow(0.05, 0.18, 0.9, sceneGlow({ primary: p.primary, onHero: "#FFFFFF" }, typeof night === "string" ? night : "#0B0B12", 0.4)),
         title(c, 0.06, 0.05, 0.88, 0.12, { size: 80, color: "#FFFFFF", lineHeight: 1.02, align: "center" }),
         ...sub(c, 0.1, 0.17, 0.8, 0.045, { color: "#C9CDD6", align: "center" }),
         ...badgeOf(c, 0.33, 0.225, p.primary, p.onPrimary),

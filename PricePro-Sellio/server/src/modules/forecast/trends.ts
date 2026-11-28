@@ -9,6 +9,9 @@ import { recordApiCall } from "../../services/apiLog.js";
 import type { Point } from "./engine.js";
 
 export type TrendsRange = "today 3-m" | "today 12-m" | "today 5-y";
+/** An exact period, "YYYY-MM-DD YYYY-MM-DD" (Google Trends' custom time range). */
+export type CustomRange = `${string}-${string}-${string} ${string}-${string}-${string}`;
+export type RelatedQuery = { query: string; value: number };
 export type CountryInterest = { code: string; name: string; value: number };
 
 export interface TrendsProvider {
@@ -16,7 +19,9 @@ export interface TrendsProvider {
   /** Interest over time for one area; geo "" = worldwide. */
   interestOverTime(query: string, geo: string, range: TrendsRange): Promise<Point[]>;
   /** Up to 5 queries in one request: their values share one scale, so they can be compared with each other. */
-  interestOverTimeMulti?(queries: string[], geo: string, range: TrendsRange): Promise<Record<string, Point[]>>;
+  interestOverTimeMulti?(queries: string[], geo: string, range: TrendsRange | CustomRange): Promise<Record<string, Point[]>>;
+  /** The most searched queries that contain the term (100 = the most searched of them); "rising" = growing fastest. */
+  relatedQueries?(query: string, geo: string, range: TrendsRange | CustomRange): Promise<{ top: RelatedQuery[]; rising: RelatedQuery[] }>;
   /** Interest by country, worldwide (comparable between countries). */
   interestByCountry(query: string, range: TrendsRange): Promise<CountryInterest[]>;
   /** Interest by region inside one country (e.g. the regions of Uzbekistan). */
@@ -76,6 +81,17 @@ export function parseTimelineMulti(body: unknown, queries: string[]): Record<str
   return Object.fromEntries(Object.entries(out).map(([q, m]) => [q, [...m.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([date, units]) => ({ date, units }))]));
 }
 
+/** Parse `related_queries` (RELATED_QUERIES): top and rising queries with their values. */
+export function parseRelated(body: unknown): { top: RelatedQuery[]; rising: RelatedQuery[] } {
+  const rq = (body as { related_queries?: { top?: unknown[]; rising?: unknown[] } } | null)?.related_queries;
+  const list = (items: unknown[] | undefined) => (Array.isArray(items) ? items : []).flatMap((raw) => {
+    const it = raw as { query?: unknown; value?: unknown; extracted_value?: unknown };
+    const value = num(it.extracted_value) ?? num(it.value);
+    return typeof it.query === "string" && it.query.trim() && value !== null ? [{ query: it.query.trim(), value }] : [];
+  });
+  return { top: list(rq?.top), rising: list(rq?.rising) };
+}
+
 /** Parse `interest_by_region` (GEO_MAP_0). */
 export function parseByRegion(body: unknown): CountryInterest[] {
   const items = (body as { interest_by_region?: unknown[] } | null)?.interest_by_region;
@@ -118,9 +134,14 @@ export class SerpApiTrendsProvider implements TrendsProvider {
     return body ? parseTimeline(body) : [];
   }
 
-  async interestOverTimeMulti(queries: string[], geo: string, range: TrendsRange) {
+  async interestOverTimeMulti(queries: string[], geo: string, range: TrendsRange | CustomRange) {
     const body = await this.call({ q: queries.join(","), date: range, data_type: "TIMESERIES", ...(geo ? { geo } : {}) });
     return parseTimelineMulti(body, queries);
+  }
+
+  async relatedQueries(query: string, geo: string, range: TrendsRange | CustomRange) {
+    const body = await this.call({ q: query, date: range, data_type: "RELATED_QUERIES", ...(geo ? { geo } : {}) });
+    return body ? parseRelated(body) : { top: [], rising: [] };
   }
 
   async interestByCountry(query: string, range: TrendsRange) {

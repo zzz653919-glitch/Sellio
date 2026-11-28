@@ -11,6 +11,7 @@ import { metrics } from "../campaigns/metrics.js";
 import { COUNTRIES } from "../forecast/market.js";
 import { buildRadar, topDemand } from "../forecast/topDemand.js";
 import { topForPeriod, type Period } from "../forecast/topPeriods.js";
+import { MODEL_GROUPS, topModels } from "../forecast/models.js";
 import { TrendsError, trendsProvider } from "../forecast/trends.js";
 import { cached, DAY_MS } from "./cache.js";
 import { M49, tradeProfile } from "./comtrade.js";
@@ -34,6 +35,22 @@ intelRouter.get("/options", (_req, res) => {
     tradeCountries: Object.keys(M49),
     indicators: Object.entries(INDICATORS).map(([key, v]) => ({ key, label: v.label, unit: v.unit })),
   });
+});
+
+/** Brands and models inside a watched product for a period (e.g. which phone models are searched most). */
+const modelsSchema = z.object({ query: z.string().min(1).max(60), period: z.enum(["week", "month", "quarter", "year"]).default("month") });
+intelRouter.get("/top/models", async (req, res) => {
+  const { query, period } = parseQuery(req, modelsSchema);
+  if (!trendsProvider()) { res.json({ configured: false }); return; }
+  if (!MODEL_GROUPS[query]) { res.json({ configured: true, available: false }); return; }
+  try {
+    const data = await topModels(query, period as Period, "UZ");
+    if (data === "unavailable" || !data) { res.json({ configured: true, available: false }); return; }
+    res.json({ configured: true, available: true, ...data });
+  } catch (err) {
+    if (err instanceof TrendsError) throw notConfigured("trends", err.message);
+    throw err;
+  }
 });
 
 /** Top products for a period: most searched and fastest growing (last week / month / 3 months / year). */

@@ -5,7 +5,7 @@
  * background and light (the product itself is kept exactly as it is).
  */
 import { useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Check, ChevronDown, Folder, Loader2, Palette as PaletteIcon, Sparkles, UploadCloud, Wand2, X } from "lucide-react";
+import { ArrowLeft, Check, ChevronDown, Loader2, Palette as PaletteIcon, Sparkles, UploadCloud, Wand2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ErrorAlert } from "../components/shared";
 import { Button, Card, Field, Input, Select, cx, useToast } from "../components/ui";
@@ -37,7 +37,6 @@ const BG_OPTIONS: { key: BackgroundKey; label: string; swatch: string }[] = [
   { key: "interior", label: "Luxury interior", swatch: "linear-gradient(160deg,#2A211B,#6B5543)" },
   { key: "custom", label: "Custom background", swatch: "repeating-linear-gradient(45deg,#e5e7eb 0 4px,#fff 4px 8px)" },
 ];
-const LIGHT_OPTIONS: [LightKey, string][] = [["soft", "Soft light"], ["studio", "Studio light"], ["dramatic", "Dramatic"], ["natural", "Natural daylight"], ["neon", "Neon"], ["golden", "Golden hour"]];
 const SCENE_BACKGROUNDS: BackgroundKey[] = ["flowers", "nature", "marble", "studio", "interior"];
 const SCENE_THEMES = ["flowers", "nature", "marble", "studio-3d", "cinematic", "seasonal"];
 
@@ -160,12 +159,6 @@ export function CreateCard({ onDone, onCancel, from, regen }: { onDone: (groupId
   const sample = { copy: sampleCopy, input: { ...input, marketplace: live.mp, price: live.price ?? "199 000", oldPrice: live.oldPrice }, photo: previewPhoto, photos: { before: previewPhoto }, style: live.style };
   const shownLayout = previewLayout && cfg.layouts.includes(previewLayout) ? previewLayout : cfg.layouts[0] ?? "hero";
   const previewDoc = buildCard(shownLayout, sample, live.size);
-  const toggleLayout = (l: LayoutKey) => setCfg((c) => {
-    const has = c.layouts.includes(l);
-    if (has && c.layouts.length === 1) return c;
-    const order = themeLayouts(c.style.theme);
-    return { ...c, layouts: has ? c.layouts.filter((x) => x !== l) : order.filter((x) => x === l || c.layouts.includes(x)) };
-  });
   const cardsCount = cfg.layouts.length;
 
   const ready = Boolean(photo?.uploadId && input.name.length >= 2 && cfg.layouts.length > 0 && user?.emailVerified && prefilled);
@@ -342,25 +335,6 @@ export function CreateCard({ onDone, onCancel, from, regen }: { onDone: (groupId
             <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:thin]" data-testid="theme-folders">
               {THEMES.map((th) => <ThemeFolder key={th.key} th={th} sample={layoutSample} size={thumbSize} mp={f.marketplace} selected={cfg.style.theme === th.key} onClick={() => applyTheme(th)} small />)}
             </div>
-            <div className="rounded-xl border border-slate-200 p-3 dark:border-slate-700" data-testid="theme-designs">
-              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                <p className="flex items-center gap-1.5 text-sm font-semibold"><Folder className="h-4 w-4 text-brand-600" />{t(theme?.name ?? "")} · {t("{n} designs", { n: themeLayouts(cfg.style.theme).length })}</p>
-                <span className="text-xs muted">{t("{n} selected — one card is made for each", { n: cfg.layouts.length })}</span>
-              </div>
-              <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
-                {themeLayouts(cfg.style.theme).map((l) => {
-                  const on = cfg.layouts.includes(l);
-                  return (
-                    <button key={l} type="button" aria-pressed={on} data-layout={l} onClick={() => { toggleLayout(l); setPreviewLayout(l); }}
-                      className={cx("relative overflow-hidden rounded-lg border-2 text-left transition", on ? "border-brand-500 ring-2 ring-brand-500/20" : "border-slate-200 opacity-60 hover:opacity-100 dark:border-slate-700")}>
-                      <DocPreview doc={buildCard(l, layoutSample, thumbSize)} width={170} />
-                      <span className={cx("absolute right-1 top-1 grid h-5 w-5 place-items-center rounded-full text-white shadow", on ? "bg-brand-600" : "bg-slate-900/40")}>{on && <Check className="h-3.5 w-3.5" />}</span>
-                      <span className="block truncate px-1.5 py-1 text-[10px] font-semibold">{t(LAYOUT_LABEL[l])}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
           </Section>
 
           {/* 5. background */}
@@ -383,7 +357,7 @@ export function CreateCard({ onDone, onCancel, from, regen }: { onDone: (groupId
           {/* 7. customisation */}
           <Card className="p-5" data-testid="custom-section">
             <button type="button" onClick={() => setMore((v) => !v)} aria-expanded={more} className="flex w-full items-center justify-between">
-              <span className="font-semibold">6. {t("Colours, text and light")}</span><ChevronDown className={cx("h-4 w-4 transition", more && "rotate-180")} />
+              <span className="font-semibold">6. {t("Colours and text")}</span><ChevronDown className={cx("h-4 w-4 transition", more && "rotate-180")} />
             </button>
             {more && (
               <div className="mt-4 grid gap-4 sm:grid-cols-2">
@@ -398,9 +372,6 @@ export function CreateCard({ onDone, onCancel, from, regen }: { onDone: (groupId
                 </div>
                 <Field label={t("Font style")}><Select value={cfg.style.font} onChange={(e) => setStyle({ font: e.target.value })} data-testid="font-select" options={Object.entries(FONT_PAIRS).map(([k, v]) => ({ value: k, label: v ? t(v.label) : t("Theme font") }))} /></Field>
                 <Field label={t("Text placement")}><Select value={cfg.style.textAlign} onChange={(e) => setStyle({ textAlign: e.target.value as StyleConfig["textAlign"] })} data-testid="text-select" options={[{ value: "auto", label: t("As in the design") }, { value: "left", label: t("Left") }, { value: "center", label: t("Centre") }, { value: "right", label: t("Right") }]} /></Field>
-                <Field label={t("Product position")}><Select value={cfg.style.productPos} onChange={(e) => setStyle({ productPos: e.target.value as StyleConfig["productPos"] })} data-testid="position-select" options={[{ value: "auto", label: t("As in the design") }, { value: "left", label: t("Left") }, { value: "center", label: t("Centre") }, { value: "right", label: t("Right") }]} /></Field>
-                <Field label={t("Lighting style")}><Select value={cfg.style.lighting} onChange={(e) => setStyle({ lighting: e.target.value as LightKey })} data-testid="light-select" options={LIGHT_OPTIONS.map(([k, l]) => ({ value: k, label: t(l) }))} /></Field>
-                <Field label={`${t("Shadow intensity")} · ${cfg.style.shadow}%`}><input type="range" min={0} max={100} value={cfg.style.shadow} onChange={(e) => setStyle({ shadow: Number(e.target.value) })} className="w-full accent-[var(--v-sky)]" data-testid="shadow-range" /></Field>
               </div>
             )}
           </Card>
@@ -415,7 +386,7 @@ export function CreateCard({ onDone, onCancel, from, regen }: { onDone: (groupId
               <div className="flex flex-wrap gap-1">{cfg.layouts.map((l) => <button key={l} type="button" onClick={() => setPreviewLayout(l)} className={cx("rounded-full border px-2 py-0.5 text-[10px] font-semibold", l === shownLayout ? "border-brand-500 text-brand-600" : "border-slate-200 muted dark:border-slate-700")}>{t(LAYOUT_LABEL[l])}</button>)}</div>
             )}
             <div className="flex flex-wrap gap-1 text-[10px]">
-              {[t(theme?.name ?? ""), t(BG_OPTIONS.find((b) => b.key === cfg.style.background)?.label ?? ""), t(LIGHT_OPTIONS.find(([k]) => k === cfg.style.lighting)?.[1] ?? "")].filter(Boolean).map((x, i) => <span key={i} className="rounded-full bg-slate-100 px-2 py-0.5 dark:bg-slate-800">{x}</span>)}
+              {[t(theme?.name ?? ""), t(BG_OPTIONS.find((b) => b.key === cfg.style.background)?.label ?? "")].filter(Boolean).map((x, i) => <span key={i} className="rounded-full bg-slate-100 px-2 py-0.5 dark:bg-slate-800">{x}</span>)}
             </div>
             <p className="text-[11px] muted">{t("The preview shows sample texts. Your card gets the texts written by the AI from your product data.")}</p>
           </Card>

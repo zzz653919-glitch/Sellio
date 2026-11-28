@@ -10,9 +10,10 @@ import { logActivity } from "../../services/activity.js";
 import { notify } from "../../services/notifications.js";
 import { consumeRequest, releaseRequest, reserveRequest } from "../../services/quota.js";
 import { detectGranularity, runForecast, type Granularity, type Point } from "./engine.js";
-import { analyseSeasonality, type SeasonalAnalysis } from "./seasonal.js";
+import { analyseSeasonality, seasonOrder as seasonOrderOf, type SeasonalAnalysis } from "./seasonal.js";
 import { savedRefs, type SavedRefs } from "../../services/savedRefs.js";
 import { TrendsError, trendsProvider, type CountryInterest, type TrendsRange } from "./trends.js";
+import { completeJson, llmProvider } from "../../services/llm.js";
 
 export const COUNTRIES: { code: string; name: string }[] = [
   { code: "UZ", name: "Uzbekistan" }, { code: "KZ", name: "Kazakhstan" }, { code: "KG", name: "Kyrgyzstan" },
@@ -77,6 +78,27 @@ export type CompareItem = {
   recent: { month: string; value: number }[];
 };
 export type CompareResult = { kind: "compare"; source: "google_trends"; fetchedAt: string; geo: string; geoName: string; items: CompareItem[] };
+
+/** "When does this product sell best?" — the months of the year, from 5 years of searches. */
+export type MonthRating = "best" | "good" | "normal" | "slow" | "worst";
+export type WhenResult = {
+  kind: "when";
+  source: "google_trends";
+  fetchedAt: string;
+  query: string; // what the user typed
+  usedQuery: string; // the search term whose data is shown (may be a Russian / English form of it)
+  geo: string; // the area whose data is shown
+  geoName: string;
+  requestedGeo: string;
+  requestedGeoName: string;
+  tried: { query: string; geo: string }[];
+  seasonality: SeasonalAnalysis | null;
+  months: { month: number; effectPct: number; consistency: number; rating: MonthRating }[];
+  bestMonths: number[];
+  worstMonths: number[];
+  prepare: { date: string; months: number } | null; // start stock and advertising
+  weekly?: Point[]; // the 5-year weekly series the answer is based on (weeks / seasons / years views)
+};
 
 export type Horizon = {
   days: 7 | 30 | 90 | 365;
@@ -209,7 +231,7 @@ async function serialize(r: Row, refs?: SavedRefs) {
     range: r.range,
     geos: safeJson<string[]>(r.geos_json, []),
     status: r.status,
-    result: safeJson<MarketResult | CompareResult | null>(r.result_json, null),
+    result: safeJson<MarketResult | CompareResult | WhenResult | null>(r.result_json, null),
     projectId: refs ? (refs.project.get(r.id) ?? null) : ((await get<{ id: string }>("SELECT id FROM projects WHERE user_id = ? AND type = 'forecast' AND ref_id = ?", r.user_id, r.id))?.id ?? null),
     favoriteId: refs ? (refs.favorite.get(r.id) ?? null) : ((await get<{ id: string }>("SELECT id FROM favorites WHERE user_id = ? AND item_type = 'forecast' AND ref_id = ?", r.user_id, r.id))?.id ?? null),
     createdAt: r.created_at,
@@ -290,6 +312,7 @@ export async function listMarketAnalyses(userId: string, limit = 20) {
     const s = await serialize(r, refs);
     // The list only needs the headline numbers.
     if (!s.result) return s;
+    if ("kind" in s.result && s.result.kind === "when") return { ...s, result: { ...s.result, weekly: [], seasonality: s.result.seasonality ? { ...s.result.seasonality, monthly: [], trendLine: [], outlook: [] } : null } };
     if ("kind" in s.result) return { ...s, result: { ...s.result, items: s.result.items.map((i) => ({ ...i, recent: [], seasonality: i.seasonality ? { ...i.seasonality, monthly: [], trendLine: [], outlook: [] } : null })) } };
     return { ...s, result: { ...s.result, areas: s.result.areas.map((a) => ({ ...a, history: [], forecast: [], seasonality: null })), byCountry: [] } };
   })));
@@ -303,6 +326,10 @@ export async function deleteMarketAnalysis(userId: string, id: string) {
 
 /** Headline for lists: the first area with a forecast (worldwide comes first when chosen). */
 export function headline(a: Awaited<ReturnType<typeof serialize>>) {
+  if (a.result && "kind" in a.result && a.result.kind === "when") {
+    const s = a.result.seasonality;
+    return s ? { name: a.result.geoName, changePct: s.next3Pct, periodChangePct: s.yoyPct, trend: s.direction } : null;
+  }
   if (a.result && "kind" in a.result) {
     const best = [...a.result.items].filter((i) => i.seasonality).sort((x, y) => (y.seasonality!.next3Pct ?? -1e9) - (x.seasonality!.next3Pct ?? -1e9))[0];
     return best ? { name: best.query, changePct: best.seasonality!.next3Pct, periodChangePct: best.seasonality!.yoyPct, trend: best.seasonality!.direction } : null;
@@ -352,6 +379,122 @@ export async function runComparison(userId: string, input: { queries: string[]; 
     if (status === "completed") {
       await notify(userId, "forecast", "World demand analysis completed", `Search-interest analysis for "${title}" is ready.`, `/forecast?market=${id}`);
     }
+  } catch (err) {
+    await releaseRequest("forecast", id);
+    throw err;
+  }
+  return getMarketAnalysis(userId, id);
+}
+
+// ---------------------------------------------------------------- when does it sell best
+
+/** Rates each calendar month from its seasonal effect. Without a seasonal pattern every month is "normal". */
+export function rateMonths(s: SeasonalAnalysis): WhenResult["months"] {
+  const maxE = Math.max(...s.months.map((m) => m.effectPct)), minE = Math.min(...s.months.map((m) => m.effectPct));
+  return s.months.map((m) => {
+    const e = m.effectPct;
+    const rating: MonthRating = s.level === "none" ? "normal"
+      : e >= Math.max(10, maxE * 0.6) ? "best"
+      : e >= 5 ? "good"
+      : e <= Math.min(-10, minE * 0.6) ? "worst"
+      : e <= -5 ? "slow" : "normal";
+    return { month: m.month, effectPct: m.effectPct, consistency: m.consistency, rating };
+  });
+}
+
+/** Enough data for a season analysis: two years of months and not mostly empty weeks. */
+const usable = (h: Point[]) => h.length > 0 && h.filter((p) => p.units === 0).length <= h.length * 0.3;
+
+/** Other ways people search for the product (Russian, English), from the AI service when it is configured. */
+async function searchTerms(query: string, country: string): Promise<string[]> {
+  if (!llmProvider()) return [];
+  try {
+    const r = await completeJson<{ ru?: string; en?: string }>({
+      system: "You help sellers look up products on Google Trends. Answer with JSON only.",
+      messages: [{ role: "user", content: `A seller in ${country} typed this product name: "${query}". How do people most often search for this product on Google? Give the usual short search term (1-3 words, keep a brand or model if one is given) in Russian (Cyrillic) and in English. JSON: {"ru": "...", "en": "..."}` }],
+      maxTokens: 120,
+    });
+    const seen = new Set([query.trim().toLowerCase()]);
+    const out: string[] = [];
+    for (const t of [r.ru, r.en]) {
+      const v = typeof t === "string" ? t.trim().slice(0, 100) : "";
+      if (v.length >= 2 && !seen.has(v.toLowerCase())) { seen.add(v.toLowerCase()); out.push(v); }
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * When does a product sell best? Reads 5 years of searches in the chosen area. If there is too
+ * little data for the name as typed, tries the usual Russian / English search term and then the
+ * whole world; the result always says which term and area the answer is based on.
+ */
+export async function runBestTime(userId: string, input: { query: string; geo: string }) {
+  const provider = trendsProvider();
+  if (!provider) {
+    throw notConfigured("trends", "World demand data is not connected on this server. An administrator must configure SerpApi (SERPAPI_API_KEY), which provides Google Trends data.");
+  }
+  const id = newId();
+  await reserveRequest(userId, "forecast", id);
+  try {
+    const nameOf = (g: string) => (g === WORLDWIDE ? "Worldwide" : (COUNTRY_NAME.get(g) ?? g));
+    const tried: { query: string; geo: string }[] = [];
+    let found: { query: string; geo: string; s: SeasonalAnalysis; h: Point[] } | null = null;
+    let failures = 0;
+    const attempt = async (query: string, geo: string) => {
+      if (found || tried.some((t) => t.query.toLowerCase() === query.toLowerCase() && t.geo === geo)) return;
+      tried.push({ query, geo });
+      try {
+        const h = await provider.interestOverTime(query, geo === WORLDWIDE ? "" : geo, HISTORY);
+        const s = usable(h) ? analyseSeasonality(h) : null;
+        if (s) found = { query, geo, s, h };
+      } catch (err) {
+        failures++;
+        if (!(err instanceof TrendsError)) throw err;
+      }
+    };
+    await attempt(input.query, input.geo);
+    let alts: string[] | null = null;
+    if (!found) { alts = await searchTerms(input.query, nameOf(input.geo)); for (const q of alts) await attempt(q, input.geo); }
+    if (!found && input.geo !== WORLDWIDE) {
+      await attempt(input.query, WORLDWIDE);
+      for (const q of (alts ?? []).slice(-1)) await attempt(q, WORLDWIDE); // the English term
+    }
+    if (!found && failures === tried.length) throw upstreamError("trends", "Google Trends request failed. Try again later.");
+    const f = found as { query: string; geo: string; s: SeasonalAnalysis; h: Point[] } | null;
+    const months = f ? rateMonths(f.s) : [];
+    const pick = (r: MonthRating) => f ? seasonOrderOf(months.filter((m) => m.rating === r).map((m) => m.month)) : [];
+    // Get ready one month before the climb into the next best season (next year's if it is on now).
+    let prepare: WhenResult["prepare"] = null;
+    const best = pick("best");
+    if (f && best.length > 0 && !(f.s.direction === "declining" && !f.s.ahead.realRise)) {
+      const rating = new Map(months.map((m) => [m.month, m.rating]));
+      const prev = (m: number) => ((m + 10) % 12) + 1;
+      let start = best[0];
+      for (let k = 0; k < 3 && rating.get(prev(start)) === "good"; k++) start = prev(start);
+      const prepMonth = prev(start);
+      const now = new Date();
+      const ahead = (prepMonth - (now.getUTCMonth() + 1) + 12) % 12;
+      const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + ahead, 1));
+      prepare = { date: d.toISOString().slice(0, 10), months: ahead };
+    }
+    const result: WhenResult = {
+      kind: "when", source: "google_trends", fetchedAt: nowIso(),
+      query: input.query, usedQuery: f?.query ?? input.query, geo: f?.geo ?? input.geo, geoName: nameOf(f?.geo ?? input.geo), requestedGeo: input.geo, requestedGeoName: nameOf(input.geo),
+      tried, seasonality: f?.s ?? null, months,
+      bestMonths: best, worstMonths: pick("worst"), prepare,
+      weekly: f?.h.map((p) => ({ date: p.date, units: p.units })) ?? [],
+    };
+    const status = f ? "completed" : "no_data";
+    await run(
+      "INSERT INTO market_analyses (id,user_id,query,range,geos_json,status,result_json,created_at) VALUES (?,?,?,?,?,?,?,?)",
+      id, userId, input.query, "when", JSON.stringify([input.geo]), status, JSON.stringify(result), nowIso(),
+    );
+    if (status === "completed") await consumeRequest("forecast", id);
+    else await releaseRequest("forecast", id);
+    await logActivity(userId, "market_analysis", "forecast", `Best time to sell: ${input.query}`, { refId: id, success: status === "completed" });
   } catch (err) {
     await releaseRequest("forecast", id);
     throw err;

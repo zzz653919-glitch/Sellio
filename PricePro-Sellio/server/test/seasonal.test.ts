@@ -69,3 +69,33 @@ test("season months are listed in season order across the new year", () => {
   assert.deepEqual(seasonOrder([8, 9]), [8, 9]);
   assert.deepEqual(seasonOrder([12, 1, 2, 3]), [12, 1, 2, 3]);
 });
+
+test("an old model in long decline: bumps are not sold as growth (iPhone 11 case)", () => {
+  // −35% a year, with launch (September) and holiday (December) bumps that scale with the level.
+  const old = (m: number, yi: number) => {
+    const level = 100 * Math.exp(-0.43 * (yi + (m - 1) / 12));
+    return level * (m === 9 ? 1.3 : m === 12 ? 1.18 : 1);
+  };
+  const a = analyseSeasonality(weekly(today, old, 1), today)!;
+  assert.equal(a.direction, "declining");
+  assert.ok(a.yoyPct! < -25, `yoy ${a.yoyPct}`);
+  assert.equal(a.ahead.realRise, false, "no real rise for a product that falls every year");
+  assert.ok(a.ahead.high.vsLastYearPct! < -15, `the best month ahead is below last year (${a.ahead.high.vsLastYearPct})`);
+  const lastDec = a.monthly.find((m) => m.month === "2025-12")!.value;
+  const nextDec = a.outlook.find((o) => o.date === "2026-12-01")!.value;
+  assert.ok(nextDec < lastDec * 0.85, `December forecast follows the decline (${nextDec} vs ${lastDec})`);
+  assert.ok(a.ahead.yearPct! < -15);
+  // Two seasons (September, December): in November the nearest one is December, and the climb is now.
+  assert.ok(a.peakMonths.includes(12) && a.peakMonths.includes(9));
+  assert.equal(a.nextPeak!.date, "2026-12-01");
+  assert.ok(a.nextRise!.months <= a.nextPeak!.months, "the rise never comes after the peak it leads to");
+});
+
+test("a seasonal product with a stable level: the coming season is a real rise", () => {
+  const coat = (m: number) => 25 + (m === 12 ? 60 : m === 1 ? 45 : m === 11 ? 30 : 0);
+  const a = analyseSeasonality(weekly(new Date(Date.UTC(2026, 8, 25)), coat, 2), new Date(Date.UTC(2026, 8, 25)))!;
+  assert.equal(a.direction, "stable");
+  assert.equal(a.ahead.realRise, true);
+  assert.ok(a.ahead.high.date === "2026-12-01", a.ahead.high.date);
+  assert.ok(a.ahead.high.vsNowPct! > 100);
+});

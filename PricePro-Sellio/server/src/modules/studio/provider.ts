@@ -2,6 +2,20 @@ import { recordApiCall } from "../../services/apiLog.js";
 import { settings } from "../../services/settings.js";
 import { config } from "../../config.js";
 import { notConfigured, upstreamError } from "../../lib/errors.js";
+import { cutOutWhite, decodePng, encodePng } from "../../lib/png.js";
+
+/** Models that answered "transparent background is not supported" (remembered while the server runs). */
+const NO_TRANSPARENCY = new Set<string>();
+const NOT_SUPPORTED = /transparent background is not supported|background.*not supported|does not support.*transparen/i;
+/** Added to the prompt when the model cannot make the background transparent itself. */
+export const WHITE_BACKGROUND = "Place the product on a plain, pure white (#FFFFFF) seamless background that fills the whole frame, with nothing else in it: no shadow, no reflection, no props, no text. Keep a clear margin around the product.";
+
+/** Turns a white-background result into a transparent PNG; the original is kept if that is not possible. */
+export function makeTransparent(image: Buffer): Buffer {
+  const decoded = decodePng(image);
+  const cut = decoded ? cutOutWhite(decoded) : null;
+  return cut ? encodePng(cut) : image;
+}
 
 export type EditRequest = {
   image: Buffer;
@@ -34,6 +48,21 @@ export class OpenAIImageProvider implements ImageProvider {
   ) {}
 
   async edit(req: EditRequest): Promise<Buffer> {
+    if (!req.transparent) return this.call(req, false);
+    if (!NO_TRANSPARENCY.has(this.model)) {
+      try {
+        return await this.call(req, true);
+      } catch (err) {
+        if (!(err instanceof Error && NOT_SUPPORTED.test(err.message))) throw err;
+        NO_TRANSPARENCY.add(this.model);
+      }
+    }
+    // The model cannot make a transparent background: make it on white and cut the white out here.
+    const white = await this.call({ ...req, prompt: `${req.prompt}\n\n${WHITE_BACKGROUND}` }, false);
+    return makeTransparent(white);
+  }
+
+  private async call(req: EditRequest, transparent: boolean): Promise<Buffer> {
     const ext = req.mime === "image/png" ? "png" : req.mime === "image/webp" ? "webp" : "jpg";
     const form = new FormData();
     form.append("model", this.model);
@@ -42,7 +71,8 @@ export class OpenAIImageProvider implements ImageProvider {
     form.append("size", req.size);
     form.append("quality", req.quality);
     form.append("n", "1");
-    if (req.transparent) form.append("background", "transparent");
+    if (transparent) form.append("background", "transparent");
+
 
     const started = Date.now();
     const log = (ok: boolean, status: number | null, error: string | null) => recordApiCall({ provider: "openai_image", operation: `edit ${this.model}`, ok, status, ms: Date.now() - started, error });

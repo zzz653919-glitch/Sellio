@@ -5,14 +5,16 @@ import { useSearchParams } from "react-router-dom";
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { ErrorAlert, FavoriteButton, IntegrationNotice, SaveProjectButton } from "../components/shared";
 import { Alert, Badge, Button, Card, ConfirmDialog, EmptyState, Field, Input, Select, Tabs, cx, useToast } from "../components/ui";
-import { CompareForm, CompareView, SeasonPanel, TopDemand, type CompareResult, type Seasonality, type TopDemandData } from "./SeasonInsights";
+import { CompareForm, CompareView, SeasonPanel, useVerdict, type CompareResult, type Seasonality } from "./SeasonInsights";
+import { LastMonthTop, type LastMonthData } from "./LastMonth";
+import { WhenForm, WhenView, type WhenResult } from "./BestTime";
 import { del, errorMessage, get, post } from "../lib/api";
-import { fmtAxis, fmtDateTime, fmtNumber, fmtPct, timeAgo } from "../lib/format";
+import { fmtAxis, fmtDateTime, fmtMonthName, fmtNumber, fmtPct, timeAgo } from "../lib/format";
 import { useI18n } from "../lib/i18n";
 import { useTheme } from "../lib/theme";
 import type { Granularity } from "../lib/types";
 
-type Range = "today 3-m" | "today 12-m" | "today 5-y" | "compare";
+type Range = "today 3-m" | "today 12-m" | "today 5-y" | "compare" | "when";
 type Point = { date: string; units: number };
 type Area = {
   geo: string; name: string; status: "ok" | "no_data" | "error"; error?: string; note?: string; granularity?: Granularity;
@@ -29,10 +31,11 @@ type Horizon = {
 type SingleResult = { fetchedAt: string; horizonDays: number; areas: Area[]; byCountry: { code: string; name: string; value: number }[]; byCountryError?: string };
 type Analysis = {
   id: string; query: string; range: Range; geos: string[]; status: "completed" | "no_data"; createdAt: string; projectId: string | null; favoriteId: string | null;
-  result: SingleResult | CompareResult | null;
+  result: SingleResult | CompareResult | WhenResult | null;
 };
 type Options = { configured: boolean; countries: { code: string; name: string }[]; ranges: { value: Exclude<Range, "compare">; horizonDays: number }[]; maxAreas: number };
 const isCompare = (r: Analysis["result"]): r is CompareResult => Boolean(r && "kind" in r && r.kind === "compare");
+const isWhen = (r: Analysis["result"]): r is WhenResult => Boolean(r && "kind" in r && r.kind === "when");
 
 const WORLD = "WORLD";
 const COLORS = ["#6366f1", "#06b6d4", "#10b981", "#f59e0b", "#ec4899"];
@@ -41,6 +44,7 @@ const RANGE_LABEL: Record<Range, string> = {
   "today 12-m": "3-month forecast · 5-year history",
   "today 5-y": "6-month forecast · 5-year history",
   compare: "Product comparison · 5-year history",
+  when: "When does it sell best · 5-year history",
 };
 
 function TrendValue({ a }: { a: Area }) {
@@ -54,9 +58,11 @@ function TrendValue({ a }: { a: Area }) {
   );
 }
 
-function AreaCard({ a, color }: { a: Area; color: string }) {
+function AreaCard({ a, color, months }: { a: Area; color: string; months: number }) {
   const { t } = useI18n();
+  const verdict = useVerdict();
   const name = a.geo === WORLD ? t("Worldwide") : t(a.name);
+  const v = a.seasonality ? verdict(a.seasonality) : null;
   return (
     <div className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
       <p className="flex items-center gap-2 text-sm font-semibold"><span className="h-2.5 w-2.5 rounded-full" style={{ background: color }} />{name}</p>
@@ -66,14 +72,17 @@ function AreaCard({ a, color }: { a: Area; color: string }) {
         <p className="mt-2 text-sm muted">{t("Too little search data for this product here.")}</p>
       ) : (
         <div className="mt-2 space-y-1">
+          {v && <p className={cx("text-sm font-bold", v.tone === "up" ? "text-emerald-600 dark:text-emerald-400" : v.tone === "down" ? "text-rose-600 dark:text-rose-400" : "text-slate-800 dark:text-slate-100")} data-testid="area-verdict">{v.title}</p>}
+          {a.changePct !== null && <p className="text-xs muted">{t(months === 1 ? "Next month versus the last month" : "Next {n} months versus the last {n} months", { n: months })}</p>}
           <TrendValue a={a} />
+          {!v && (
+            <p className="text-xs muted">
+              {a.trend === "growing" ? t("Demand is rising") : a.trend === "declining" ? t("Demand is falling") : a.trend === "stable" ? t("Demand is stable") : t(a.note ?? "")}
+            </p>
+          )}
           <p className="text-xs muted">
-            {a.changePct !== null && <>{t("Next period")}: </>}
-            {a.trend === "growing" ? t("Demand is rising") : a.trend === "declining" ? t("Demand is falling") : a.trend === "stable" ? t("Demand is stable") : t(a.note ?? "")}
-          </p>
-          <p className="text-xs muted">
-            <span title={t("Google Trends: 100% = the highest search interest in this period, 50% = half of it. It is not the number of sales.")}>{t("Search interest now")}</span>: <b className="text-slate-700 dark:text-slate-200">{fmtNumber(a.recentAvg ?? 0)}%</b>
-            {a.forecastAvg !== null && <> · {t("expected")}: <b className="text-slate-700 dark:text-slate-200">{fmtNumber(a.forecastAvg)}%</b></>}
+            <span title={t("Google Trends: 100% = the highest search interest in this period, 50% = half of it. It is not the number of sales.")}>{t("Search interest")}</span>: <b className="text-slate-700 dark:text-slate-200">{fmtNumber(a.recentAvg ?? 0)}%</b>
+            {a.forecastAvg !== null && <> → <b className="text-slate-700 dark:text-slate-200">{fmtNumber(a.forecastAvg)}%</b></>}
           </p>
           {a.periodChangePct != null && (
             <p className="text-xs muted">{t(a.seasonality ? "Last 12 months vs the year before" : "Since the start of the period")}: <b className={a.periodChangePct > 0 ? "text-emerald-600 dark:text-emerald-400" : a.periodChangePct < 0 ? "text-rose-600 dark:text-rose-400" : ""}>{fmtPct(a.periodChangePct)}</b></p>
@@ -175,7 +184,7 @@ function HorizonTable({ areas }: { areas: Area[] }) {
 function AnalysisResult({ a, onDelete, onRefresh, refreshing, refreshError }: { a: Analysis; onDelete: () => void; onRefresh: () => void; refreshing: boolean; refreshError: unknown }) {
   const { t } = useI18n();
   const r = a.result;
-  const seasonAreas = r && !isCompare(r) ? r.areas.filter((x) => x.seasonality) : [];
+  const seasonAreas = r && !isCompare(r) && !isWhen(r) ? r.areas.filter((x) => x.seasonality) : [];
   const [seasonGeo, setSeasonGeo] = useState<string | null>(null);
   if (!r) return <Alert tone="error">{t("Corrupted result")}</Alert>;
   const ageDays = Math.floor((Date.now() - Date.parse(r.fetchedAt)) / 86_400_000);
@@ -188,6 +197,26 @@ function AnalysisResult({ a, onDelete, onRefresh, refreshing, refreshError }: { 
       {refreshError ? <ErrorAlert error={refreshError} /> : null}
     </>
   );
+  if (isWhen(r)) {
+    return (
+      <Card className="space-y-5 p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold">{t("When does {product} sell best?", { product: a.query })}</h2>
+            <p className="text-xs muted">{t(r.requestedGeoName ?? r.geoName)} · {t("Data received")}: {fmtDateTime(r.fetchedAt)}</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">{refreshButton}</div>
+        </div>
+        {staleNote}
+        <WhenView r={r} />
+        <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-4 dark:border-slate-800">
+          <SaveProjectButton type="forecast" refId={a.id} projectId={a.projectId} invalidate={["market", a.id]} />
+          <FavoriteButton itemType="forecast" refId={a.id} favoriteId={a.favoriteId} invalidate={["market", a.id]} />
+          <Button size="sm" variant="ghost" className="ml-auto" icon={<Trash2 className="h-4 w-4" />} onClick={onDelete}>{t("Delete")}</Button>
+        </div>
+      </Card>
+    );
+  }
   if (isCompare(r)) {
     return (
       <Card className="space-y-5 p-5">
@@ -222,10 +251,8 @@ function AnalysisResult({ a, onDelete, onRefresh, refreshing, refreshError }: { 
       {a.status === "no_data" && <Alert tone="warning">{t("Google has too little search data for this product in the chosen areas. Try a more general or English product name.")}</Alert>}
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {r.areas.map((area, i) => <AreaCard key={area.geo} a={area} color={COLORS[i % COLORS.length]} />)}
+        {r.areas.map((area, i) => <AreaCard key={area.geo} a={area} color={COLORS[i % COLORS.length]} months={Math.max(1, Math.round(r.horizonDays / 30))} />)}
       </div>
-
-      <HorizonTable areas={r.areas} />
 
       {shown?.seasonality && (
         <div className="space-y-2">
@@ -238,6 +265,8 @@ function AnalysisResult({ a, onDelete, onRefresh, refreshing, refreshError }: { 
       {r.areas.some((x) => x.status === "ok" && !x.seasonality) && (
         <p className="text-xs muted">{t("Season analysis needs at least two years of search data; some areas have less.")}</p>
       )}
+
+      <HorizonTable areas={r.areas} />
 
       <InterestChart areas={r.areas} />
       <p className="text-xs muted">{t("Solid line: actual search interest. Dashed line: forecast. Each area's line is scaled to its own peak, so compare directions between areas, not heights.")}</p>
@@ -286,8 +315,8 @@ export default function MarketDemand() {
     queryFn: () => get<{ analysis: Analysis }>(`/market/${currentId}`).then((r) => r.analysis),
     enabled: Boolean(currentId),
   });
-  const top = useQuery({ queryKey: ["market-top"], queryFn: () => get<TopDemandData>("/market/top"), staleTime: 3600_000, retry: false });
-  const [mode, setMode] = useState<"single" | "compare">("single");
+  const lastMonth = useQuery({ queryKey: ["market-last-month"], queryFn: () => get<LastMonthData>("/market/last-month"), staleTime: 3600_000, retry: false });
+  const [mode, setMode] = useState<"when" | "single" | "compare">("when");
   const [query, setQuery] = useState(() => params.get("q") ?? "");
   const [range, setRange] = useState<Exclude<Range, "compare">>("today 12-m");
   const [geos, setGeos] = useState<string[]>([WORLD, "UZ"]);
@@ -314,6 +343,14 @@ export default function MarketDemand() {
       open(d.analysis.id);
     },
   });
+  const when = useMutation({
+    mutationFn: ({ query, geo }: { query: string; geo: string }) => post<{ analysis: Analysis }>("/market/when", { query, geo }),
+    onSuccess: (d) => {
+      qc.invalidateQueries({ queryKey: ["market"] });
+      qc.setQueryData(["market", d.analysis.id], d.analysis);
+      open(d.analysis.id);
+    },
+  });
   const remove = useMutation({
     mutationFn: (id: string) => del(`/market/${id}`),
     onSuccess: (_, id) => {
@@ -329,9 +366,14 @@ export default function MarketDemand() {
       <div className="space-y-5 lg:col-span-2">
         <Card className="space-y-4 p-5">
           <h2 className="flex items-center gap-2 font-semibold"><Globe2 className="h-4 w-4" />{t("World and country demand")}</h2>
-          <Tabs value={mode} onChange={setMode} tabs={[{ value: "single", label: t("One product") }, { value: "compare", label: t("Compare products") }]} />
+          <Tabs value={mode} onChange={setMode} tabs={[{ value: "when", label: t("When it sells") }, { value: "single", label: t("One product") }, { value: "compare", label: t("Comparison") }]} />
           {o && !o.configured && <IntegrationNotice service="trends" />}
-          {mode === "compare" ? (
+          {mode === "when" ? (
+            <>
+              <WhenForm key={params.get("q") ?? ""} initial={params.get("q") ?? undefined} countries={o?.countries ?? []} disabled={o?.configured === false} loading={when.isPending} onRun={(q, geo) => when.mutate({ query: q, geo })} />
+              {when.error && <ErrorAlert error={when.error} />}
+            </>
+          ) : mode === "compare" ? (
             <>
               <CompareForm countries={o?.countries ?? []} disabled={o?.configured === false} loading={compare.isPending} onRun={(queries, geo) => compare.mutate({ queries, geo })} />
               {compare.error && <ErrorAlert error={compare.error} />}
@@ -374,19 +416,21 @@ export default function MarketDemand() {
           {list.data?.length === 0 ? <p className="py-4 text-center text-sm muted">{t("No analyses yet.")}</p> : (
             <ul className="divide-y divide-slate-100 dark:divide-slate-800">
               {list.data?.map((a) => {
-                const top = a.result && !isCompare(a.result)
+                const top = a.result && !isCompare(a.result) && !isWhen(a.result)
                   ? a.result.areas.find((x) => x.status === "ok" && x.changePct !== null)
                   : null;
                 const cmp = isCompare(a.result) ? a.result.items.filter((i) => i.seasonality)[0]?.seasonality : null;
+                const best = isWhen(a.result) ? a.result.bestMonths : null;
                 return (
                   <li key={a.id}>
                     <button onClick={() => open(a.id)} className={cx("flex w-full items-center gap-3 py-2.5 text-left", currentId === a.id && "text-brand-600 dark:text-brand-400")}>
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-sm font-medium">{a.query}</span>
-                        <span className="text-xs muted">{a.range === "compare" ? t("Comparison") : `${a.geos.length} ${t("areas")}`} · {timeAgo(a.createdAt)}</span>
+                        <span className="text-xs muted">{a.range === "compare" ? t("Comparison") : a.range === "when" ? t("When it sells") : `${a.geos.length} ${t("areas")}`} · {timeAgo(a.createdAt)}</span>
                       </span>
                       {top && <span className="text-sm font-semibold">{fmtPct(top.changePct)}</span>}
                       {cmp && <span className="text-sm font-semibold">{fmtPct(cmp.next3Pct)}</span>}
+                      {best && best.length > 0 && <span className="max-w-[45%] truncate text-xs font-semibold text-emerald-600 dark:text-emerald-400">{best.map((m) => fmtMonthName(m, true)).join(", ")}</span>}
                     </button>
                   </li>
                 );
@@ -399,23 +443,25 @@ export default function MarketDemand() {
       <div className="lg:col-span-3">
         {currentId && current.data ? (
           <AnalysisResult a={current.data} onDelete={() => setConfirmDelete(current.data!.id)}
-            refreshing={run.isPending || compare.isPending} refreshError={run.error ?? compare.error}
+            refreshing={run.isPending || compare.isPending || when.isPending} refreshError={run.error ?? compare.error ?? when.error}
             onRefresh={() => {
               const x = current.data!;
               const res = x.result;
-              if (res && isCompare(res)) compare.mutate({ queries: res.items.map((i) => i.query), geo: res.geo });
+              if (res && isWhen(res)) when.mutate({ query: x.query, geo: res.requestedGeo });
+              else if (res && isCompare(res)) compare.mutate({ queries: res.items.map((i) => i.query), geo: res.geo });
               else run.mutate({ query: x.query, geos: x.geos, range: x.range as Range });
             }} />
         ) : currentId && current.error ? (
           <ErrorAlert error={current.error} />
         ) : (
           <Card className="space-y-6 p-5 sm:p-6">
-            <TopDemand data={top.data} loading={top.isLoading} onAnalyse={(q) => {
-              setMode("single"); setQuery(q); setGeos(["UZ"]);
-              run.mutate({ query: q, geos: ["UZ"] });
+            <LastMonthTop data={lastMonth.data} loading={lastMonth.isLoading} onAnalyse={(q) => {
+              setMode("when");
+              when.mutate({ query: q, geo: "UZ" });
             }} />
-            {run.isPending && <p className="text-sm muted">{t("Analysing…")}</p>}
+            {(run.isPending || when.isPending) && <p className="text-sm muted">{t("Analysing…")}</p>}
             {run.error && <ErrorAlert error={run.error} />}
+            {when.error && <ErrorAlert error={when.error} />}
             <EmptyState icon={<Info className="h-6 w-6" />} title={t("World demand will appear here")}
               text={t("Enter a product, choose the world and the countries you sell in, and run the analysis. You will see where demand is growing and where it is falling.")} />
           </Card>

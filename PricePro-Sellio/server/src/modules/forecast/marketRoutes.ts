@@ -6,6 +6,7 @@ import { currentUser, requireAuth, requireVerified } from "../../middleware/auth
 import { serviceLimiter } from "../../middleware/rateLimit.js";
 import * as market from "./market.js";
 import { topDemand } from "./topDemand.js";
+import { lastMonthTop } from "./topPeriods.js";
 import { trendsProvider } from "./trends.js";
 
 /** World / country demand (Google Trends search interest). */
@@ -41,6 +42,12 @@ marketRouter.get("/top", async (_req, res) => {
   res.json(data ? { configured: true, ...data } : { configured: false });
 });
 
+/** Last calendar month: the watched products searched most and least in Uzbekistan (shared, cached daily). */
+marketRouter.get("/last-month", async (_req, res) => {
+  const data = await lastMonthTop("UZ");
+  res.json(data ? { configured: true, ...data } : { configured: false });
+});
+
 const compareSchema = z.object({
   queries: z.array(z.string().trim().min(2, "Enter a product name").max(100)).min(2, "Enter at least 2 products").max(5, "Compare at most 5 products"),
   geo: z.string(),
@@ -53,6 +60,19 @@ marketRouter.post("/compare", requireVerified, serviceLimiter, async (req, res) 
   const queries = [...new Map(input.queries.map((q) => [q.toLowerCase(), q])).values()];
   if (queries.length < 2) throw badRequest("Enter at least 2 different products");
   res.status(201).json({ analysis: await market.runComparison(currentUser(req).id, { queries, geo: input.geo }) });
+});
+
+const whenSchema = z.object({
+  query: z.string().trim().min(2, "Enter a product name").max(100, "The product name is too long"),
+  geo: z.string(),
+});
+
+/** When does a product sell best? Months of the year from 5 years of searches. */
+marketRouter.post("/when", requireVerified, serviceLimiter, async (req, res) => {
+  const input = parseBody(req, whenSchema);
+  const allowed = new Set([market.WORLDWIDE, ...market.COUNTRIES.map((c) => c.code)]);
+  if (!allowed.has(input.geo)) throw badRequest(`Unknown area: ${input.geo}`);
+  res.status(201).json({ analysis: await market.runBestTime(currentUser(req).id, input) });
 });
 
 marketRouter.get("/", async (req, res) => {

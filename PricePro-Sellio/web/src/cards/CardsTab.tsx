@@ -5,7 +5,7 @@
  * duplicated, deleted, compared and downloaded, and its settings reused.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, CheckSquare, Columns3, Folder, Copy, Download, LayoutGrid, Loader2, PencilLine, Plus, RefreshCw, Settings2, Sparkles, Square, Trash2, Wand2, ArrowLeft } from "lucide-react";
+import { Check, CheckSquare, Columns3, Folder, Copy, Download, GalleryHorizontal, LayoutGrid, Loader2, PencilLine, Plus, RefreshCw, Settings2, Sparkles, Square, Trash2, Wand2, ArrowLeft } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { ErrorAlert } from "../components/shared";
@@ -18,6 +18,7 @@ import Editor from "../studio/Editor";
 import type { Doc, ImageEl } from "../studio/types";
 import { cardData, CopyPanel, DocPreview, downloadZip, MP_ORDER, slug, storeImage, thumbOf, useCards, useOptions, type Full, type Summary } from "./common";
 import { CreateCard } from "./CreateCard";
+import { SlideViewer } from "./SlideViewer";
 import { brandOf, buildCard, LAYOUT_LABEL, layoutsFor, MARKETPLACE_LAYOUTS, type LayoutKey, type MarketplaceKey } from "./layouts";
 import type { ExportType } from "../studio/render";
 import { THEME_BY_KEY, type ThemeKey } from "./themes";
@@ -83,14 +84,14 @@ function ZipButton({ ids, actions, label }: { ids: string[]; actions: ReturnType
   );
 }
 
-function CardTile({ c, selected, onSelect, onOpen, onRename, onDelete, actions, mpLabel }: {
-  c: Summary; selected?: boolean; onSelect?: () => void; onOpen: () => void; onRename: () => void; onDelete: () => void; actions: ReturnType<typeof useCardActions>; mpLabel: string;
+function CardTile({ c, selected, onSelect, onOpen, onView, onRename, onDelete, actions, mpLabel }: {
+  c: Summary; selected?: boolean; onSelect?: () => void; onOpen: () => void; onView?: () => void; onRename: () => void; onDelete: () => void; actions: ReturnType<typeof useCardActions>; mpLabel: string;
 }) {
   const { t } = useI18n();
   return (
     <div className={cx("card group overflow-hidden transition hover:-translate-y-0.5 hover:shadow-lg", selected && "ring-2 ring-brand-500")} data-card={c.id}>
       <div className="relative">
-        <button type="button" className="block w-full bg-slate-100 dark:bg-slate-800" onClick={onOpen} aria-label={`${t("Edit")}: ${c.name}`}>
+        <button type="button" className="block w-full bg-slate-100 dark:bg-slate-800" onClick={onView ?? onOpen} aria-label={`${onView ? t("View") : t("Edit")}: ${c.name}`} data-testid="card-view">
           {c.thumb ? <img src={c.thumb} alt={c.name} className="aspect-[3/4] w-full object-contain" loading="lazy" decoding="async" /> : <div className="grid aspect-[3/4] place-items-center"><LayoutGrid className="h-6 w-6 muted" /></div>}
         </button>
         {onSelect && (
@@ -241,6 +242,13 @@ function CompareView({ items, onKeep, onOpen, keeping }: { items: Summary[]; onK
   );
 }
 
+/** One saved card drawn large (its full design), with the small preview shown while it loads. */
+function FullCardPreview({ id, width, fallback }: { id: string; width: number; fallback: string | null }) {
+  const q = useQuery({ queryKey: ["card", id], queryFn: () => get<{ card: Full }>(`/cards/${id}`).then((r) => r.card), staleTime: 60_000 });
+  if (q.data?.doc) return <DocPreview doc={q.data.doc} width={width} />;
+  return fallback ? <img src={fallback} alt="" className="w-full" style={{ width }} /> : <div className="grid aspect-[3/4] place-items-center bg-white/10" style={{ width }}><Loader2 className="h-6 w-6 animate-spin" /></div>;
+}
+
 function GroupView({ groupId, open, onBack, onNew, onReuse }: { groupId: string; open: (id: string) => void; onBack: () => void; onNew: () => void; onReuse: (regenerate: boolean) => void }) {
   const { t } = useI18n();
   const toast = useToast();
@@ -257,6 +265,7 @@ function GroupView({ groupId, open, onBack, onNew, onReuse }: { groupId: string;
   const actions = useCardActions();
   const [rename, setRename] = useState<Summary | null>(null);
   const [toDelete, setToDelete] = useState<Summary | null>(null);
+  const [viewing, setViewing] = useState<number | null>(null);
   const items = (cards.data ?? []).filter((c) => c.groupId === groupId).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   const first = items[0];
   const detail = useQuery({ queryKey: ["card", first?.id], queryFn: () => get<{ card: Full }>(`/cards/${first!.id}`).then((r) => r.card), enabled: Boolean(first) });
@@ -275,6 +284,7 @@ function GroupView({ groupId, open, onBack, onNew, onReuse }: { groupId: string;
         <Button size="sm" variant="secondary" icon={<Plus className="h-4 w-4" />} onClick={onNew}>{t("New card")}</Button>
       </div>
       <div className="flex flex-wrap gap-2">
+        <Button size="sm" variant="secondary" icon={<GalleryHorizontal className="h-4 w-4" />} onClick={() => setViewing(0)} data-testid="view-all">{t("View one by one")}</Button>
         {items.length > 1 && <Button size="sm" variant={comparing ? "primary" : "secondary"} icon={<Columns3 className="h-4 w-4" />} onClick={() => setComparing((v) => !v)} data-testid="compare-toggle">{comparing ? t("Back to the grid") : t("Compare variations")}</Button>}
         <Button size="sm" variant="secondary" icon={<RefreshCw className="h-4 w-4" />} onClick={() => onReuse(true)} data-testid="regenerate">{t("Regenerate")}</Button>
         <Button size="sm" variant="secondary" icon={<Settings2 className="h-4 w-4" />} onClick={() => onReuse(false)} data-testid="reuse-settings">{t("Use these settings")}</Button>
@@ -284,8 +294,22 @@ function GroupView({ groupId, open, onBack, onNew, onReuse }: { groupId: string;
       </div>
       {comparing ? <CompareView items={items} keeping={keepOne.isPending} onOpen={(c) => open(c.id)} onKeep={(c) => setKeep(c)} /> : (
         <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-          {items.map((c) => <CardTile key={c.id} c={c} actions={actions} mpLabel={mpLabel} onOpen={() => open(c.id)} onRename={() => setRename(c)} onDelete={() => setToDelete(c)} />)}
+          {items.map((c, k) => <CardTile key={c.id} c={c} actions={actions} mpLabel={mpLabel} onOpen={() => open(c.id)} onView={() => setViewing(k)} onRename={() => setRename(c)} onDelete={() => setToDelete(c)} />)}
         </div>
+      )}
+      {viewing !== null && (
+        <SlideViewer start={viewing} onClose={() => setViewing(null)}
+          slides={items.map((c, k) => ({
+            key: c.id, title: `${k + 1}. ${c.name}`,
+            render: (w) => <FullCardPreview id={c.id} width={w} fallback={c.thumb} />,
+            thumb: () => (c.thumb ? <img src={c.thumb} alt="" className="aspect-[3/4] w-full object-cover" /> : undefined),
+          }))}
+          footer={(k) => (
+            <>
+              <Button size="sm" icon={<PencilLine className="h-4 w-4" />} onClick={() => { setViewing(null); open(items[k].id); }}>{t("Edit")}</Button>
+              <ZipButton ids={[items[k].id]} actions={actions} label={t("Download")} />
+            </>
+          )} />
       )}
       <ConfirmDialog open={Boolean(keep)} title={t("Keep only this design?")} text={t("The other {n} variations of this product will be deleted.", { n: items.length - 1 })} confirmLabel={t("Keep this one")}
         loading={keepOne.isPending} onClose={() => setKeep(null)} onConfirm={() => keep && keepOne.mutate(keep)} />

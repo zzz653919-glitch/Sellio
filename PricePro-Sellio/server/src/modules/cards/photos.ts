@@ -10,7 +10,7 @@ export const THEMES = {
   "light-minimal": "light minimal: airy bright whites and soft greys, lots of empty space, calm and clean",
   flowers: "floral: fresh flowers and petals arranged around the product, romantic soft mood",
   "premium-gold": "premium gold: warm golden highlights, champagne and black tones, elegant luxury",
-  "black-white": "black and white: monochrome, graphic high-contrast styling (the product keeps its real colours)",
+  "black-white": "black and white set: a clean bright white or light-grey studio with crisp black graphic accents and high contrast. Only the set is monochrome: the product itself must stay in full original colour (never turn the product grey or black-and-white), and a dark product must stand out clearly against a light area",
   "modern-gradient": "modern gradient: smooth vivid colour gradient backdrop, contemporary and bold",
   glass: "glassmorphism: frosted translucent glass panels, soft blurred colour lights, modern tech feel",
   neon: "futuristic neon: dark scene with glowing neon light lines in pink, cyan and violet, cyberpunk mood",

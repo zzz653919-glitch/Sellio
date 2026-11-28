@@ -56,8 +56,10 @@ const r1 = (v: number) => Math.round(v * 10) / 10;
 export function scoreItem(query: string, label: string, history: Point[], category?: Category): TopItem | null {
   if (history.length < 60 || history.every((p) => p.units === 0)) return null;
   const last4 = avg(history.slice(-4).map((p) => p.units));
-  const year = avg(history.slice(-52).map((p) => p.units));
-  if (year <= 0) return null;
+  const lastYear = history.slice(-52).map((p) => p.units);
+  const year = avg(lastYear);
+  // Too little search volume (mostly empty weeks, or a tiny average) turns one spike into "+1200%".
+  if (year < 2 || lastYear.filter((v) => v === 0).length > lastYear.length * 0.3) return null;
   const s = analyseSeasonality(history);
   return {
     query, label, category,
@@ -106,13 +108,13 @@ export type Radar = TopDemand & { rising: TopItem[]; declining: TopItem[]; upcom
 export function buildRadar(data: TopDemand): Radar {
   const rising = data.items.filter((i) => i.nowVsAvgPct >= 10 || (i.next3Pct ?? 0) >= 10).sort((a, b) => (b.next3Pct ?? b.nowVsAvgPct) - (a.next3Pct ?? a.nowVsAvgPct));
   const declining = data.items.filter((i) => i.nowVsAvgPct <= -10 || (i.next3Pct ?? 0) <= -10).sort((a, b) => (a.next3Pct ?? a.nowVsAvgPct) - (b.next3Pct ?? b.nowVsAvgPct));
-  const upcoming = data.items.filter((i) => i.nextRise && i.nextRise.months <= 2 && i.phase !== "peak" && i.phase !== "rising").sort((a, b) => a.nextRise!.months - b.nextRise!.months);
+  const upcoming = data.items.filter((i) => i.nextRise && i.nextRise.months <= 2 && i.phase !== "peak" && i.phase !== "rising" && i.direction !== "declining").sort((a, b) => a.nextRise!.months - b.nextRise!.months);
   const updates: RadarUpdate[] = [];
   for (const i of data.items) {
     const base = { query: i.query, label: i.label };
     if (i.nowVsAvgPct >= 25) updates.push({ ...base, kind: "surge", msg: { key: "{label}: interest is {pct}% above its yearly average right now.", vars: { label: i.label, pct: i.nowVsAvgPct } } });
     if (i.nowVsAvgPct <= -25) updates.push({ ...base, kind: "drop", msg: { key: "{label}: interest is {pct}% below its yearly average right now.", vars: { label: i.label, pct: Math.abs(i.nowVsAvgPct) } } });
-    if (i.nextRise && i.nextRise.months <= 2 && i.phase !== "rising" && i.phase !== "peak") updates.push({ ...base, kind: "season_soon", msg: { key: "{label}: the season usually starts in {months} month(s) — prepare stock and advertising now.", vars: { label: i.label, months: Math.max(1, i.nextRise.months) } } });
+    if (i.nextRise && i.nextRise.months <= 2 && i.phase !== "rising" && i.phase !== "peak" && i.direction !== "declining") updates.push({ ...base, kind: "season_soon", msg: { key: "{label}: the season usually starts in {months} month(s) — prepare stock and advertising now.", vars: { label: i.label, months: Math.max(1, i.nextRise.months) } } });
     if ((i.yoyPct ?? 0) >= 15) updates.push({ ...base, kind: "growing_year", msg: { key: "{label}: {pct}% more interest over the last 12 months than the year before.", vars: { label: i.label, pct: i.yoyPct! } } });
     if ((i.yoyPct ?? 0) <= -15) updates.push({ ...base, kind: "declining_year", msg: { key: "{label}: {pct}% less interest over the last 12 months than the year before.", vars: { label: i.label, pct: Math.abs(i.yoyPct!) } } });
   }
@@ -139,7 +141,8 @@ export function findOpportunities(data: TopDemand): Opportunity[] {
   const out: Opportunity[] = [];
   for (const i of data.items) {
     const yoy = i.yoyPct ?? 0, next3 = i.next3Pct ?? 0;
-    const seasonSoon = Boolean(i.nextRise && i.nextRise.months <= 3 && i.phase !== "falling");
+    // A season of a product in long-term decline is a smaller bump each year, not an opportunity.
+    const seasonSoon = Boolean(i.nextRise && i.nextRise.months <= 3 && i.phase !== "falling" && i.direction !== "declining");
     const raw = 0.45 * clamp(yoy, -50, 100) + 0.35 * clamp(next3, -50, 100) + 0.2 * clamp(i.nowVsAvgPct, -50, 100) + (seasonSoon ? 10 : 0);
     if (raw <= 3) continue;
     const reasons: Msg[] = [];

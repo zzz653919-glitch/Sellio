@@ -9,6 +9,8 @@ import { useTheme } from "../lib/theme";
 // ------------------------------------------------------------------ types (mirror the API)
 export type SeasonEvent = "school" | "new_year" | "navruz_march8" | "valentine" | "summer" | "winter" | "black_friday" | "autumn" | "spring";
 export type SeasonPoint = { date: string; months: number };
+export type AheadPoint = { date: string; months: number; value: number; vsNowPct: number | null; vsLastYearPct: number | null };
+export type Ahead = { high: AheadPoint; low: AheadPoint; yearPct: number | null; realRise: boolean };
 export type Seasonality = {
   method: string; years: number; monthsOfData: number;
   monthly: { month: string; value: number }[]; trendLine: { month: string; value: number }[];
@@ -20,12 +22,13 @@ export type Seasonality = {
   yoyPct: number | null; direction: "growing" | "declining" | "stable";
   outlook: { date: string; value: number; lower: number; upper: number }[];
   next3Pct: number | null;
+  ahead?: Ahead; // missing in analyses saved before it existed
   model: { name: string; smapePct: number; confidence: "high" | "medium" | "low"; holdoutMonths: number };
 };
 export type CompareItem = { query: string; status: "ok" | "no_data" | "error"; error?: string; seasonality: Seasonality | null; recent: { month: string; value: number }[] };
 export type CompareResult = { kind: "compare"; fetchedAt: string; geo: string; geoName: string; items: CompareItem[] };
 
-const EVENT_LABEL: Record<SeasonEvent, string> = {
+export const EVENT_LABEL: Record<SeasonEvent, string> = {
   school: "back to school (1 September)",
   new_year: "New Year",
   navruz_march8: "Navruz and 8 March",
@@ -37,13 +40,6 @@ const EVENT_LABEL: Record<SeasonEvent, string> = {
   autumn: "autumn",
 };
 const LEVEL_LABEL = { strong: "strong", moderate: "moderate", weak: "weak", none: "none" } as const;
-const PHASE_LABEL = {
-  rising: "Now: demand is starting to rise.",
-  peak: "Now: peak season.",
-  falling: "Now: demand is going down after the season.",
-  low: "Now: low season.",
-  normal: "Now: an ordinary period.",
-} as const;
 const COLORS = ["#6366f1", "#06b6d4", "#10b981", "#f59e0b", "#ec4899"];
 
 /** "avgust, sentabr" — consecutive months stay in calendar order. */
@@ -62,7 +58,79 @@ function When({ p }: { p: SeasonPoint | null }) {
   );
 }
 
-/** Plain-language conclusions computed from the numbers (no paid AI service involved). */
+/** The best and weakest forecast month of the next 12 (computed here for analyses saved before the server sent it). */
+export function aheadOf(s: Seasonality): Ahead | null {
+  if (s.ahead) return s.ahead;
+  if (s.outlook.length === 0 || s.monthly.length < 12) return null;
+  const last3 = s.monthly.slice(-3).reduce((a, m) => a + m.value, 0) / 3;
+  const pct = (a: number, b: number) => (b > 0 ? Math.round(((a - b) / b) * 1000) / 10 : null);
+  const point = (k: number): AheadPoint => ({
+    date: s.outlook[k].date, months: k, value: s.outlook[k].value, vsNowPct: pct(s.outlook[k].value, last3),
+    vsLastYearPct: pct(s.outlook[k].value, s.monthly[s.monthly.length - 12 + k]?.value ?? 0),
+  });
+  const vals = s.outlook.map((o) => o.value);
+  const hi = vals.indexOf(Math.max(...vals)), lo = vals.indexOf(Math.min(...vals));
+  const high = point(hi);
+  return { high, low: point(lo), yearPct: null, realRise: (high.vsNowPct ?? 0) >= 15 && hi > 0 };
+}
+
+export type Verdict = { tone: "up" | "down" | "flat" | "season"; title: string; lines: string[]; advice: string };
+
+/**
+ * One clear conclusion from the long-term direction and the forecast together. A product that is
+ * falling year after year is never told "it will grow in month X" just because of a seasonal bump:
+ * the bump is compared with now and with the same month last year.
+ */
+export function useVerdict() {
+  const { t } = useI18n();
+  const list = useMonthList();
+  return (s: Seasonality): Verdict => {
+    const a = aheadOf(s);
+    const abs = (v: number | null | undefined) => `${fmtNumber(Math.abs(v ?? 0))}%`;
+    const seasonal = s.level !== "none" && s.peakMonths.length > 0;
+    const highMonth = a ? fmtMonth(a.high.date) : "";
+    const riseMonth = s.nextRise && s.nextRise.months > 0 ? fmtMonth(s.nextRise.date) : highMonth;
+    if (s.direction === "declining") {
+      const lines = [t("Over the last 12 months interest fell by {pct} compared with the year before.", { pct: abs(s.yoyPct) })];
+      if (a?.realRise) {
+        lines.push(a.high.vsLastYearPct !== null && a.high.vsLastYearPct < 0
+          ? t("A short seasonal rise is expected in {month} (+{up} versus now), but it will still be {down} lower than in the same month last year.", { month: highMonth, up: abs(a.high.vsNowPct), down: abs(a.high.vsLastYearPct) })
+          : t("A short seasonal rise is expected in {month} (+{up} versus now). After it the decline is likely to continue.", { month: highMonth, up: abs(a.high.vsNowPct) }));
+      } else if (seasonal) {
+        lines.push(t("Searches still go up a little every year in {months}, but each bump is smaller than the year before. No real rise is expected in the next 12 months.", { months: list(s.peakMonths) }));
+      } else {
+        lines.push(t("No rise is expected in the next 12 months."));
+      }
+      return { tone: "down", title: t("Demand is falling"), lines, advice: t("Do not buy a large stock. Sell what you have and look at newer alternatives.") };
+    }
+    if (s.direction === "growing") {
+      const lines = [t("Over the last 12 months interest grew by {pct} compared with the year before.", { pct: abs(s.yoyPct) })];
+      if (a?.realRise) lines.push(t("The highest interest in the next 12 months is expected in {month} (+{up} versus now).", { month: highMonth, up: abs(a.high.vsNowPct) }));
+      return { tone: "up", title: t("Demand is growing"), lines, advice: a?.realRise ? t("Prepare stock and advertising before {month}.", { month: riseMonth }) : t("A good product to keep in stock.") };
+    }
+    if (seasonal && s.phase === "peak") {
+      return {
+        tone: "season", title: t("Peak season now"),
+        lines: [t("Interest is near its yearly high now. It usually starts to fall in {month}.", { month: s.nextFall ? fmtMonth(s.nextFall.date) : "—" })],
+        advice: t("Sell actively now; do not buy a big new stock for after {month}.", { month: s.nextFall ? fmtMonth(s.nextFall.date) : "—" }),
+      };
+    }
+    if (seasonal && a?.realRise) {
+      return {
+        tone: "season", title: t("Seasonal product: a rise is ahead"),
+        lines: [t("Year to year demand is about the same, but it rises every year in {months}. Next high: {month} (+{up} versus now).", { months: list(s.peakMonths), month: highMonth, up: abs(a.high.vsNowPct) })],
+        advice: t("Prepare stock and advertising before {month}.", { month: riseMonth }),
+      };
+    }
+    return {
+      tone: "flat", title: t("Demand is stable"),
+      lines: [t("No big changes are expected in the next 12 months.")],
+      advice: t("Keep a steady stock."),
+    };
+  };
+}
+
+/** Background facts about the seasonal pattern (the conclusion itself is in useVerdict). */
 export function useSeasonSummary() {
   const { t } = useI18n();
   const list = useMonthList();
@@ -72,27 +140,43 @@ export function useSeasonSummary() {
       out.push(t("No clear seasonal pattern: interest is similar all year."));
     } else {
       const top = [...s.months].sort((a, b) => b.effectPct - a.effectPct)[0];
-      out.push(t("Demand is seasonal ({level}): it rises every year in {months}.", { level: t(LEVEL_LABEL[s.level]), months: list(s.peakMonths) }));
-      out.push(t("In {month} interest is {pct}% above the yearly average.", { month: fmtMonthName(top.month), pct: fmtNumber(top.effectPct) }));
+      out.push(t("Seasonal pattern ({level}): every year searches are higher than usual in {months}.", { level: t(LEVEL_LABEL[s.level]), months: list(s.peakMonths) }));
+      out.push(t("In {month} searches are usually {pct}% above the normal level.", { month: fmtMonthName(top.month), pct: fmtNumber(top.effectPct) }));
       if (s.lowMonths.length) {
         const bottom = [...s.months].sort((a, b) => a.effectPct - b.effectPct)[0];
-        out.push(t("The quietest months: {months} ({pct}% below average).", { months: list(s.lowMonths), pct: fmtNumber(Math.abs(bottom.effectPct)) }));
+        out.push(t("The quietest months: {months} ({pct}% below normal).", { months: list(s.lowMonths), pct: fmtNumber(Math.abs(bottom.effectPct)) }));
       }
       if (s.events.length) out.push(t("This matches: {events}.", { events: s.events.map((e) => t(EVENT_LABEL[e])).join(", ") }));
       const years = Math.max(1, Math.round(s.years));
       out.push(t("The pattern repeated in {n} of {total} years.", { n: Math.round(top.consistency * years), total: years }));
     }
-    if (s.yoyPct !== null) {
-      out.push(t(
-        s.direction === "growing" ? "Over the last 12 months interest is {pct} versus the year before: demand is growing."
-          : s.direction === "declining" ? "Over the last 12 months interest is {pct} versus the year before: demand is falling."
-          : "Over the last 12 months demand is about the same as a year before ({pct}).",
-        { pct: fmtPct(s.yoyPct) },
-      ));
-    }
-    if (s.next3Pct !== null) out.push(t("Expected over the next 3 months: {pct} versus the last 3 months.", { pct: fmtPct(s.next3Pct) }));
     return out;
   };
+}
+
+const VERDICT_TONE = {
+  up: { box: "border-emerald-200 bg-emerald-50 dark:border-emerald-500/30 dark:bg-emerald-500/10", text: "text-emerald-700 dark:text-emerald-300", Icon: TrendingUp },
+  down: { box: "border-rose-200 bg-rose-50 dark:border-rose-500/30 dark:bg-rose-500/10", text: "text-rose-700 dark:text-rose-300", Icon: TrendingDown },
+  season: { box: "border-brand-200 bg-white dark:border-brand-500/30 dark:bg-slate-900", text: "text-brand-700 dark:text-brand-300", Icon: CalendarClock },
+  flat: { box: "border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900", text: "text-slate-700 dark:text-slate-200", Icon: Minus },
+} as const;
+
+export function VerdictBox({ s }: { s: Seasonality }) {
+  const { t } = useI18n();
+  const v = useVerdict()(s);
+  const tone = VERDICT_TONE[v.tone];
+  return (
+    <div className={cx("rounded-xl border p-4", tone.box)} data-testid="season-verdict" data-tone={v.tone}>
+      <p className={cx("flex items-center gap-2 text-base font-bold", tone.text)}><tone.Icon className="h-5 w-5" />{v.title}</p>
+      <div className="mt-1.5 space-y-1 text-sm">{v.lines.map((l, i) => <p key={i}>{l}</p>)}</div>
+      <p className="mt-2 text-sm"><b>{t("Advice")}:</b> {v.advice}</p>
+    </div>
+  );
+}
+
+function Pct({ v }: { v: number | null | undefined }) {
+  if (v == null) return <b>—</b>;
+  return <b className={v > 3 ? "text-emerald-600 dark:text-emerald-400" : v < -3 ? "text-rose-600 dark:text-rose-400" : "text-slate-900 dark:text-white"}>{fmtPct(v)}</b>;
 }
 
 // ------------------------------------------------------------------ single product
@@ -100,6 +184,7 @@ export function SeasonPanel({ s, title }: { s: Seasonality; title: string }) {
   const { t } = useI18n();
   const { resolved } = useTheme();
   const summary = useSeasonSummary()(s);
+  const ahead = aheadOf(s);
   const grid = resolved === "dark" ? "#1e293b" : "#e2e8f0";
   const axis = resolved === "dark" ? "#94a3b8" : "#64748b";
   const curMonth = new Date().getMonth() + 1;
@@ -119,26 +204,30 @@ export function SeasonPanel({ s, title }: { s: Seasonality; title: string }) {
         <Badge tone={s.level === "strong" ? "violet" : s.level === "none" ? "slate" : "cyan"}>{t("Seasonality")}: {t(LEVEL_LABEL[s.level])}</Badge>
       </div>
 
+      <VerdictBox s={s} />
+
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4" data-testid="season-tiles">
+        <div className="rounded-xl bg-white p-3 text-sm dark:bg-slate-900">
+          <p className="mb-1 text-xs font-semibold muted">{t("Last 12 months")}</p>
+          <Pct v={s.yoyPct} /><span className="block text-xs muted">{t("versus the 12 months before")}</span>
+        </div>
+        <div className="rounded-xl bg-white p-3 text-sm dark:bg-slate-900">
+          <p className="mb-1 text-xs font-semibold muted">{t("Next 3 months")}</p>
+          <Pct v={s.next3Pct} /><span className="block text-xs muted">{t("versus the last 3 months")}</span>
+        </div>
+        {ahead && ([["Best month ahead", ahead.high, "text-emerald-600 dark:text-emerald-400"], ["Weakest month ahead", ahead.low, "text-rose-600 dark:text-rose-400"]] as const).map(([label, p, color]) => (
+          <div key={label} className="rounded-xl bg-white p-3 text-sm dark:bg-slate-900">
+            <p className={cx("mb-1 text-xs font-semibold", color)}>{t(label)}</p>
+            <b className="text-slate-900 dark:text-white">{fmtMonth(p.date)}</b>
+            <span className="block text-xs muted">{t("versus now")}: {fmtPct(p.vsNowPct)}</span>
+            {p.vsLastYearPct !== null && <span className="block text-xs muted">{t("versus a year before")}: {fmtPct(p.vsLastYearPct)}</span>}
+          </div>
+        ))}
+      </div>
+
       <ul className="space-y-1.5 text-sm">
-        <li className="font-semibold">{t(PHASE_LABEL[s.phase])}</li>
         {summary.map((line, i) => <li key={i} className="flex gap-2"><span className="text-brand-500">•</span><span>{line}</span></li>)}
       </ul>
-
-      {s.level !== "none" && (
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          {([
-            ["Rise starts", s.nextRise, TrendingUp, "text-emerald-600 dark:text-emerald-400"],
-            ["Peak", s.nextPeak, CalendarClock, "text-brand-600 dark:text-brand-400"],
-            ["Decline starts", s.nextFall, TrendingDown, "text-rose-600 dark:text-rose-400"],
-            ["Lowest", s.nextLow, Minus, "text-slate-500"],
-          ] as const).map(([label, p, Icon, color]) => (
-            <div key={label} className="rounded-xl bg-white p-3 text-sm dark:bg-slate-900">
-              <p className={cx("mb-1 flex items-center gap-1.5 text-xs font-semibold", color)}><Icon className="h-3.5 w-3.5" />{t(label)}</p>
-              <When p={p} />
-            </div>
-          ))}
-        </div>
-      )}
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
         <div>
@@ -159,7 +248,7 @@ export function SeasonPanel({ s, title }: { s: Seasonality; title: string }) {
               </BarChart>
             </ResponsiveContainer>
           </div>
-          <p className="text-xs muted">{t("Green: above the yearly average, red: below. The highlighted bar is the current month.")}</p>
+          <p className="text-xs muted">{t("How much each month is usually above (green) or below (red) the normal level, with the long-term rise or fall removed. The highlighted bar is the current month.")}</p>
         </div>
         <div>
           <p className="mb-2 flex items-center gap-1.5 text-sm font-semibold"><TrendingUp className="h-4 w-4" />{t("Next 12 months forecast")}</p>
@@ -245,9 +334,11 @@ export function CompareView({ r, onDelete }: { r: CompareResult; onDelete: () =>
             {rising.length > 0 && <li>{t("Growing in the next 3 months: {items}.", { items: rising.map((i) => `${i.query} (${fmtPct(i.seasonality!.next3Pct)})`).join(", ") })}</li>}
             {falling.length > 0 && <li>{t("Falling: {items}.", { items: falling.map((i) => `${i.query} (${fmtPct(i.seasonality!.next3Pct)})`).join(", ") })}</li>}
             {rising.length === 0 && falling.length === 0 && <li>{t("No big changes expected in the next 3 months.")}</li>}
-            {ok.filter((i) => i.seasonality!.nextRise).slice(0, 4).map((i) => {
+            {ok.filter((i) => i.seasonality!.nextRise || i.seasonality!.direction === "declining").slice(0, 5).map((i) => {
               const s = i.seasonality!;
-              return (s.phase === "peak" || s.phase === "rising") && s.nextFall ? (
+              return s.direction === "declining" ? (
+                <li key={i.query}>{t("{product}: demand is falling ({pct} in a year); no real rise is expected.", { product: i.query, pct: fmtPct(s.yoyPct) })}</li>
+              ) : (s.phase === "peak" || s.phase === "rising") && s.nextFall ? (
                 <li key={i.query}>{t("{product}: the season is on now; demand starts to fall in {month}.", { product: i.query, month: fmtMonth(s.nextFall.date) })}</li>
               ) : (
                 <li key={i.query}>{t("{product}: next season starts in {month} (in {n} months).", { product: i.query, month: fmtMonth(s.nextRise!.date), n: s.nextRise!.months })}</li>
@@ -288,7 +379,7 @@ export function CompareView({ r, onDelete }: { r: CompareResult; onDelete: () =>
                       <td className="px-3 py-2.5">{s.peakMonths.length ? list(s.peakMonths) : <span className="muted">{t("no clear season")}</span>}
                         {s.events.includes("school") && <GraduationCap className="ml-1 inline h-3.5 w-3.5 text-brand-500" aria-label={t(EVENT_LABEL.school)} />}
                       </td>
-                      <td className="px-3 py-2.5"><When p={s.nextRise} /></td>
+                      <td className="px-3 py-2.5">{s.direction === "declining" && !aheadOf(s)?.realRise ? <span className="text-xs muted">{t("no real rise")}</span> : <When p={s.nextRise} />}</td>
                     </>
                   )}
                 </tr>
@@ -322,63 +413,6 @@ export function CompareView({ r, onDelete }: { r: CompareResult; onDelete: () =>
       <div className="flex justify-end border-t border-slate-100 pt-4 dark:border-slate-800">
         <Button size="sm" variant="ghost" icon={<Trash2 className="h-4 w-4" />} onClick={onDelete}>{t("Delete")}</Button>
       </div>
-    </div>
-  );
-}
-
-// ------------------------------------------------------------------ top demand now
-export type TopItem = {
-  query: string; label: string; nowVsAvgPct: number; phase: Seasonality["phase"] | null; next3Pct: number | null;
-  yoyPct: number | null; peakMonths: number[]; events: SeasonEvent[]; recent: { month: string; value: number }[];
-};
-export type TopDemandData = { configured: true; geo: string; computedAt: string; checked: number; items: TopItem[]; top: TopItem[] } | { configured: false };
-
-const PHASE_SHORT = { rising: "rising now", peak: "peak season", falling: "after the season", low: "low season", normal: "ordinary period" } as const;
-
-export function TopDemand({ data, loading, onAnalyse }: { data: TopDemandData | undefined; loading: boolean; onAnalyse: (query: string) => void }) {
-  const { t } = useI18n();
-  const list = useMonthList();
-  if (loading) {
-    return (
-      <div className="space-y-3">
-        <p className="text-sm muted">{t("Checking the most searched products on Google…")}</p>
-        {[0, 1, 2].map((i) => <div key={i} className="h-24 animate-pulse rounded-2xl bg-slate-100 dark:bg-slate-800" />)}
-      </div>
-    );
-  }
-  if (!data || !data.configured || data.top.length === 0) return null;
-  return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-end justify-between gap-2">
-        <h3 className="flex items-center gap-2 font-semibold"><TrendingUp className="h-4 w-4 text-emerald-500" />{t("Top 3 products in demand right now")} · {t("Uzbekistan")}</h3>
-        <span className="text-xs muted">{t("Updated")}: {fmtMonth(data.computedAt.slice(0, 10))}</span>
-      </div>
-      {data.top.map((it, k) => (
-        <div key={it.query} className="flex flex-col gap-3 rounded-2xl border border-slate-200 p-4 dark:border-slate-800 sm:flex-row sm:items-center">
-          <span className="flex h-10 w-10 flex-none items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-lg font-bold text-white">{k + 1}</span>
-          <div className="min-w-0 flex-1">
-            <p className="font-semibold">{t(it.label)} <span className="text-xs font-normal muted">«{it.query}»</span></p>
-            <p className="text-sm">
-              <b className="text-emerald-600 dark:text-emerald-400">{t("{pct} above its usual level", { pct: fmtPct(it.nowVsAvgPct) })}</b>
-              {it.phase && <span className="muted"> · {t(PHASE_SHORT[it.phase])}</span>}
-            </p>
-            <p className="text-xs muted">
-              {it.peakMonths.length > 0 && <>{t("Season")}: {list(it.peakMonths)}</>}
-              {it.next3Pct !== null && <> · {t("Next 3 months")}: {fmtPct(it.next3Pct)}</>}
-              {it.events.includes("school") && <GraduationCap className="ml-1 inline h-3.5 w-3.5 text-brand-500" />}
-            </p>
-          </div>
-          {it.recent.length > 2 && (
-            <div className="h-10 w-full sm:w-28" aria-hidden>
-              <ResponsiveContainer>
-                <LineChart data={it.recent}><Line dataKey="value" stroke="#10b981" strokeWidth={2} dot={false} isAnimationActive={false} /></LineChart>
-              </ResponsiveContainer>
-            </div>
-          )}
-          <Button size="sm" variant="secondary" onClick={() => onAnalyse(it.query)}>{t("Detailed analysis")}</Button>
-        </div>
-      ))}
-      <p className="text-xs muted">{t("Vendora watches {n} popular products on Google Trends and shows the ones searched most above their usual level now. Refreshed weekly.", { n: data.checked })}</p>
     </div>
   );
 }

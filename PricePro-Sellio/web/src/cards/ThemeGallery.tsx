@@ -10,6 +10,7 @@ import { useI18n } from "../lib/i18n";
 import { DocPreview } from "./common";
 import { buildCard, defaultStyle, LAYOUT_LABEL, type BuildData, type LayoutKey, type MarketplaceKey } from "./layouts";
 import { THEME_CATEGORIES, THEME_LAYOUTS, THEMES, type ThemeCategory, type ThemeKey, type ThemePreset } from "./themes";
+import { SlideViewer } from "./SlideViewer";
 
 export const themeLayouts = (k: ThemeKey) => (THEME_LAYOUTS[k] ?? THEME_LAYOUTS.brand) as LayoutKey[];
 
@@ -51,6 +52,7 @@ export function ThemeGallery({ open, onClose, current, onSelect, sample, size, m
   const [q, setQ] = useState("");
   const [cat, setCat] = useState<ThemeCategory | "all">("all");
   const [folder, setFolder] = useState<ThemePreset | null>(null);
+  const [viewing, setViewing] = useState<number | null>(null);
   const list = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return THEMES.filter((x) => (cat === "all" || x.categories.includes(cat))
@@ -70,15 +72,29 @@ export function ThemeGallery({ open, onClose, current, onSelect, sample, size, m
             <Button onClick={() => pick(folder)} data-testid="folder-choose">{folder.key === current ? t("Selected") : t("Choose this theme")}</Button>
           </div>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-            {themeLayouts(folder.key).map((l) => (
-              <div key={l} className="space-y-1">
-                <div className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-700">
+            {themeLayouts(folder.key).map((l, k) => (
+              <button key={l} type="button" className="space-y-1 text-left" onClick={() => setViewing(k)} title={t("View one by one")} data-folder-design={l}>
+                <div className="overflow-hidden rounded-lg border border-slate-200 transition hover:-translate-y-0.5 hover:shadow-md dark:border-slate-700">
                   <DocPreview doc={buildCard(l, { ...sample, style: { ...defaultStyle(mp), theme: folder.key, lighting: folder.suggest.lighting as never } }, previewSize)} width={300} />
                 </div>
                 <p className="truncate text-[11px] font-semibold">{t(LAYOUT_LABEL[l])}</p>
-              </div>
+              </button>
             ))}
           </div>
+          <p className="text-xs muted">{t("Click a design to see the designs one by one.")}</p>
+          {viewing !== null && (() => {
+            const style = { ...defaultStyle(mp), theme: folder.key, lighting: folder.suggest.lighting as never };
+            const real = size; // the chosen format, not the portrait preview
+            return (
+              <SlideViewer start={viewing} onClose={() => setViewing(null)}
+                slides={themeLayouts(folder.key).map((l, k) => ({
+                  key: l, title: `${t(folder.name)} · ${k + 1}. ${t(LAYOUT_LABEL[l])}`,
+                  render: (w) => <DocPreview doc={buildCard(l, { ...sample, style }, real)} width={w} />,
+                  thumb: (w) => <DocPreview doc={buildCard(l, { ...sample, style }, previewSize)} width={w} />,
+                }))}
+                footer={() => <Button onClick={() => { setViewing(null); pick(folder); }}>{folder.key === current ? t("Selected") : t("Choose this theme")}</Button>} />
+            );
+          })()}
         </div>
       ) : (
         <div className="space-y-4" data-testid="theme-gallery">

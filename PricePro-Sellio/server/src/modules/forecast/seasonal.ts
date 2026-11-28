@@ -2,12 +2,16 @@
  * Seasonal demand analysis on monthly search interest (5 years of Google Trends).
  *
  * - STL decomposition (Cleveland et al., 1990) with a periodic seasonal component and
- *   robustness iterations: splits the series into trend + seasonal + remainder.
+ *   robustness iterations, on the log of the series: splits it into trend × seasonal × remainder,
+ *   so a seasonal bump scales with the level (a fading product gets smaller bumps, not the same ones).
  * - Forecast candidates, chosen by a hold-out back-test on the last 12 months:
  *     1. Prophet-style regression (piecewise-linear trend with regularised changepoints +
  *        yearly Fourier terms), the model behind Meta's Prophet, fitted by ridge least squares;
  *     2. STL seasonal + damped trend;
- *     3. Seasonal naive (same month last year).
+ *     3. Seasonal naive (same month last year);
+ *     4. Seasonal naive with the yearly change applied (same month last year × last-12 / previous-12).
+ * - "Ahead": the highest and lowest forecast month of the next 12, compared with now and with the same
+ *   month last year, so a seasonal bump of a declining product is not presented as growth.
  * - From the seasonal component: which months demand rises and falls, how consistent that is
  *   across years, the next rise / peak / fall dates, and calendar events that line up with it
  *   (back to school, New Year, Navruz, 8 March, summer, ...).
@@ -27,6 +31,7 @@ export type MonthEffect = {
 };
 
 export type SeasonPoint = { date: string; months: number };
+export type AheadPoint = { date: string; months: number; value: number; vsNowPct: number | null; vsLastYearPct: number | null };
 
 export type SeasonalAnalysis = {
   method: string;
@@ -49,6 +54,8 @@ export type SeasonalAnalysis = {
   direction: "growing" | "declining" | "stable";
   outlook: { date: string; value: number; lower: number; upper: number }[];
   next3Pct: number | null; // next 3 months (forecast) vs last 3 months (actual)
+  /** From the forecast: the best and the weakest month of the next 12, and the next 12 months vs the last 12. */
+  ahead: { high: AheadPoint; low: AheadPoint; yearPct: number | null; realRise: boolean };
   model: { name: string; smapePct: number; confidence: "high" | "medium" | "low"; holdoutMonths: number };
 };
 
@@ -212,6 +219,26 @@ const seasonalNaive: Model = {
   },
 };
 
+/** Same month last year, scaled by the change of the last 12 months versus the 12 before. */
+const seasonalDrift: Model = {
+  name: "Seasonal naive + yearly change",
+  fit(train) {
+    const n = train.length;
+    const a = mean(train.slice(-12)), b = mean(train.slice(-24, -12));
+    const ratio = n >= 24 && b > 0 ? Math.max(0.4, Math.min(2.5, a / b)) : 1;
+    return (h) => Array.from({ length: h }, (_, k) => Math.min(100, train[n - 12 + (k % 12)] * ratio ** (1 + Math.floor(k / 12))));
+  },
+};
+
+/** Fits a model on the log series and returns forecasts on the original scale (multiplicative seasonality). */
+const logModel = (m: Model, c: number): Model => ({
+  name: m.name,
+  fit(train, firstMonth) {
+    const f = m.fit(train.map((v) => Math.log(v + c)), firstMonth);
+    return (h) => f(h).map((v) => Math.max(0, Math.min(100, Math.exp(v) - c)));
+  },
+});
+
 function smape(a: number[], f: number[]) {
   let s = 0;
   for (let i = 0; i < a.length; i++) {
@@ -277,19 +304,22 @@ export function analyseSeasonality(points: Point[], today = new Date()): Seasona
   const n = y.length;
   const level = Math.max(1e-9, mean(y));
   if (y.every((v) => v === 0)) return null;
-  const { trend, seasonal, remainder } = stl(y);
+  // Multiplicative decomposition: STL on log(y + c). c keeps zero weeks finite.
+  const c = Math.max(1, level * 0.02);
+  const ly = y.map((v) => Math.log(v + c));
+  const { trend, seasonal, remainder } = stl(ly);
 
-  // Seasonal effect per calendar month, in % of the average level.
+  // Seasonal effect per calendar month, in % above / below the trend level.
   const firstMonth = monthIndex(monthly[0].month);
   const effect = new Array<number>(12).fill(0);
-  for (let i = 0; i < 12 && i < n; i++) effect[(firstMonth - 1 + i) % 12] = (seasonal[i] / level) * 100;
+  for (let i = 0; i < 12 && i < n; i++) effect[(firstMonth - 1 + i) % 12] = (Math.exp(seasonal[i]) - 1) * 100;
   // Consistency: in how many years the month sat on the same side of the trend as its average effect.
   const months: MonthEffect[] = effect.map((e, m) => {
     let same = 0, total = 0;
     for (let i = 0; i < n; i++) {
       if ((firstMonth - 1 + i) % 12 !== m) continue;
       total++;
-      const dev = y[i] - trend[i];
+      const dev = ly[i] - trend[i];
       if (Math.sign(dev) === Math.sign(e) || Math.abs(e) < 1) same++;
     }
     return { month: m + 1, effectPct: r1(e), consistency: total ? r1(same / total) : 0 };
@@ -313,20 +343,36 @@ export function analyseSeasonality(points: Point[], today = new Date()): Seasona
 
   const lastYm = monthly[n - 1].month;
   const nowYm = addMonths(lastYm, 1); // the month we are in (not complete yet)
-  const peak = effect.indexOf(maxE) + 1;
-  const low = effect.indexOf(minE) + 1;
-  // Rise starts at the earliest month of the climb towards the peak (each step up is significant).
-  const step = Math.max(2, (maxE - minE) * 0.08);
-  const prevOf = (m: number) => ((m + 10) % 12) + 1;
-  let rise = peak;
-  for (let cur = peak, k = 0; k < 11 && effect[cur - 1] - effect[prevOf(cur) - 1] > step; k++) {
-    rise = cur;
-    cur = prevOf(cur);
-  }
-  // Fall starts the month after the peak.
-  const fall = (peak % 12) + 1;
   const curM = monthIndex(nowYm);
   const nextM = (curM % 12) + 1;
+  const ahead = (m: number) => (m - curM + 12) % 12;
+  const prevOf = (m: number) => ((m + 10) % 12) + 1;
+  const step = Math.max(2, (maxE - minE) * 0.08);
+  // Seasons = runs of consecutive peak months. The next season is the nearest one from now
+  // (a product can have two, e.g. September and December); its top month is its peak.
+  const ordered = seasonOrder(peakMonths);
+  const seasons: number[][] = [];
+  for (const m of ordered) {
+    const last = seasons[seasons.length - 1];
+    if (last && (last[last.length - 1] % 12) + 1 === m) last.push(m);
+    else seasons.push([m]);
+  }
+  if (seasons.length > 1) { // join a run that wraps the year end
+    const a = seasons[0], z = seasons[seasons.length - 1];
+    if ((z[z.length - 1] % 12) + 1 === a[0]) { seasons[0] = [...z, ...a]; seasons.pop(); }
+  }
+  const inSeason = seasons.find((r) => r.includes(curM));
+  const nextSeason = inSeason ?? [...seasons].sort((a, b) => ahead(a[0]) - ahead(b[0]))[0];
+  let peak = effect.indexOf(maxE) + 1, rise = peak, fall = (peak % 12) + 1;
+  if (nextSeason) {
+    peak = nextSeason.reduce((best, m) => (effect[m - 1] > effect[best - 1] ? m : best), nextSeason[0]);
+    // The climb starts at the earliest month of significant steps up towards the peak.
+    rise = peak;
+    for (let cur = peak, k = 0; k < 11 && effect[cur - 1] - effect[prevOf(cur) - 1] > step; k++) { rise = cur; cur = prevOf(cur); }
+    if (inSeason || ahead(rise) > ahead(peak)) rise = curM; // the climb is already under way
+    fall = (peak % 12) + 1; // demand starts going down right after the top month
+  }
+  const low = effect.indexOf(minE) + 1;
   const phase: SeasonalAnalysis["phase"] = lvl === "none" ? "normal"
     : peakMonths.includes(curM) ? "peak"
     : peakMonths.includes(nextM) || effect[nextM - 1] - effect[curM - 1] > step ? "rising"
@@ -341,8 +387,9 @@ export function analyseSeasonality(points: Point[], today = new Date()): Seasona
   // Forecast: back-test the candidates on the last 12 months, refit the best on everything.
   const holdout = n >= 36 ? 12 : 6;
   const train = y.slice(0, n - holdout), test = y.slice(n - holdout);
-  const scored = [prophetStyle, stlDamped, seasonalNaive]
-    .filter((m) => m !== seasonalNaive || train.length >= 12)
+  const candidates = [logModel(prophetStyle, c), logModel(stlDamped, c), seasonalNaive, seasonalDrift];
+  const scored = candidates
+    .filter((m) => (m !== seasonalNaive || train.length >= 12) && (m !== seasonalDrift || train.length >= 24))
     .map((m) => ({ m, err: smape(test, m.fit(train, firstMonth)(holdout)) }))
     .sort((a, b) => a.err - b.err);
   const best = scored[0];
@@ -360,6 +407,20 @@ export function analyseSeasonality(points: Point[], today = new Date()): Seasona
   // so the forecast starts at it.
   const last3 = mean(y.slice(-3)), next3 = mean(fc.slice(0, 3));
   const next3Pct = last3 > 0 ? r1(((next3 - last3) / last3) * 100) : null;
+  // The best / weakest forecast month of the next 12, versus now (last 3 months) and the same month a year before.
+  const pctOf = (a: number, b: number) => (b > 0 ? r1(((a - b) / b) * 100) : null);
+  const aheadPoint = (k: number): AheadPoint => {
+    const yearAgo = n - 12 + k; // index of the same calendar month one year earlier
+    return {
+      date: outlook[k].date, months: k, value: outlook[k].value,
+      vsNowPct: pctOf(fc[k], last3),
+      vsLastYearPct: yearAgo >= 0 && yearAgo < n ? pctOf(fc[k], y[yearAgo]) : null,
+    };
+  };
+  const hiK = fc.indexOf(Math.max(...fc)), loK = fc.indexOf(Math.min(...fc));
+  const high = aheadPoint(hiK);
+  const yearPct = pctOf(mean(fc), last12);
+  const aheadInfo = { high, low: aheadPoint(loK), yearPct, realRise: (high.vsNowPct ?? 0) >= 15 && hiK > 0 };
 
   return {
     method: "STL (periodic, robust) + model chosen by 12-month back-test",
@@ -382,6 +443,7 @@ export function analyseSeasonality(points: Point[], today = new Date()): Seasona
     direction,
     outlook,
     next3Pct,
+    ahead: aheadInfo,
     model: {
       name: best.m.name,
       smapePct: r1(best.err),

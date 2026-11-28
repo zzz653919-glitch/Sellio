@@ -168,16 +168,25 @@ test("API: top products for a period — one shared scale across requests via th
   assert.equal(w.mostWanted[0].query, "кондиционер");
   assert.equal(w.mostWanted[0].index, 100);
   const phone = w.mostWanted.find((i: { query: string }) => i.query === "телефон");
-  assert.ok(Math.abs(phone.index - 33) <= 2, `phone ≈ 40/120 of the top (${phone.index})`);
+  // The calendar week 23–29 March holds 5 of the 7 jump days: conditioners average (2·30 + 5·120) / 7 ≈ 94.
+  assert.ok(Math.abs(phone.index - 42) <= 2, `phone ≈ 40/94 of the top (${phone.index})`);
   assert.equal(w.fastestGrowing[0].query, "кондиционер");
   assert.ok(w.fastestGrowing[0].changePct > 200);
   assert.equal(w.declining[0].query, "обогреватель");
   assert.equal(w.mostWanted[0].series.length, 7);
+  assert.equal(w.from, "2026-03-23", "the last complete week, Monday to Sunday");
+  assert.equal(w.to, "2026-03-29");
+  assert.equal(w.dates.length, 7);
   // A month compares the last 30 days with the 30 before; the same cached data is reused (no new requests).
   const before = calls.length;
   const m = (await client.get("/api/intel/top?period=month")).data;
   assert.equal(calls.length, before, "week and month share one cached download");
-  assert.equal(m.mostWanted[0].series.length, 30);
+  assert.equal(m.from, "2026-03-01", "the last complete calendar month");
+  assert.equal(m.to, "2026-03-31");
+  assert.equal(m.mostWanted[0].series.length, 31);
+  assert.equal(m.prevFrom, "2026-02-01");
+  assert.equal(m.mostWanted[0].prevSeries.length, 31);
+  assert.equal(m.leastWanted[m.leastWanted.length - 1].query, m.mostWanted[0].query, "least wanted is the same ranking reversed");
   assert.equal((await client.get("/api/intel/top?period=decade")).status, 400);
   setTrendsProviderForTests(undefined);
 });
