@@ -3,7 +3,7 @@
  * ("Explore all designs") lists the folders with search and category filters; opening a folder shows its
  * five designs large, and "Choose this theme" applies the theme and its five designs.
  */
-import { ArrowLeft, Check, Eye, Folder, Search } from "lucide-react";
+import { ArrowLeft, Check, Eye, Folder, Search, Wand2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Button, Input, Modal, cx } from "../components/ui";
 import { useI18n } from "../lib/i18n";
@@ -44,8 +44,10 @@ export function ThemeFolder({ th, sample, size, mp, selected, onClick, small }: 
   );
 }
 
-export function ThemeGallery({ open, onClose, current, onSelect, sample, size, mp }: {
+export function ThemeGallery({ open, onClose, current, onSelect, onGenerate, sample, size, mp }: {
   open: boolean; onClose: () => void; current: ThemeKey; onSelect: (t: ThemePreset) => void;
+  /** Choose the theme and start making cards with it right away. */
+  onGenerate?: (t: ThemePreset) => void;
   sample: BuildData; size: { w: number; h: number }; mp: MarketplaceKey;
 }) {
   const { t } = useI18n();
@@ -62,6 +64,7 @@ export function ThemeGallery({ open, onClose, current, onSelect, sample, size, m
   // previews are portrait so they line up; the real format is used on the cards themselves
   const previewSize = size.w > size.h * 1.2 ? { w: 1080, h: 1350 } : size;
   const pick = (th: ThemePreset) => { onSelect(th); setFolder(null); onClose(); };
+  const generate = (th: ThemePreset) => { setFolder(null); setPreview(null); setViewing(null); onClose(); onGenerate?.(th); };
 
   return (
     <Modal open={open} onClose={() => { setFolder(null); onClose(); }} title={folder ? t(folder.name) : t("Explore all designs")} wide>
@@ -93,7 +96,12 @@ export function ThemeGallery({ open, onClose, current, onSelect, sample, size, m
                   render: (w) => <DocPreview doc={buildCard(l, { ...sample, style }, real)} width={w} />,
                   thumb: (w) => <DocPreview doc={buildCard(l, { ...sample, style }, previewSize)} width={w} />,
                 }))}
-                footer={() => <Button onClick={() => { setViewing(null); pick(folder); }}>{folder.key === current ? t("Selected") : t("Choose this theme")}</Button>} />
+                footer={() => (
+                  <>
+                    <Button variant="secondary" onClick={() => { setViewing(null); pick(folder); }}>{folder.key === current ? t("Selected") : t("Choose this theme")}</Button>
+                    {onGenerate && <Button icon={<Wand2 className="h-4 w-4" />} onClick={() => generate(folder)}>{t("Generate with this design")}</Button>}
+                  </>
+                )} />
             );
           })()}
         </div>
@@ -119,6 +127,7 @@ export function ThemeGallery({ open, onClose, current, onSelect, sample, size, m
                     <Button size="sm" variant="secondary" className="flex-1" icon={<Eye className="h-3.5 w-3.5" />} onClick={() => setPreview(th)} data-testid="theme-preview">{t("Preview")}</Button>
                     <Button size="sm" className="flex-1" variant={th.key === current ? "secondary" : "primary"} onClick={() => pick(th)} data-testid="theme-select">{th.key === current ? t("Selected") : t("Select")}</Button>
                   </div>
+                  {onGenerate && <Button size="sm" variant="ghost" className="w-full" icon={<Wand2 className="h-3.5 w-3.5" />} onClick={() => generate(th)} data-testid="theme-generate">{t("Generate with this design")}</Button>}
                 </div>
               ))}
             </div>
@@ -134,7 +143,12 @@ export function ThemeGallery({ open, onClose, current, onSelect, sample, size, m
               render: (w) => <DocPreview doc={buildCard(l, { ...sample, style }, size)} width={w} />,
               thumb: (w) => <DocPreview doc={buildCard(l, { ...sample, style }, previewSize)} width={w} />,
             }))}
-            footer={() => <Button onClick={() => { const th = preview; setPreview(null); pick(th); }}>{preview.key === current ? t("Selected") : t("Choose this theme")}</Button>} />
+            footer={() => (
+              <>
+                <Button variant="secondary" onClick={() => { const th = preview; setPreview(null); pick(th); }}>{preview.key === current ? t("Selected") : t("Choose this theme")}</Button>
+                {onGenerate && <Button icon={<Wand2 className="h-4 w-4" />} onClick={() => generate(preview)} data-testid="viewer-generate">{t("Generate with this design")}</Button>}
+              </>
+            )} />
         );
       })()}
     </Modal>

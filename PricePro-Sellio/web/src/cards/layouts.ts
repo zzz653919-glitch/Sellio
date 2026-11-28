@@ -7,7 +7,7 @@
  * Colours are semantic — paper (background), ink (text), panel (tiles), hero (colour areas) — so every
  * composition works with every theme and background.
  */
-import { arch, circle, diamond, dots, frame, glow, img, lin, pill, plus, rad, rect, ring, shape, sparkle, star, stripes, text, blob, tri, wave, type Part } from "../studio/templates/compose";
+import { arch, burst, circle, diamond, dots, frame, glow, half, img, lin, pill, plus, rad, rect, ring, shape, sparkle, star, stripes, text, blob, tri, wave, type Part } from "../studio/templates/compose";
 import { iconSrc } from "../studio/icons";
 import { patternSrc } from "../studio/patterns";
 import type { Doc, El, Fill, ImageEl, TextEl } from "../studio/types";
@@ -837,6 +837,157 @@ function decoParts(deco: Deco[], p: Palette): Part[] {
       named(img(patternSrc("marble", "#F2F0EC", "#8E8A84"), 0, 0.68, 1, 0.32, { fit: "cover", shadow: false }), "Marble floor"),
       named(rect(0, 0.678, 1, 0.003, alpha(p.accent, 0.8)), "Gold line"));
     if (d === "geometry") out.push(glow(-0.2, -0.15, 0.6, alpha(p.primary, 0.12)), glow(0.6, 0.65, 0.6, alpha(p.accent, 0.12)));
+    // ---- batch 3
+    if (d === "chrome") out.push(
+      glow(-0.3, -0.2, 0.8, "rgba(226,232,240,0.18)"), glow(0.55, 0.45, 0.8, alpha(p.accent, 0.12)),
+      named(wave(-0.1, 0.8, 1.2, 0.2, lin(90, "#4B5563", "#E5E9EF", "#6B7280", "#F8FAFC", "#525A66")), "Liquid chrome"),
+      named(wave(-0.05, 0.86, 1.1, 0.16, lin(90, "#9AA3AF", "#F1F5F9", "#4B5563", "#D1D5DB")), "Liquid chrome"),
+      named(rect(0.25, -0.3, 0.06, 1.6, lin(90, "rgba(255,255,255,0)", "rgba(255,255,255,0.16)", "rgba(255,255,255,0)"), 0, { rot: 20 }), "Chrome sheen"));
+    if (d === "desert") out.push(
+      named(glow(0.45, -0.18, 0.75, "rgba(255,214,140,0.5)"), "Sun glow"),
+      named(wave(-0.15, 0.74, 1.3, 0.26, lin(180, "#E9B872", "#C98B45")), "Dune"),
+      named(wave(-0.05, 0.84, 1.15, 0.18, lin(180, "#F1C98A", "#D9A15C")), "Dune"));
+    if (d === "underwater") out.push(
+      named(img(patternSrc("caustics", "#BFF6FF"), 0, 0, 1, 1, { fit: "cover", shadow: false, opacity: 0.16 }), "Light ripples"),
+      ...[[0.18, 0.06], [0.5, 0.11], [0.72, 0.04]].map(([x, w]) => named(rect(x, -0.2, w, 1.3, lin(180, "rgba(191,246,255,0.22)", "rgba(191,246,255,0)"), 0, { rot: 10 }), "Light ray")),
+      named(wave(0, 0.93, 1, 0.07, alpha(p.grad2, 0.6)), "Sea floor"));
+    if (d === "velvet") out.push(
+      named(img(patternSrc("velvet", "#3B030E", "#8A0E24"), 0, 0, 1, 1, { fit: "cover", shadow: false, opacity: 0.95 }), "Red velvet"),
+      named(tri(0.2, -0.05, 0.6, 0.75, lin(180, "rgba(255,240,220,0.20)", "rgba(255,240,220,0)")), "Spotlight"));
+    if (d === "heaven") {
+      out.push(...[[0.08, 0.14], [0.22, 0.08], [0.36, 0.05]].map(([x, w]) => named(rect(x, -0.25, w, 1.2, lin(180, "rgba(255,255,255,0.45)", "rgba(255,255,255,0)"), 0, { rot: -24 }), "Sun ray")));
+      for (const [x, y, dd] of [[-0.2, 0.78, 0.45], [0.1, 0.84, 0.38], [0.38, 0.86, 0.36], [0.62, 0.8, 0.44], [0.86, 0.84, 0.36], [-0.08, 0.9, 0.3], [0.5, 0.92, 0.32], [0.75, -0.08, 0.28], [0.9, -0.04, 0.22]] as const)
+        out.push(named(circle(x, y, dd, rad(0.5, 0.4, 0.6, "#FFFFFF", "#EAF4FF"), { opacity: 0.95, blur: 2 }), "Cloud"));
+    }
+    if (d === "crystal") out.push(
+      named(img(patternSrc("facets", "#FFFFFF", "#A5B4FC"), 0, 0, 1, 1, { fit: "cover", shadow: false, opacity: 0.55 }), "Crystal facets"),
+      sparkle(0.85, 0.06, 0.06, "#FFFFFF"), sparkle(0.08, 0.5, 0.04, "#C7D2FE"), sparkle(0.9, 0.62, 0.035, "#FFFFFF"), sparkle(0.2, 0.9, 0.03, "#C7D2FE"));
+    if (d === "film") out.push(
+      named(tri(0.15, -0.05, 0.7, 0.95, lin(180, "rgba(255,236,190,0.16)", "rgba(255,236,190,0)")), "Spotlight cone"),
+      named(rect(0, 0, 1, 0.05, "#000000"), "Letterbox"), named(rect(0, 0.95, 1, 0.05, "#000000"), "Letterbox"),
+      named(rect(0, 0.05, 1, 0.002, alpha(p.primary, 0.5)), "Film line"), named(rect(0, 0.948, 1, 0.002, alpha(p.primary, 0.5)), "Film line"));
+    if (d === "popart") out.push(
+      named(img(patternSrc("halftone", alpha(p.primary, 0.55)), -0.05, -0.05, 0.6, 0.45, { fit: "cover", shadow: false, rot: 180 }), "Halftone"),
+      named(img(patternSrc("halftone", alpha(p.grad2, 0.45)), 0.5, 0.62, 0.55, 0.42, { fit: "cover", shadow: false }), "Halftone"),
+      ...[0, 1, 2, 3, 4, 5].map((k) => named(tri(0.02 + k * 0.05, 0.955, 0.05, 0.035, k % 2 ? p.grad2 : p.primary), "Zigzag")));
+    if (d === "scandi") out.push(
+      named(rect(0, 0.76, 1, 0.24, lin(180, "#E2C9A6", "#C9A97E")), "Oak floor"),
+      named(stripes(0, 0.76, 1, 0.24, "#A88654", 0.12), "Floor boards"),
+      named(rect(0, 0.758, 1, 0.006, "#FFFFFF"), "Skirting"),
+      named(rect(0.66, 0.2, 0.3, 0.012, "#C9A97E", 3), "Shelf"), named(rect(0.7, 0.155, 0.04, 0.045, "#E7E2D8", 4), "Vase"), named(circle(0.8, 0.165, 0.035, "#5B7065"), "Bowl"),
+      named(img(patternSrc("leaves", "#4F7A5C", "#86A989"), 0.86, 0.6, 0.16, 0.16, { fit: "cover", shadow: false, opacity: 0.95 }), "Plant"),
+      named(rect(0.9, 0.73, 0.07, 0.06, lin(180, "#F2EEE7", "#D9D3C8"), 8), "Plant pot"));
+    if (d === "hud") out.push(
+      named(img(patternSrc("grid", p.primary), 0, 0, 1, 1, { fit: "cover", shadow: false, opacity: 0.05 }), "Grid"),
+      ...[[0.03, 0.025, 1, 1], [0.97, 0.025, -1, 1], [0.03, 0.975, 1, -1], [0.97, 0.975, -1, -1]].flatMap(([x, y, sx, sy]) => [
+        named(rect(sx > 0 ? x : x - 0.08, sy > 0 ? y : y - 0.004, 0.08, 0.004, p.primary), "HUD bracket"),
+        named(rect(sx > 0 ? x : x - 0.004, sy > 0 ? y : y - 0.06, 0.004, 0.06, p.primary), "HUD bracket")]),
+      ...[0.3, 0.33, 0.36].map((y, k) => named(rect(0.9, y, 0.06 - k * 0.015, 0.004, alpha(p.grad2, 0.8), 2), "Data line")),
+      glow(-0.3, 0.2, 0.7, alpha(p.primary, 0.14)), glow(0.6, -0.2, 0.7, alpha(p.grad2, 0.14)));
+    if (d === "perfume") out.push(
+      named(wave(-0.2, 0.62, 1.4, 0.22, lin(90, alpha(p.accent, 0.9), alpha(p.primary, 0.55), alpha(p.accent, 0.8))), "Silk"),
+      named(wave(-0.1, 0.7, 1.3, 0.16, lin(90, "rgba(255,255,255,0.55)", alpha(p.accent, 0.5), "rgba(255,255,255,0.35)")), "Silk"),
+      named(rect(0.38, -0.2, 0.24, 1.2, lin(90, "rgba(255,255,255,0)", "rgba(255,255,255,0.22)", "rgba(255,255,255,0)")), "Soft beam"));
+    if (d === "sunset") out.push(
+      named(rect(0, 0.62, 1, 0.38, lin(180, "rgba(124,58,237,0)", "rgba(76,29,149,0.35)")), "Dusk"),
+      named(glow(0.15, 0.3, 0.7, "rgba(253,186,116,0.55)"), "Haze"));
+    if (d === "galaxy") out.push(
+      named(img(patternSrc("stars", "#FFFFFF"), 0, 0, 1, 1, { fit: "cover", shadow: false, opacity: 0.9 }), "Stars"),
+      named(glow(-0.3, 0.3, 0.9, alpha(p.primary, 0.3)), "Nebula"), named(glow(0.5, -0.2, 0.8, alpha(p.accent, 0.25)), "Nebula"),
+      );
+    if (d === "splash") out.push(glow(-0.25, -0.15, 0.7, alpha(p.primary, 0.14)), glow(0.55, 0.55, 0.7, alpha(p.grad2, 0.1)));
+    if (d === "ice") out.push(
+      named(img(patternSrc("frost", "#FFFFFF"), 0, 0, 1, 1, { fit: "cover", shadow: false, opacity: 0.85 }), "Frost"),
+      named(img(patternSrc("snow", "#FFFFFF"), 0, 0, 1, 1, { fit: "cover", shadow: false, opacity: 0.5 }), "Snow"),
+      named(frame(0.025, 0.02, 0.95, 0.96, "rgba(255,255,255,0.7)", 2, 18), "Ice frame"));
+    if (d === "boutique") out.push(
+      ...[0.18, 0.5, 0.82].map((x) => named(tri(x - 0.14, -0.02, 0.28, 0.62, lin(180, "rgba(255,248,230,0.55)", "rgba(255,248,230,0)")), "Spotlight")),
+      ...[0.18, 0.5, 0.82].map((x) => named(rect(x - 0.025, 0, 0.05, 0.012, "#2B2B30", 3), "Lamp")),
+      named(rect(0, 0.0, 1, 0.006, alpha(p.accent, 0.7)), "Gold trim"));
+    if (d === "bauhaus") out.push(
+      named(circle(0.55, 0.08, 0.62, lighter(p.accent, 0.25)), "Big circle"),
+      named(rect(-0.02, 0.78, 0.34, 0.24, p.grad2), "Block"),
+      named(half(0.7, 0.86, 0.26, 0.14, p.primary), "Half circle"),
+      named(rect(-0.1, 0.72, 1.2, 0.006, p.ink, 0, { rot: -18 }), "Line"));
+    if (d === "goldenHour") out.push(
+      named(glow(-0.35, -0.35, 1.0, "rgba(255,196,92,0.6)"), "Sun flare"), named(circle(0.02, 0.03, 0.12, "rgba(255,244,214,0.95)", { blur: 4 }), "Sun"),
+      ...[[0.1, 0.12], [0.3, 0.07], [0.45, 0.1]].map(([x, w]) => named(rect(x, -0.3, w, 1.6, lin(180, "rgba(255,214,140,0.28)", "rgba(255,214,140,0)"), 0, { rot: -32 }), "Light beam")),
+      named(img(patternSrc("bokeh", "#FFD27A", "#FFFFFF"), 0, 0, 1, 1, { fit: "cover", shadow: false, opacity: 0.6 }), "Bokeh"));
+    if (d === "gallery") out.push(
+      named(rect(0, 0.82, 1, 0.18, lin(180, "#E2DFD8", "#D3CFC6")), "Gallery floor"), named(rect(0, 0.818, 1, 0.004, "#FFFFFF"), "Skirting"));
+    if (d === "macro") out.push(
+      named(img(patternSrc("bokeh", "#FFFFFF", p.accent), -0.1, -0.1, 0.6, 0.5, { fit: "cover", shadow: false, opacity: 0.35 }), "Out-of-focus light"),
+      named(img(patternSrc("bokeh", p.accent, "#FFFFFF"), 0.55, 0.6, 0.55, 0.5, { fit: "cover", shadow: false, opacity: 0.3 }), "Out-of-focus light"));
+    // ---- batch 4
+    if (d === "tropical") out.push(
+      named(rect(0, 0.84, 1, 0.16, lin(180, "#FDF3D7", "#F2DDAA")), "Sand"),
+      named(wave(-0.1, 0.8, 1.2, 0.1, lin(90, "#5EEAD4", "#14B8A6", "#67E8F9")), "Sea"),
+      named(img(patternSrc("leaves", "#0F5D3A", "#2F9E5B"), -0.32, -0.2, 0.5, 0.28, { fit: "cover", shadow: false, rot: -14 }), "Palm leaves"),
+      named(img(patternSrc("leaves", "#147A47", "#3DB36B"), 0.8, -0.18, 0.44, 0.26, { fit: "cover", shadow: false, rot: 16 }), "Palm leaves"));
+    if (d === "watercolor") out.push(
+      named(img(patternSrc("watercolor", lighter(p.primary, 0.55), lighter(p.accent, 0.35)), -0.1, -0.08, 1.2, 1.16, { fit: "cover", shadow: false, opacity: 0.55 }), "Watercolour"),
+      named(img(patternSrc("kraft", "rgba(0,0,0,0)", "#B8A88E"), 0, 0, 1, 1, { fit: "cover", shadow: false, opacity: 0.25 }), "Paper grain"));
+    if (d === "brutal") out.push(
+      named(frame(0.02, 0.015, 0.96, 0.97, "#111111", 10), "Thick border"),
+      named(ring(-0.1, 0.8, 0.24, "#111111", 6), "Outline circle"), named(rect(0.955, 0.5, 0.08, 0.08, p.accent, 0, { stroke: "#111111", strokeW: 4 }), "Accent block"));
+    if (d === "vapor") out.push(
+      named(img(patternSrc("vgrid", p.primary), 0, 0.64, 1, 0.36, { fit: "cover", shadow: false, opacity: 0.85 }), "Grid floor"),
+      named(rect(0, 0.635, 1, 0.006, p.accent, 0, { blur: 1 }), "Horizon"),
+      glow(-0.3, -0.2, 0.8, alpha(p.grad2, 0.3)));
+    if (d === "coffee") out.push(
+      named(rect(0, 0.8, 1, 0.2, lin(180, "#8B5E3C", "#5C3A22")), "Wooden table"), named(stripes(0, 0.8, 1, 0.2, "#3E2614", 0.12), "Wood grain"),
+      ...[[0.05, 0.86, 20], [0.1, 0.9, -30], [0.86, 0.87, 40], [0.92, 0.92, -10], [0.8, 0.93, 70]].map(([x, y, r]) => named(shape("circle", x, y, 0.045, 0.03, lin(90, "#5A3418", "#2E1A0C"), { rot: r }), "Coffee bean")));
+    if (d === "sakura") out.push(
+      named(img(patternSrc("petals", "#F9A8C7", "#FBCFE0"), 0, 0, 1, 1, { fit: "cover", shadow: false, opacity: 0.85 }), "Falling petals"));
+    if (d === "autumn") out.push(
+      named(img(patternSrc("petals", "#E8742B", "#C2410C"), 0, 0, 1, 1, { fit: "cover", shadow: false, opacity: 0.38 }), "Falling leaves"),
+      named(img(patternSrc("leaves", "#C2410C", "#EA9A3B"), -0.2, 0.8, 0.6, 0.3, { fit: "cover", shadow: false }), "Leaves"),
+      named(img(patternSrc("leaves", "#B45309", "#DC6B1F"), 0.66, -0.12, 0.5, 0.28, { fit: "cover", shadow: false, rot: 20 }), "Leaves"),
+      named(wave(0, 0.93, 1, 0.07, lin(90, "#4D5B26", "#6B7A2E")), "Moss"));
+    if (d === "mirror") out.push(glow(-0.2, -0.2, 0.7, "rgba(226,232,240,0.12)"), named(rect(0, 0.8, 1, 0.003, "rgba(226,232,240,0.35)"), "Mirror floor"));
+    if (d === "paper") out.push(
+      named(wave(-0.1, 0.8, 1.2, 0.22, "rgba(0,0,0,0.10)"), "Paper shadow"), named(wave(-0.1, 0.78, 1.2, 0.22, lighter(p.primary, 0.45)), "Paper layer"),
+      named(wave(-0.1, 0.86, 1.2, 0.16, "rgba(0,0,0,0.10)"), "Paper shadow"), named(wave(-0.1, 0.845, 1.2, 0.16, lighter(p.grad2, 0.5)), "Paper layer"),
+      named(wave(-0.1, 0.92, 1.2, 0.1, lighter(p.accent, 0.45)), "Paper layer"));
+    if (d === "kitchen") out.push(
+      named(img(patternSrc("tiles", "#FFFFFF", "#E3E8EC"), 0, 0, 1, 0.78, { fit: "cover", shadow: false }), "Metro tiles"),
+      named(rect(0, 0.78, 1, 0.22, lin(180, "#E7E5E4", "#CFCBC7")), "Stone counter"), named(rect(0, 0.778, 1, 0.006, "#FFFFFF"), "Counter edge"),
+      named(img(patternSrc("leaves", "#15803D", "#4ADE80"), 0.82, 0.62, 0.2, 0.18, { fit: "cover", shadow: false }), "Herbs"));
+    if (d === "moon") out.push(
+      named(img(patternSrc("stars", "#E2E8F0"), 0, 0, 1, 0.6, { fit: "cover", shadow: false, opacity: 0.6 }), "Stars"),
+      named(frame(0.03, 0.022, 0.94, 0.956, alpha(p.primary, 0.5), 1), "Silver line"), named(frame(0.045, 0.033, 0.91, 0.934, alpha(p.primary, 0.25), 1), "Silver line"));
+    if (d === "arcade") out.push(
+      named(img(patternSrc("pixels", p.primary, p.grad2), -0.05, -0.05, 0.5, 0.35, { fit: "cover", shadow: false, opacity: 0.8 }), "Pixels"),
+      named(img(patternSrc("pixels", p.accent, p.primary), 0.6, 0.72, 0.45, 0.32, { fit: "cover", shadow: false, opacity: 0.7 }), "Pixels"),
+      named(img(patternSrc("scanlines", "#FFFFFF"), 0, 0, 1, 1, { fit: "cover", shadow: false, opacity: 0.04 }), "Scan lines"));
+    if (d === "stage") out.push(
+      ...[[0.05, p.primary, 14], [0.4, p.accent, 0], [0.75, p.grad2, -14]].map(([x, c, r]) => named(tri(x as number - 0.1, -0.05, 0.4, 0.95, lin(180, alpha(c as string, 0.45), alpha(c as string, 0)), { rot: r as number }), "Stage beam")),
+      named(rect(0, 0.86, 1, 0.14, lin(180, "#1A1626", "#0A0910")), "Stage floor"), named(rect(0, 0.858, 1, 0.004, alpha(p.accent, 0.6)), "Stage edge"),
+      named(glow(0.1, 0.7, 0.8, "rgba(255,255,255,0.08)"), "Haze"));
+    if (d === "kraft") out.push(
+      named(img(patternSrc("kraft", "#D9B98C", "#8B6A3E"), 0, 0, 1, 1, { fit: "cover", shadow: false }), "Kraft paper"),
+      named(rect(-0.1, 0.975, 1.2, 0.004, "#7A5A33", 2, { rot: -2 }), "Twine"),
+      named(ring(0.8, 0.04, 0.15, alpha(p.primary, 0.75), 4), "Eco stamp"), named(ring(0.815, 0.055, 0.12, alpha(p.primary, 0.5), 2), "Eco stamp"),
+      named(img(patternSrc("leaves", "#4D7C0F", "#65A30D"), 0.835, 0.075, 0.08, 0.06, { fit: "cover", shadow: false }), "Eco leaf"));
+    if (d === "pearl") out.push(
+      named(wave(-0.2, 0.7, 1.4, 0.22, lin(90, "#FFFFFF", "#F1E3D6", "#FFFFFF", "#EADBCB")), "Satin"),
+      named(wave(-0.1, 0.78, 1.3, 0.18, lin(90, "#F6EDE4", "#FFFFFF", "#E8D8C8")), "Satin"),
+      ...Array.from({ length: 11 }, (_, k) => named(circle(0.02 + k * 0.035, 0.9 - Math.sin(k / 3) * 0.04, 0.03, rad(0.35, 0.3, 0.8, "#FFFFFF", "#E7DCCF")), "Pearl")));
+    if (d === "glitch") out.push(
+      named(img(patternSrc("glitch", p.primary, p.grad2), 0, 0, 1, 1, { fit: "cover", shadow: false, opacity: 0.28 }), "Glitch bars"),
+      named(img(patternSrc("scanlines", "#FFFFFF"), 0, 0, 1, 1, { fit: "cover", shadow: false, opacity: 0.05 }), "Scan lines"));
+    if (d === "terrazzo") out.push(
+      named(img(patternSrc("terrazzo", "#E07A5F", "#81B29A"), 0, 0, 1, 1, { fit: "cover", shadow: false, opacity: 0.55 }), "Terrazzo"),
+      named(rect(-0.06, 0.9, 0.18, 0.12, lighter(p.primary, 0.5), 12), "Pastel block"));
+    if (d === "neonSign") out.push(
+      named(img(patternSrc("brick", "#5A2E2E", "#2A1515"), 0, 0, 1, 1, { fit: "cover", shadow: false }), "Brick wall"),
+      named(rect(0, 0, 1, 1, lin(180, "rgba(12,7,9,0.15)", "rgba(12,7,9,0.65)")), "Shade"),
+      );
+    if (d === "iso") out.push(glow(-0.25, -0.2, 0.7, alpha(p.primary, 0.1)));
+    if (d === "sport") out.push(
+      named(rect(0, 0.8, 1, 0.2, lin(180, "#15803D", "#14532D")), "Field"), named(stripes(0, 0.8, 1, 0.2, "#0F5132", 0.2), "Turf"),
+      ...[0.84, 0.9, 0.96].map((y) => named(rect(0, y, 1, 0.004, "rgba(255,255,255,0.8)"), "Lane line")),
+      named(glow(-0.3, -0.3, 0.7, "rgba(255,255,255,0.3)"), "Floodlight"), named(glow(0.6, -0.3, 0.7, "rgba(255,255,255,0.3)"), "Floodlight"));
   }
   return out;
 }
@@ -875,6 +1026,117 @@ function productDeco(deco: Deco[], prod: ImageEl, p: Palette): El[] {
     add(rect(clampX(prod.x + prod.w - size * 0.02, size * 0.11), prod.y + prod.h * 0.72, size * 0.11, size * 0.11, lin(135, lighter(p.grad2, 0.4), p.grad2), 6, { rot: 28 }), "3D cube");
     add(ring(clampX(prod.x - size * 0.06, size * 0.12), prod.y + prod.h * 0.78, size * 0.12, p.accent, 7), "3D torus");
   }
+  // ---- batch 3
+  const below = Math.min(0.97, prod.y + prod.h * 0.94);
+  if (deco.includes("chrome")) add(shape("circle", cx - prod.w * 0.45, below - prod.h * 0.03, prod.w * 0.9, prod.h * 0.09, lin(90, "#6B7280", "#F1F5F9", "#9CA3AF", "#E5E7EB")), "Chrome puddle");
+  if (deco.includes("desert")) add(circle(Math.min(0.98 - size * 0.42, cx + size * 0.12), Math.max(0.02, prod.y - size * 0.05), size * 0.42, lin(180, "#FFF1C9", "#F7C46C")), "Sun");
+  if (deco.includes("desert")) add(shape("circle", cx - prod.w * 0.5, below - prod.h * 0.02, prod.w, prod.h * 0.1, rad(0.5, 0.5, 0.5, "rgba(120,72,24,0.35)", "rgba(120,72,24,0)")), "Sand shadow");
+  if (deco.includes("underwater")) {
+    for (const [dx, dy, dd] of [[-0.18, 0.2, 0.05], [-0.12, 0.05, 0.03], [-0.2, -0.05, 0.02], [1.08, 0.3, 0.045], [1.14, 0.12, 0.025], [1.05, -0.02, 0.035]] as const)
+      add(ring(clampX(prod.x + prod.w * dx, size * dd), prod.y + prod.h * dy, size * dd, "rgba(236,254,255,0.75)", 2), "Bubble");
+  }
+  if (deco.includes("crystal")) {
+    add(diamond(clampX(prod.x - size * 0.12, size * 0.16), below - size * 0.2, size * 0.16, size * 0.22, lin(135, "rgba(255,255,255,0.95)", "rgba(165,180,252,0.6)")), "Crystal");
+    add(diamond(clampX(prod.x + prod.w - size * 0.04, size * 0.12), below - size * 0.16, size * 0.12, size * 0.17, lin(135, "rgba(255,255,255,0.9)", "rgba(147,197,253,0.6)")), "Crystal");
+    add(diamond(clampX(prod.x + prod.w + size * 0.04, size * 0.07), below - size * 0.09, size * 0.07, size * 0.1, lin(135, "rgba(255,255,255,0.9)", "rgba(199,210,254,0.7)")), "Crystal");
+  }
+  if (deco.includes("popart")) add(burst(cx - size * 0.62, cy - size * 0.62, size * 1.24, p.accent, { stroke: "#111111", strokeW: 5 }), "Comic burst");
+  if (deco.includes("hud")) {
+    add(ring(cx - size * 0.56, cy - size * 0.56, size * 1.12, alpha(p.primary, 0.75), 2), "HUD ring");
+    add(ring(cx - size * 0.64, cy - size * 0.64, size * 1.28, alpha(p.grad2, 0.4), 1), "HUD ring");
+    const r0 = size * 0.6;
+    add(rect(cx - 0.002, cy - r0 - size * 0.06, 0.004, size * 0.06, p.primary), "HUD tick");
+    add(rect(cx - 0.002, cy + r0, 0.004, size * 0.06, p.primary), "HUD tick");
+    add(rect(cx - r0 - size * 0.06, cy - 0.002, size * 0.06, 0.004, p.primary), "HUD tick");
+    add(rect(cx + r0, cy - 0.002, size * 0.06, 0.004, p.primary), "HUD tick");
+  }
+  if (deco.includes("perfume")) add(shape("circle", cx - prod.w * 0.48, below - prod.h * 0.03, prod.w * 0.96, prod.h * 0.08, rad(0.5, 0.5, 0.5, "rgba(255,255,255,0.75)", "rgba(255,255,255,0)")), "Glossy floor");
+  if (deco.includes("sunset")) add(circle(cx - size * 0.62, cy - size * 0.35, size * 1.24, lin(180, "#FFE7A3", "#FB923C", "#F43F5E")), "Setting sun");
+  if (deco.includes("galaxy")) {
+    const pd = size * 0.24, px = clampX(prod.x - pd * 0.55, pd), py = Math.max(0.02, prod.y + prod.h * 0.02);
+    add(circle(px, py, pd, rad(0.35, 0.3, 0.8, "#FDE68A", "#C2410C")), "Planet");
+    add(shape("ring", px - pd * 0.3, py + pd * 0.36, pd * 1.6, pd * 0.32, "rgba(253,230,138,0.85)", { strokeW: 3, rot: -18 }), "Planet ring");
+  }
+  if (deco.includes("galaxy")) add(glow(cx - size * 0.7, cy - size * 0.7, size * 1.4, alpha(p.primary, 0.35)), "Cosmic glow");
+  if (deco.includes("splash")) {
+    add(wave(cx - prod.w * 0.62, below - prod.h * 0.12, prod.w * 1.24, prod.h * 0.18, lin(180, "rgba(186,230,253,0.95)", alpha(p.primary, 0.75))), "Splash crown");
+    for (const [dx, dy, dd] of [[-0.12, 0.55, 0.05], [-0.06, 0.35, 0.03], [1.05, 0.5, 0.045], [1.1, 0.3, 0.025], [0.2, -0.06, 0.03], [0.85, -0.04, 0.035]] as const)
+      add(circle(clampX(prod.x + prod.w * dx, size * dd), prod.y + prod.h * dy, size * dd, rad(0.35, 0.3, 0.8, "#FFFFFF", alpha(p.primary, 0.85))), "Droplet");
+  }
+  if (deco.includes("ice")) add(rect(cx - prod.w * 0.46, below - prod.h * 0.06, prod.w * 0.92, prod.h * 0.12, lin(180, "rgba(255,255,255,0.85)", "rgba(191,219,254,0.7)"), 10), "Ice block");
+  if (deco.includes("boutique")) {
+    add(arch(cx - prod.w * 0.58, prod.y - prod.h * 0.12, prod.w * 1.16, prod.h * 1.1, lin(180, "#FFFFFF", "#EFE9DF")), "Display niche");
+    add(rect(cx - prod.w * 0.62, below, prod.w * 1.24, 0.012, lin(180, "rgba(255,255,255,0.95)", "rgba(200,210,220,0.8)"), 3), "Glass shelf");
+  }
+  if (deco.includes("gallery")) {
+    const pad = 0.03;
+    add(frame(prod.x - pad, prod.y - pad * 0.6, prod.w + pad * 2, prod.h + pad * 1.2, "#1A1A1A", 9), "Picture frame");
+    add(frame(prod.x - pad + 0.012, prod.y - pad * 0.6 + 0.009, prod.w + pad * 2 - 0.024, prod.h + pad * 1.2 - 0.018, "rgba(184,134,91,0.6)", 2), "Frame inlay");
+    add(tri(cx - prod.w * 0.6, -0.02, prod.w * 1.2, prod.y + 0.05, lin(180, "rgba(255,250,235,0.6)", "rgba(255,250,235,0)")), "Gallery light");
+    add(rect(Math.min(0.9, prod.x + prod.w + pad + 0.02), prod.y + prod.h * 0.75, 0.07, 0.04, "#FFFFFF", 2, { stroke: "rgba(0,0,0,0.15)", strokeW: 1 }), "Museum label");
+  }
+  // ---- batch 4
+  if (deco.includes("sakura")) {
+    const by = prod.y + prod.h * 0.04;
+    add(rect(cx, by, 1.1 - cx, 0.011, "#5B3A2E", 6, { rot: -12 }), "Branch");
+    add(rect(cx + (1 - cx) * 0.35, by - 0.03, 0.16, 0.007, "#5B3A2E", 4, { rot: 24 }), "Branch");
+    for (const [t, dy, dd] of [[0.05, -0.02, 0.06], [0.25, -0.05, 0.055], [0.45, -0.03, 0.065], [0.62, -0.07, 0.05], [0.8, -0.05, 0.055]] as const)
+      add(circle(cx + (1 - cx) * t - 0.02, by + dy, dd, rad(0.5, 0.5, 0.5, "#FFFFFF", "#F7A8C6")), "Blossom");
+  }
+  if (deco.includes("tropical")) add(shape("circle", cx - prod.w * 0.45, below - prod.h * 0.03, prod.w * 0.9, prod.h * 0.08, rad(0.5, 0.5, 0.5, "rgba(120,90,40,0.3)", "rgba(120,90,40,0)")), "Sand shadow");
+  if (deco.includes("watercolor")) add(img(patternSrc("watercolor", lighter(p.grad2, 0.35), lighter(p.primary, 0.3)), cx - size * 0.75, cy - size * 0.7, size * 1.5, size * 1.4, { fit: "cover", shadow: false, opacity: 0.8, name: "Paint splash" }), "Paint splash");
+  if (deco.includes("brutal")) {
+    add(rect(prod.x + 0.02, prod.y + 0.02, prod.w, prod.h, "#111111"), "Hard shadow");
+    add(rect(prod.x, prod.y, prod.w, prod.h, "#F5F4F1", 0, { stroke: "#111111", strokeW: 5 }), "Product box");
+  }
+  if (deco.includes("vapor")) {
+    const sd = size * 1.1, sx = cx - sd / 2, sy = cy - sd * 0.62;
+    add(circle(sx, sy, sd, lin(180, "#FDE047", "#FB7185", "#C026D3")), "Striped sun");
+    for (let k = 0; k < 5; k++) add(rect(sx, sy + sd * (0.55 + k * 0.085), sd, sd * (0.015 + k * 0.007), "#3B0A55"), "Sun stripe");
+  }
+  if (deco.includes("mirror")) for (let k = 4; k >= 1; k--) {
+    const sc = 1 + k * 0.16;
+    add(frame(cx - prod.w * sc / 2, cy - prod.h * sc / 2 - k * 0.012, prod.w * sc, prod.h * sc, `rgba(226,232,240,${(0.55 - k * 0.1).toFixed(2)})`, 2, 6), "Mirror frame");
+  }
+  if (deco.includes("moon")) {
+    const md = size * 0.42, mx = Math.min(0.98 - md, cx + size * 0.12), my = Math.max(0.03, prod.y - size * 0.08);
+    add(circle(mx, my, md, rad(0.4, 0.35, 0.7, "#F8FAFC", "#CBD5E1")), "Moon");
+    add(circle(mx + md * 0.28, my - md * 0.08, md, typeof p.paper === "string" ? p.paper : "#0B1530"), "Moon shade");
+    add(glow(mx - md * 0.4, my - md * 0.4, md * 1.8, "rgba(226,232,240,0.18)"), "Moon glow");
+  }
+  if (deco.includes("arcade")) for (let k = 0; k < 7; k++) add(rect(cx - prod.w * 0.42 + k * prod.w * 0.12, below - 0.005 + (k % 2) * 0.01, prod.w * 0.12, 0.02, k % 2 ? p.grad2 : p.primary), "Pixel platform");
+  if (deco.includes("stage")) add(shape("circle", cx - prod.w * 0.55, below - prod.h * 0.04, prod.w * 1.1, prod.h * 0.12, rad(0.5, 0.5, 0.5, "rgba(255,240,220,0.45)", "rgba(255,240,220,0)")), "Spotlight pool");
+  if (deco.includes("pearl")) for (const [dx, dd] of [[-0.12, 0.05], [-0.04, 0.04], [1.0, 0.045], [1.08, 0.035]] as const)
+    add(circle(clampX(prod.x + prod.w * dx, size * dd), below - size * dd, size * dd, rad(0.35, 0.3, 0.8, "#FFFFFF", "#E7DCCF")), "Pearl");
+  if (deco.includes("glitch")) {
+    add(glow(cx - size * 0.62, cy - size * 0.55, size * 1.1, alpha(p.primary, 0.35)), "Red channel");
+    add(glow(cx - size * 0.42, cy - size * 0.55, size * 1.1, alpha(p.grad2, 0.35)), "Cyan channel");
+  }
+  if (deco.includes("terrazzo")) {
+    add(arch(cx - prod.w * 0.45, prod.y - prod.h * 0.06, prod.w * 0.9, prod.h * 0.98, lighter(p.accent, 0.45)), "Pastel arch");
+    add(rect(cx - prod.w * 0.4, below - prod.h * 0.05, prod.w * 0.8, Math.min(0.05, 1 - below), lin(180, lighter(p.primary, 0.35), lighter(p.primary, 0.15)), 8), "Plinth");
+  }
+  if (deco.includes("neonSign")) {
+    const nd = size * 0.46, nx = clampX(cx - nd * 0.05, nd), ny = Math.max(0.03, prod.y + size * 0.02);
+    add(ring(nx, ny, nd, p.primary, 12, { blur: 7 }), "Neon glow"); add(ring(nx, ny, nd, "#FFE4F3", 3), "Neon tube");
+    add(rect(cx - prod.w * 0.55, ny + nd * 0.15, prod.w * 0.45, 0.014, p.accent, 7, { blur: 5 }), "Neon glow"); add(rect(cx - prod.w * 0.55, ny + nd * 0.15 + 0.004, prod.w * 0.45, 0.005, "#E6FFFF", 3), "Neon tube");
+  }
+  if (deco.includes("neonSign")) add(shape("circle", cx - prod.w * 0.5, below - prod.h * 0.03, prod.w, prod.h * 0.1, rad(0.5, 0.5, 0.5, alpha(p.primary, 0.4), alpha(p.primary, 0))), "Neon reflection");
+  if (deco.includes("iso")) {
+    const pw = prod.w * 1.05, ph = prod.h * 0.18, px = cx - pw / 2, py = below - ph * 0.7;
+    add(rect(px, py + ph / 2, pw, ph * 0.32, lin(90, darker(p.primary, 0.8), p.primary)), "Platform side");
+    add(diamond(px, py, pw, ph, lin(135, lighter(p.primary, 0.6), lighter(p.primary, 0.35))), "Platform top");
+    for (const [dx, dy, dd] of [[-0.14, 0.15, 0.09], [1.04, 0.35, 0.07]] as const) {
+      const bx = clampX(prod.x + prod.w * dx, size * dd), by = prod.y + prod.h * dy, bd = size * dd;
+      add(diamond(bx, by, bd, bd * 0.55, lighter(p.accent, 0.4)), "Iso block");
+      add(rect(bx, by + bd * 0.275, bd, bd * 0.5, lin(90, lighter(p.accent, 0.1), darker(p.accent, 0.8))), "Iso block");
+    }
+  }
+  if (deco.includes("sport")) add(shape("circle", cx - prod.w * 0.45, below - prod.h * 0.03, prod.w * 0.9, prod.h * 0.08, rad(0.5, 0.5, 0.5, "rgba(0,0,0,0.45)", "rgba(0,0,0,0)")), "Shadow");
+  if (deco.includes("macro")) for (const [x, y, sx, sy] of [[prod.x, prod.y, 1, 1], [prod.x + prod.w, prod.y, -1, 1], [prod.x, prod.y + prod.h, 1, -1], [prod.x + prod.w, prod.y + prod.h, -1, -1]] as const) {
+    add(rect(sx > 0 ? x : x - 0.05, sy > 0 ? y : y - 0.003, 0.05, 0.003, alpha(p.ink, 0.6)), "Focus mark");
+    add(rect(sx > 0 ? x : x - 0.003, sy > 0 ? y : y - 0.035, 0.003, 0.035, alpha(p.ink, 0.6)), "Focus mark");
+  }
   return out;
 }
 
@@ -893,6 +1155,11 @@ function finish(els: El[], s: StyleConfig, p: Palette, deco: Deco[]): El[] {
     const lightGlow: Partial<Record<LightKey, string>> = { studio: "rgba(255,255,255,0.55)", natural: "rgba(255,226,170,0.45)", golden: "rgba(246,194,91,0.5)", neon: alpha(p.primary, 0.5) };
     if (lightGlow[s.lighting]) behind.push({ ...glow(cx - prod.w * 0.55, cy - prod.w * 0.55, prod.w * 1.1, lightGlow[s.lighting]!), id: "" } as El);
     if (s.lighting === "neon") behind.push({ ...glow(cx - prod.w * 0.2, cy - prod.w * 0.1, prod.w * 0.8, alpha(p.accent, 0.4)), id: "" } as El);
+    if (deco.includes("macro") && (prod.mask ?? "none") === "none") {
+      // close-up: the product fills more of the frame
+      const k = 1.2, nw = Math.min(1.04, prod.w * k), nh = prod.h * k;
+      prod.x = Math.max(-0.02, Math.min(1.02 - nw, cx - nw / 2)); prod.y = Math.max(0, cy - nh / 2); prod.w = nw; prod.h = nh;
+    }
     behind.push(...productDeco(deco, prod, p));
     if (deco.includes("podium") && (prod.mask ?? "none") === "none") {
       behind.push({ ...rect(prod.x + prod.w * 0.08, prod.y + prod.h * 0.86, prod.w * 0.84, prod.h * 0.14, p.dark ? lin(180, "#2A2A30", "#141418") : lin(180, "#FFFFFF", "#D9DCE1"), 999), name: "Podium", id: "" } as El);

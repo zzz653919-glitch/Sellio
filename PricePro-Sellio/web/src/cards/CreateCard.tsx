@@ -162,6 +162,8 @@ export function CreateCard({ onDone, onCancel, from, regen }: { onDone: (groupId
   const cardsCount = cfg.layouts.length;
 
   const ready = Boolean(photo?.uploadId && input.name.length >= 2 && cfg.layouts.length > 0 && user?.emailVerified && prefilled);
+  // "Generate with this design" from the gallery: once the theme is applied, start right away (or say what is missing)
+  const [genWith, setGenWith] = useState<string | null>(null);
   const setStep = (key: string, p: Partial<Step>) => setSteps((s) => s?.map((x) => (x.key === key ? { ...x, ...p } : x)) ?? null);
 
   const create = async () => {
@@ -247,6 +249,14 @@ export function CreateCard({ onDone, onCancel, from, regen }: { onDone: (groupId
   const mp = opts.data?.marketplaces;
   const theme = THEME_BY_KEY[cfg.style.theme];
   const busy = steps !== null;
+  useEffect(() => {
+    if (!genWith || cfg.style.theme !== genWith) return;
+    setGenWith(null);
+    if (ready && !busy) { void create(); return; }
+    toast("info", !photo ? t("Design chosen. Upload a product photo, then press Generate.") : input.name.length < 2 ? t("Design chosen. Enter the product name, then press Generate.") : t("Design chosen. Press Generate when you are ready."));
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [genWith, cfg.style.theme]);
   const styleDeb = useDebounced(cfg.style, 300);
   const layoutSample = { ...sample, style: styleDeb };
   const thumbSize = size.w > size.h * 1.2 ? { w: 1080, h: 1350 } : size;
@@ -421,7 +431,8 @@ export function CreateCard({ onDone, onCancel, from, regen }: { onDone: (groupId
           <p className="flex items-center justify-center gap-1 text-[11px] muted"><Sparkles className="h-3 w-3" />{t("Settings are saved with the cards in My Projects and can be reused.")}</p>
         </div>
       </div>
-      <ThemeGallery open={gallery} onClose={() => setGallery(false)} current={cfg.style.theme} onSelect={applyTheme} sample={layoutSample} size={size} mp={f.marketplace} />
+      <ThemeGallery open={gallery} onClose={() => setGallery(false)} current={cfg.style.theme} onSelect={applyTheme}
+        onGenerate={(th) => { applyTheme(th); setGenWith(th.key); }} sample={layoutSample} size={size} mp={f.marketplace} />
     </div>
   );
 }
