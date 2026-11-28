@@ -5,7 +5,7 @@
  * background and light (the product itself is kept exactly as it is).
  */
 import { useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Check, ChevronDown, Loader2, Palette as PaletteIcon, Sparkles, UploadCloud, Wand2, X } from "lucide-react";
+import { ArrowLeft, Check, ChevronDown, GalleryHorizontal, Loader2, Palette as PaletteIcon, Sparkles, UploadCloud, Wand2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ErrorAlert } from "../components/shared";
 import { Button, Card, Field, Input, Select, cx, useToast } from "../components/ui";
@@ -23,6 +23,7 @@ import {
   type BackgroundKey, type CardCopy, type CardInput, type CardPhoto, type LayoutKey, type LightKey, type MarketplaceKey, type StyleConfig,
 } from "./layouts";
 import { ThemeFolder, ThemeGallery, themeLayouts } from "./ThemeGallery";
+import { SlideViewer } from "./SlideViewer";
 import { FONT_PAIRS, THEME_BY_KEY, THEMES, type ThemePreset } from "./themes";
 
 const BG_OPTIONS: { key: BackgroundKey; label: string; swatch: string }[] = [
@@ -73,6 +74,7 @@ export function CreateCard({ onDone, onCancel, from, regen }: { onDone: (groupId
   const [more, setMore] = useState(true);
   const [gallery, setGallery] = useState(false);
   const [previewLayout, setPreviewLayout] = useState<LayoutKey | null>(null);
+  const [viewing, setViewing] = useState<number | null>(null);
   const [steps, setSteps] = useState<Step[] | null>(null);
   const [error, setError] = useState<unknown>(null);
   const setStyle = (p: Partial<StyleConfig>) => setCfg((c) => ({ ...c, style: { ...c.style, ...p } }));
@@ -391,9 +393,22 @@ export function CreateCard({ onDone, onCancel, from, regen }: { onDone: (groupId
         <div className="space-y-4 lg:sticky lg:top-4 lg:self-start">
           <Card className="space-y-3 p-4" data-testid="live-preview">
             <div className="flex items-center justify-between gap-2"><p className="text-sm font-semibold">{t("Live preview")}</p><span className="text-[11px] muted">{t(LAYOUT_LABEL[shownLayout])} · {size.w}×{size.h}</span></div>
-            <div className="mx-auto overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700" style={{ maxWidth: size.w >= size.h ? "100%" : 340 }}><DocPreview doc={previewDoc} width={480} /></div>
+            <button type="button" onClick={() => setViewing(Math.max(0, cfg.layouts.indexOf(shownLayout)))} title={t("View one by one")} data-testid="preview-open"
+              className="mx-auto block w-full cursor-zoom-in overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700" style={{ maxWidth: size.w >= size.h ? "100%" : 340 }}><DocPreview doc={previewDoc} width={480} /></button>
             {cfg.layouts.length > 1 && (
               <div className="flex flex-wrap gap-1">{cfg.layouts.map((l) => <button key={l} type="button" onClick={() => setPreviewLayout(l)} className={cx("rounded-full border px-2 py-0.5 text-[10px] font-semibold", l === shownLayout ? "border-brand-500 text-brand-600" : "border-slate-200 muted dark:border-slate-700")}>{t(LAYOUT_LABEL[l])}</button>)}</div>
+            )}
+            <Button size="sm" variant="secondary" className="w-full" icon={<GalleryHorizontal className="h-4 w-4" />} onClick={() => setViewing(Math.max(0, cfg.layouts.indexOf(shownLayout)))} data-testid="preview-one-by-one">
+              {t("View one by one")} ({cfg.layouts.length})
+            </Button>
+            {viewing !== null && (
+              <SlideViewer start={viewing} onClose={() => setViewing(null)}
+                slides={cfg.layouts.map((l, k) => ({
+                  key: l, title: `${t(theme?.name ?? "")} · ${k + 1}. ${t(LAYOUT_LABEL[l])}`,
+                  render: (w) => <DocPreview doc={buildCard(l, sample, live.size)} width={w} />,
+                  thumb: (w) => <DocPreview doc={buildCard(l, sample, live.size)} width={w} />,
+                }))}
+                footer={(k) => <Button variant="secondary" onClick={() => { setPreviewLayout(cfg.layouts[k]); setViewing(null); }}>{t("Show in the preview")}</Button>} />
             )}
             <div className="flex flex-wrap gap-1 text-[10px]">
               {[t(theme?.name ?? ""), t(BG_OPTIONS.find((b) => b.key === cfg.style.background)?.label ?? "")].filter(Boolean).map((x, i) => <span key={i} className="rounded-full bg-slate-100 px-2 py-0.5 dark:bg-slate-800">{x}</span>)}

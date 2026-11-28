@@ -2705,4 +2705,5 @@ export const RU: Record<string, string> = {
   "The product on an isometric 3D platform with floating blocks.": "Товар на изометрической 3D-платформе с парящими блоками.",
   "Sport Arena": "Спортивная арена",
   "Stadium floodlights, a green field and white lane lines — sport energy.": "Прожекторы стадиона, зелёное поле и белые линии разметки — энергия спорта.",
+  "Show in the preview": "Показать в превью",
 };

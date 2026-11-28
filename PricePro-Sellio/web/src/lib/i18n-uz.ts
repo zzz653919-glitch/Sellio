@@ -2770,4 +2770,5 @@ export const UZ: Record<string, string> = {
   "The product on an isometric 3D platform with floating blocks.": "Mahsulot suzayotgan bloklar bilan izometrik 3D maydonchada.",
   "Sport Arena": "Sport arenasi",
   "Stadium floodlights, a green field and white lane lines — sport energy.": "Stadion projektorlari, yashil maydon va oq chiziqlar — sport energiyasi.",
+  "Show in the preview": "Jonli ko'rinishda ko'rsatish",
 };
